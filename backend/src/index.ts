@@ -17,11 +17,9 @@ await app.register(channelRoutes);
 
 app.get("/health", async () => ({ ok: true }));
 
-app.get("/", async (request, reply) => {
-    return { message: "Welcome to Guacamaya Net!" };
-});
+app.get("/", async () => ({ message: "Welcome to Guacamaya Net!" }));
 
-// Handle graceful shutdown
+
 const shutdown = async (signal: string) => {
     app.log.info(`Received ${signal}. Shutting down gracefully...`);
     try {
