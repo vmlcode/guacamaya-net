@@ -9,6 +9,7 @@ composeBom = "2024.06.00"
 bouncycastle = "1.78.1"
 room = "2.6.1"
 osmdroid = "6.1.18"
+playServicesLocation = "21.3.0"
 junit = "4.13.2"
 
 [libraries]
@@ -27,6 +28,7 @@ androidx-room-runtime = { group = "androidx.room", name = "room-runtime", versio
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 osmdroid = { group = "org.osmdroid", name = "osmdroid-android", version.ref = "osmdroid" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]

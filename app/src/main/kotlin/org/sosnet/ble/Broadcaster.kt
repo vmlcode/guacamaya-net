@@ -33,20 +33,12 @@ class Broadcaster private constructor(
     val isAdvertising: Boolean get() = activeSet.get() != null
 
     /**
-     * Start advertising with the given 22 B payload + 32 B pubkey + 64 B signature.
-     * The three blocks are concatenated into a single service-data blob keyed by
-     * the SOSNet Service UUID.
+     * Start advertising with the given hop TTL + 22 B payload + 32 B pubkey + 64 B
+     * signature, concatenated into a single service-data blob keyed by the SOSNet
+     * Service UUID. [ttl] is the unsigned hop budget (0..15) written at offset 0.
      */
-    fun start(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray) {
-        require(payload22.size == 22) { "payload must be 22 bytes, got ${payload22.size}" }
-        require(pub32.size == 32) { "pubkey must be 32 bytes, got ${pub32.size}" }
-        require(sig64.size == 64) { "signature must be 64 bytes, got ${sig64.size}" }
-
-        val combined = ByteArray(BleConfig.SERVICE_DATA_SIZE).also {
-            System.arraycopy(payload22, 0, it, 0, 22)
-            System.arraycopy(pub32, 0, it, 22, 32)
-            System.arraycopy(sig64, 0, it, 22 + 32, 64)
-        }
+    fun start(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int = BleConfig.ORIGIN_HOP_TTL) {
+        val combined = frame(payload22, pub32, sig64, ttl)
         currentServiceData = combined
 
         val data = AdvertiseData.Builder()
@@ -90,19 +82,13 @@ class Broadcaster private constructor(
      * Uses AdvertisingSet#setAdvertisingData to update in place — faster than
      * stop+start and avoids the controller re-arming delay.
      */
-    fun swap(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray) {
+    fun swap(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int = BleConfig.ORIGIN_HOP_TTL) {
         val set = activeSet.get() ?: run {
             Log.w(tag, "swap called while not advertising; calling start() instead")
-            start(payload22, pub32, sig64)
+            start(payload22, pub32, sig64, ttl)
             return
         }
-        require(payload22.size == 22 && pub32.size == 32 && sig64.size == 64)
-
-        val combined = ByteArray(BleConfig.SERVICE_DATA_SIZE).also {
-            System.arraycopy(payload22, 0, it, 0, 22)
-            System.arraycopy(pub32, 0, it, 22, 32)
-            System.arraycopy(sig64, 0, it, 22 + 32, 64)
-        }
+        val combined = frame(payload22, pub32, sig64, ttl)
         currentServiceData = combined
 
         val data = AdvertiseData.Builder()
@@ -112,6 +98,20 @@ class Broadcaster private constructor(
             .addServiceData(BleConfig.SERVICE_PARCEL_UUID, combined)
             .build()
         set.setAdvertisingData(data)
+    }
+
+    /** Assemble the 119-byte service-data blob: [ttl][payload][pubkey][sig]. */
+    private fun frame(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int): ByteArray {
+        require(payload22.size == 22) { "payload must be 22 bytes, got ${payload22.size}" }
+        require(pub32.size == 32) { "pubkey must be 32 bytes, got ${pub32.size}" }
+        require(sig64.size == 64) { "signature must be 64 bytes, got ${sig64.size}" }
+        require(ttl in 0..255) { "ttl out of byte range: $ttl" }
+        return ByteArray(BleConfig.SERVICE_DATA_SIZE).also {
+            it[BleConfig.TTL_OFFSET] = ttl.toByte()
+            System.arraycopy(payload22, 0, it, BleConfig.PAYLOAD_OFFSET, 22)
+            System.arraycopy(pub32, 0, it, BleConfig.PUBKEY_OFFSET, 32)
+            System.arraycopy(sig64, 0, it, BleConfig.SIG_OFFSET, 64)
+        }
     }
 
     fun stop() {

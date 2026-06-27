@@ -1,15 +1,23 @@
 package org.sosnet.service
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.sosnet.R
 import org.sosnet.ble.Broadcaster
 import org.sosnet.ble.Observer
@@ -98,7 +106,7 @@ class SosForegroundService : Service() {
         val dao = SOSNetDatabase.get(this).messageDao()
         val bcast = broadcaster ?: Broadcaster.create(this)
         val r = FloodRouter(dao = dao, broadcaster = bcast, scope = scope)
-        obs.setListener { p22, pub32, sig64, rssi -> r.onFrame(p22, pub32, sig64, rssi) }
+        obs.setListener { p22, pub32, sig64, ttl, rssi -> r.onFrame(p22, pub32, sig64, ttl, rssi) }
         observer = obs
         router = r
         broadcaster = bcast
@@ -107,9 +115,10 @@ class SosForegroundService : Service() {
     private fun startBroadcasting() {
         scope.launch {
             val id = identity ?: Identity.loadOrCreate(this@SosForegroundService).also { identity = it }
+            val (latE7, lonE7) = currentLatLonE7() ?: (0 to 0)
             val payload = Payload(
-                latE7 = 0,                 // TODO: wire to LocationManager FUSED in P11
-                lonE7 = 0,
+                latE7 = latE7,
+                lonE7 = lonE7,
                 tsUnix = System.currentTimeMillis() / 1000,
                 nodeId = id.nodeId,
                 flags = Flags.origin(hasHeavy = false, critical = true, batteryBucket = 3),
@@ -133,6 +142,42 @@ class SosForegroundService : Service() {
 
     private fun stopBroadcasting() {
         broadcaster?.stop()
+    }
+
+    /**
+     * Fetch the device's current position as (latE7, lonE7), or null if location is
+     * unavailable (permission denied, services off, or no Google Play Services).
+     *
+     * Uses FusedLocationProviderClient.lastLocation — a cached one-shot read, which is
+     * cheap on battery (no continuous updates) and fine for stamping an SOS. On devices
+     * without Google Play Services this resolves to null and the caller falls back.
+     */
+    @SuppressLint("MissingPermission")
+    private suspend fun currentLatLonE7(): Pair<Int, Int>? {
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            Log.w(tag, "location permission not granted; broadcasting without coordinates")
+            return null
+        }
+        val client = LocationServices.getFusedLocationProviderClient(this)
+        val loc: Location? = suspendCancellableCoroutine { cont ->
+            client.lastLocation
+                .addOnSuccessListener { cont.resume(it) }
+                .addOnFailureListener {
+                    Log.w(tag, "lastLocation failed: ${it.message}")
+                    cont.resume(null)
+                }
+        }
+        if (loc == null) {
+            Log.w(tag, "no last known location available")
+            return null
+        }
+        val latE7 = (loc.latitude * 1e7).toInt().coerceIn(-90_000_000, 90_000_000)
+        val lonE7 = (loc.longitude * 1e7).toInt().coerceIn(-180_000_000, 180_000_000)
+        return latE7 to lonE7
     }
 
     private fun startObserving() {

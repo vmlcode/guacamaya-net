@@ -9,12 +9,22 @@ import java.util.UUID
 /**
  * BLE constants + parameters. See docs/payload-binary-layout.md.
  *
- * The 22 B payload + 32 B pubkey + 64 B signature ride inside BLE service data
- * keyed by the 128-bit SOSNet Service UUID. Observer filters on this UUID in
- * software (extended service-data is often omitted when using hardware filters).
+ * Frame layout inside the BLE service data, keyed by the 128-bit SOSNet Service UUID:
  *
- * The UUID is a placeholder — change before production. Same value must be used
- * by Observer when matching ScanRecord.serviceUuids.
+ *   byte 0        unsigned hop TTL (mutable, NOT signed)
+ *   bytes 1..22   22 B signed payload
+ *   bytes 23..54  32 B Ed25519 public key
+ *   bytes 55..118 64 B Ed25519 signature
+ *
+ * The hop TTL lives OUTSIDE the signed payload on purpose: each relay decrements it,
+ * and if it were inside the signed 22 B the origin's signature would break at the next
+ * hop (node_id is bound to the origin's pubkey, so re-signing is not an option). The
+ * signed payload also carries an informational origin TTL in its flags nibble, but the
+ * authoritative live hop budget is this byte.
+ *
+ * Observer filters on the UUID in software (extended service-data is often omitted when
+ * using hardware filters). The UUID is a placeholder — change before production. Same
+ * value must be used by Observer when matching ScanRecord.serviceUuids.
  */
 object BleConfig {
 
@@ -23,8 +33,17 @@ object BleConfig {
 
     val SERVICE_PARCEL_UUID: ParcelUuid = ParcelUuid(SERVICE_UUID)
 
-    /** Total service-data length: 22 B payload + 32 B pubkey + 64 B Ed25519 signature = 118 B. */
-    const val SERVICE_DATA_SIZE = 22 + 32 + 64
+    /** Byte offsets within the service-data blob. */
+    const val TTL_OFFSET = 0
+    const val PAYLOAD_OFFSET = 1
+    const val PUBKEY_OFFSET = PAYLOAD_OFFSET + 22   // 23
+    const val SIG_OFFSET = PUBKEY_OFFSET + 32       // 55
+
+    /** Hop TTL an origin stamps on a fresh frame. Mirrors Flags origin hopTtl. */
+    const val ORIGIN_HOP_TTL = 15
+
+    /** Total service-data length: 1 B hop TTL + 22 B payload + 32 B pubkey + 64 B signature = 119 B. */
+    const val SERVICE_DATA_SIZE = 1 + 22 + 32 + 64
 
     /**
      * AdvertisingSetParameters tuned for extended ADV (BLE 5).

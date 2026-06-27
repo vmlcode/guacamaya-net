@@ -18,10 +18,13 @@ import java.security.MessageDigest
  *  1. SHA-256(pubkey)[0..4] == payload.node_id (else: pubkey swap attack)
  *  2. Payload.decode (CRC check)
  *  3. ts_unix skew ≤ 300 s (replay defense)
- *  4. hop_ttl > 0 after decrement
- *  5. Ed25519 verify
+ *  4. Ed25519 verify
  *
- * On pass: dedupe → persist → enqueue rebroadcast (via [Broadcaster.swap]).
+ * On pass: dedupe → persist → relay. The relay decrements the unsigned hop TTL
+ * (carried alongside the signed payload, see ble/BleConfig) and stops once it
+ * reaches 0 — this bounds spatial propagation and protects battery. A frame whose
+ * TTL is already exhausted is still persisted (so the local user sees it) but not
+ * rebroadcast. Loop-back within the TTL window is suppressed by the dedupe cache.
  *
  * The router is single-threaded on a dedicated dispatcher; BLE callbacks arrive
  * on a binder thread, so [onFrame] just enqueues a coroutine.
@@ -36,11 +39,11 @@ class FloodRouter(
     private val tag = "sosnet.mesh.FloodRouter"
 
     /** Callback for the BLE Observer. Cheap — offloads to a coroutine. */
-    fun onFrame(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, rssi: Int) {
-        scope.launch { handle(payload22, pub32, sig64, rssi) }
+    fun onFrame(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int, rssi: Int) {
+        scope.launch { handle(payload22, pub32, sig64, ttl, rssi) }
     }
 
-    private suspend fun handle(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, rssi: Int) {
+    private suspend fun handle(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int, rssi: Int) {
         // 1. Pubkey binding.
         val digest = MessageDigest.getInstance("SHA-256").digest(pub32)
         val expectedNodeId = digest.copyOfRange(0, 4)
@@ -66,13 +69,7 @@ class FloodRouter(
             return
         }
 
-        // 4. Hop TTL.
-        if (payload.flags.hopTtl <= 0) {
-            Log.d(tag, "DROP: hop_ttl exhausted")
-            return
-        }
-
-        // 5. Signature.
+        // 4. Signature (the expensive gate — last).
         if (!Signer.verify(pub32, payload22, sig64)) {
             Log.w(tag, "DROP: signature invalid")
             return
@@ -97,18 +94,21 @@ class FloodRouter(
             receivedAt = now(),
         )
         dao.insert(entity)
-        Log.i(tag, "OK  node=${payload.nodeId.toHex()} msg=${payload.msgId} type=${payload.sosType} rssi=$rssi fresh=$fresh hops_left=${payload.flags.hopTtl}")
+        dao.pruneOldKeeping(MAX_STORED_MESSAGES)
+        Log.i(tag, "OK  node=${payload.nodeId.toHex()} msg=${payload.msgId} type=${payload.sosType} rssi=$rssi fresh=$fresh ttl_in=$ttl")
 
-        if (!fresh) return  // already flooded
+        if (!fresh) return  // already flooded within the dedupe window
 
-        // 7. Rebroadcast the EXACT 118 B we received. v1 keeps the origin's
-        //    signature intact (re-signing with our key would break next-hop
-        //    verify, since node_id is bound to the origin's pubkey). Loop
-        //    prevention is the dedupe cache's job — each node re-emits a given
-        //    (node_id, msg_id) at most once per TTL window. hop_ttl is metadata
-        //    in v1; P11 introduces a wrapper frame for true hop-by-hop decrement.
-        broadcaster ?: return
-        broadcaster.swap(payload22, pub32, sig64)
+        // 7. Relay. The signed 22 B payload (+ pubkey + sig) is forwarded UNCHANGED
+        //    so the origin's signature still verifies at the next hop — only the
+        //    unsigned hop TTL shrinks. Stop once it would reach 0: that bounds how
+        //    far the frame travels and keeps idle radios off the air.
+        val nextTtl = ttl - 1
+        if (nextTtl <= 0) {
+            Log.d(tag, "no relay: hop TTL exhausted (ttl_in=$ttl)")
+            return
+        }
+        broadcaster?.swap(payload22, pub32, sig64, nextTtl)
     }
 
     private fun ByteArray.toHex(): String =
@@ -116,5 +116,8 @@ class FloodRouter(
 
     companion object {
         const val MAX_TS_SKEW_SECONDS = 300L
+
+        /** Cap on rows kept in the message store; older rows pruned after each insert. */
+        const val MAX_STORED_MESSAGES = 500
     }
 }

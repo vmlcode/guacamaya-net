@@ -1,8 +1,10 @@
 # SOSNet — Payload Binary Layout
 
-Over-the-air frame for the BLE Extended Advertising (ADV_EXT_IND) control plane. Three blocks travel together as BLE service data: a 22 B application payload, the 32 B Ed25519 public key of the origin (so any receiver can verify without a registry), and the 64 B Ed25519 signature over the payload.
+Over-the-air frame for the BLE Extended Advertising (ADV_EXT_IND) control plane. Four blocks travel together as BLE service data: a 1 B unsigned hop TTL, a 22 B application payload, the 32 B Ed25519 public key of the origin (so any receiver can verify without a registry), and the 64 B Ed25519 signature over the payload.
 
-Total: **118 B**, well within the BLE 5 extended ADV limit (≤ 254 B). Does not fit legacy 31 B ADV — by design, since extended ADV is required for the security guarantees.
+Total: **119 B**, well within the BLE 5 extended ADV limit (≤ 254 B). Does not fit legacy 31 B ADV — by design, since extended ADV is required for the security guarantees.
+
+The hop TTL is deliberately **outside the signed payload**: each relay decrements it, and if it lived inside the signed 22 B the origin's signature would break at the next hop (re-signing is impossible — `node_id` is bound to the origin's pubkey). The payload's `flags.hop_ttl` nibble is therefore the *origin's initial* value (informational); the authoritative live hop budget is the leading unsigned byte.
 
 ---
 
@@ -69,14 +71,18 @@ See [`crypto.md`](crypto.md) for key handling and the rejection cascade.
 +--------------------------------------------------+
 | Service UUID (16 B, 128-bit, little-endian on wire) |
 +--------------------------------------------------+
+| Hop TTL (1 B, unsigned, mutable — decremented per relay) |
++--------------------------------------------------+
 | Payload bytes 0..21 (22 B)                       |
 +--------------------------------------------------+
 | Origin pubkey bytes 0..31 (32 B)                 |
 +--------------------------------------------------+
 | Signature bytes 0..63 (64 B)                     |
 +--------------------------------------------------+
-Total = 118 B service data (excluding Service UUID header)
+Total = 119 B service data (excluding Service UUID header)
 ```
+
+Byte offsets within the service-data blob (see `ble/BleConfig.kt`): TTL @ 0, payload @ 1, pubkey @ 23, signature @ 55. A relay forwards the payload/pubkey/signature unchanged and rebroadcasts with `ttl − 1`; at 0 it stops relaying (the frame is still stored locally so the receiving user sees it).
 
 The 128-bit Service UUID is the constant defined in `ble/BleConfig.kt`:
 

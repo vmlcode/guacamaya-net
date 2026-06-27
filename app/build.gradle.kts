@@ -85,6 +85,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.osmdroid)
+    implementation(libs.play.services.location)
 
     debugImplementation(libs.androidx.ui.tooling)
 

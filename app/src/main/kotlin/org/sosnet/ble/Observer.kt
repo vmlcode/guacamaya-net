@@ -29,7 +29,7 @@ class Observer private constructor(
 
     /** Called on every SOSNet-shaped frame. Implementations must be thread-safe. */
     fun interface FrameListener {
-        fun onFrame(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, rssi: Int)
+        fun onFrame(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int, rssi: Int)
     }
 
     private var listener: FrameListener? = null
@@ -59,11 +59,12 @@ class Observer private constructor(
                 Log.w(tag, "SOSNet UUID seen but serviceData size=${blob?.size ?: -1} (need ${BleConfig.SERVICE_DATA_SIZE}) rssi=${result.rssi}")
                 return
             }
-            val payload22 = blob.copyOfRange(0, 22)
-            val pub32 = blob.copyOfRange(22, 22 + 32)
-            val sig64 = blob.copyOfRange(22 + 32, 22 + 32 + 64)
-            Log.d(tag, "frame rssi=${result.rssi} src=${result.device.address}")
-            listener?.onFrame(payload22, pub32, sig64, result.rssi)
+            val ttl = blob[BleConfig.TTL_OFFSET].toInt() and 0xFF
+            val payload22 = blob.copyOfRange(BleConfig.PAYLOAD_OFFSET, BleConfig.PUBKEY_OFFSET)
+            val pub32 = blob.copyOfRange(BleConfig.PUBKEY_OFFSET, BleConfig.SIG_OFFSET)
+            val sig64 = blob.copyOfRange(BleConfig.SIG_OFFSET, BleConfig.SERVICE_DATA_SIZE)
+            Log.d(tag, "frame ttl=$ttl rssi=${result.rssi} src=${result.device.address}")
+            listener?.onFrame(payload22, pub32, sig64, ttl, result.rssi)
         }
     }
 

@@ -53,6 +53,16 @@ interface MessageDao {
     @Query("SELECT COUNT(*) FROM messages")
     suspend fun count(): Int
 
+    /**
+     * Keep only the [keep] most-recently-received rows; delete the rest. Called
+     * after each insert so the table stays bounded on 1–2 GB devices.
+     */
+    @Query(
+        "DELETE FROM messages WHERE id NOT IN " +
+            "(SELECT id FROM messages ORDER BY received_at DESC LIMIT :keep)"
+    )
+    suspend fun pruneOldKeeping(keep: Int)
+
     @Query("DELETE FROM messages")
     suspend fun clear()
 }

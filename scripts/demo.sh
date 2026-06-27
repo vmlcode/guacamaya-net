@@ -14,7 +14,17 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk}"
+# JDK 17+ required. AGP 8.5.2 runs cleanly on JDK 21. Resolution order:
+#   1. caller-provided JAVA_HOME
+#   2. Android Studio's bundled JBR (JDK 21)
+#   3. system default on PATH
+if [ -z "${JAVA_HOME:-}" ]; then
+  if [ -x /opt/android-studio/jbr/bin/java ]; then
+    JAVA_HOME=/opt/android-studio/jbr
+  else
+    JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
+  fi
+fi
 APK="app/build/outputs/apk/debug/app-debug.apk"
 
 case "${1:-help}" in
