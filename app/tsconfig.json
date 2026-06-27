@@ -3,7 +3,18 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@guacamaya/shared": ["../packages/shared/src/index.ts"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@/assets/*": [
+        "./assets/*"
+      ]
     }
-  }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
 }
