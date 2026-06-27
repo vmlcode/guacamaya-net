@@ -1,0 +1,35 @@
+# Android / Gradle
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Kotlin / Java
+*.class
+hs_err_pid*
+
+# Build outputs
+build/
+out/
+app/build/
+.gradle/
+.cxx/
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+captures/
+.navigation/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+*.tmp
+*.bak
+*.swp
