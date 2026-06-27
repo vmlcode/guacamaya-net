@@ -4,6 +4,7 @@ import { channelsRepo } from "../db/channelsRepo.js";
 import { signRecord } from "../crypto/signer.js";
 import { broadcastRecord } from "../ws/server.js";
 import { publicKeyHex } from "../crypto/keys.js";
+import { decodeAndVerifyFrame } from "../mesh/frame.js";
 
 export async function channelRoutes(fastify: FastifyInstance) {
   // GET /pubkey -> returns backend's public identity key for client verification
@@ -63,36 +64,56 @@ export async function channelRoutes(fastify: FastifyInstance) {
     }
   );
 
-  // POST /ingest -> accepts data-mule uploads from mesh-connected devices
-  fastify.post<{ Body: { records?: any[] } }>(
+  // POST /ingest -> data-mule uploads from the SOSNet Android mesh.
+  //
+  // The phone sends an array of Base64-encoded BLE frames (the 118 B SOSNet frame:
+  // 22 B payload + 32 B pubkey + 64 B signature). ZERO TRUST: every frame is
+  // decoded and its Ed25519 signature is RE-VERIFIED here before anything is
+  // persisted — the backend never takes the client's word for authenticity.
+  //
+  // Body: { frames: string[] }  (legacy { records: [...] } JSON ingestion removed)
+  fastify.post<{ Body: { frames?: unknown } }>(
     "/ingest",
     async (request, reply) => {
-      const { records } = request.body;
+      const { frames } = request.body;
 
-      if (!records || !Array.isArray(records)) {
-        return reply.code(400).send({ error: "Missing or invalid records array" });
+      if (!Array.isArray(frames)) {
+        return reply.code(400).send({ error: "Missing or invalid 'frames' array" });
       }
 
-      let ingestedCount = 0;
-      for (const rec of records) {
-        if (
-          rec &&
-          typeof rec === "object" &&
-          typeof rec.id === "string" &&
-          typeof rec.channel === "string" &&
-          typeof rec.timestamp === "number" &&
-          typeof rec.author === "string" &&
-          rec.payload !== undefined
-        ) {
-          const added = await channelsRepo.addRecord(rec);
-          if (added) {
-            ingestedCount++;
-            broadcastRecord(rec); // Forward to websocket connections
-          }
+      let ingested = 0;
+      let duplicate = 0;
+      let rejected = 0;
+      const reasons: Record<string, number> = {};
+
+      for (const frame of frames) {
+        if (typeof frame !== "string") {
+          rejected++;
+          reasons["not a string"] = (reasons["not a string"] ?? 0) + 1;
+          continue;
+        }
+
+        const result = await decodeAndVerifyFrame(frame);
+        if (!result.ok) {
+          rejected++;
+          reasons[result.reason] = (reasons[result.reason] ?? 0) + 1;
+          continue;
+        }
+
+        const added = await channelsRepo.addRecord(result.record);
+        if (added) {
+          ingested++;
+          broadcastRecord(result.record); // push to live websocket subscribers
+        } else {
+          duplicate++;
         }
       }
 
-      return { success: true, ingested: ingestedCount };
+      if (rejected > 0) {
+        request.log.warn({ rejected, reasons }, "rejected unverifiable mesh frames");
+      }
+
+      return { success: true, ingested, duplicate, rejected, reasons };
     }
   );
 }
