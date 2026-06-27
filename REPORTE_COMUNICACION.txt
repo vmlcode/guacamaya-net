@@ -1,0 +1,262 @@
+================================================================================
+SOSNet — REPORTE COMUNICACIÓN END-TO-END
+Fecha: 2026-06-26
+Dispositivos:
+  A (Broadcaster): Realme RMX3999 (RE5C94L1) — Android 15, SDK 35
+                    adb serial: ...
+  B (Observer):    Xiaomi Redmi Note 10 (sweet / M2101K6R) — Android 11, SDK 30
+                    adb serial: ...
+                    Kernel: 4.14.356-openela-rc1-dvstrg-kns-g1cf81d53c8f0
+                    Root: KernelSU-Next 1.1.1
+================================================================================
+
+0) RESULTADO FINAL
+--------------------------------------------------------------------------------
+- A broadcast OK:  advertising started, txPower=-2 dBm, frame=118 B
+- B observe   OK:  scan started (software filter), service=8d3d0001-...
+- Frame A→B:       frame rssi=-62 src=42:CE:12:DA:06:01
+- Mesh forward:    FloodRouter OK node=40062aca msg=1073 type=DISTRESS
+                   fresh=true hops_left=15
+- UI B:            "Received: 4"
+
+Comunicación A→B funcional. Flood mesh activo (B re-broadcastea verificado).
+
+================================================================================
+1) ROOT CAUSES ENCONTRADOS (2 bugs independientes)
+================================================================================
+
+
+
+1.1) Crash SecurityException en observer Android 11
+--------------------------------------------------------------------------------
+Síntoma:
+  E AndroidRuntime: FATAL EXCEPTION: main
+  java.lang.SecurityException: Need BLUETOOTH permission: Neither user
+    10272 nor current process has android.permission.BLUETOOTH.
+    at android.bluetooth.BluetoothAdapter.getBluetoothLeScanner
+    at org.sosnet.ble.Observer$Companion.create(Observer.kt:111)
+    at org.sosnet.service.SosForegroundService.ensureObserverAndRouter
+    at org.sosnet.service.SosForegroundService.startObserving
+    at org.sosnet.service.SosForegroundService.onStartCommand
+
+Causa raíz: AndroidManifest solo declaraba permisos runtime API 31+
+(BLUETOOTH_SCAN/ADVERTISE/CONNECT). En Android 11 (SDK 30),
+getBluetoothLeScanner requiere permiso legacy android.permission.BLUETOOTH
+(normal permission, auto-granted install-time si está declarado).
+
+Fix: AndroidManifest agrega:
+  <uses-permission android:name="android.permission.BLUETOOTH"
+      android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+      android:maxSdkVersion="30" />
+
+1.2) Extended ADV con secondary PHY 2M invisible para Xiaomi
+--------------------------------------------------------------------------------
+Síntoma:
+  - A broadcasting sin errores (status=0, frame=118 B, txPower reportado)
+  - B scan activo (2327+ resultados totales en dumpsys)
+  - 0 frames SOSNet recibidos en B
+  - UI: "Received: 0"
+
+Diagnóstico:
+  dumpsys bluetooth_manager Realme advertiser ID=2:
+    Primary Phy   : LE_1M
+    Secondary Phy : LE_2M
+
+  logcat Xiaomi BtGatt.ScanManager:
+    configureRegularScanParams - ScanSetting LE 1M Scan mode=2
+    configureRegularScanParams - ScanSetting LE Coded Scan mode=2
+    (sin mención de 2M)
+
+Causa raíz: chip Qualcomm QTI en Xiaomi/Redmi Note 10 solo scanea
+LE 1M + LE Coded. 2M no habilitado aunque ScanSettings.setPhy retenga
+default PHY_LE_ALL_SUPPORTED (=255). Controller firmware QTI no soporta
+scan 2M.
+
+Hallazgo adicional: intentar secondary PHY=1M (modo "extended" 1M/1M)
+es rechazado por controller Realme con status=4 INTERNAL_ERROR. 1M/Coded
+es la única combinación cross-vendor BLE 5 que funciona en este par.
+
+Fix: BleConfig.parameters → setSecondaryPhy(PHY_LE_CODED).
+
+================================================================================
+2) ARCHIVOS CLAVE PARA COMUNICACIÓN
+================================================================================
+
+2.1) Layout BLE (capa 2)
+--------------------------------------------------------------------------------
+app/src/main/kotlin/org/sosnet/ble/
+├── BleConfig.kt        — UUID, sizes, AdvertisingSetParameters (Coded PHY)
+├── Broadcaster.kt      — GAP advertiser (startAdvertisingSet, swap, stop)
+└── Observer.kt         — GAP scanner (startScan software-filtered)
+
+2.2) Protocolo aplicación
+--------------------------------------------------------------------------------
+app/src/main/kotlin/org/sosnet/proto/
+├── Payload.kt          — 22 B big-endian + Flags bitfield + SosType enum
+└── Crc16.kt            — CRC16-CCITT para reject barato pre-verify
+
+app/src/main/kotlin/org/sosnet/crypto/
+├── Identity.kt         — Ed25519 keypair persistente (BouncyCastle)
+└── Signer.kt           — sign/verify Ed25519
+
+2.3) Mesh + almacenamiento
+--------------------------------------------------------------------------------
+app/src/main/kotlin/org/sosnet/mesh/
+├── FloodRouter.kt      — verify sig → dedupe → store → re-broadcast
+├── DedupeCache.kt      — LRU (msgId, nodeId) para flood suppression
+└── MessageStore.kt     — Room DAO + MessageEntity
+
+2.4) Orquestación lifecycle
+--------------------------------------------------------------------------------
+app/src/main/kotlin/org/sosnet/service/
+└── SosForegroundService.kt — FGS que mantiene BLE vivo en background.
+                              Actions: START/STOP/OBSERVE_ON/OBSERVE_OFF.
+
+2.5) UI
+--------------------------------------------------------------------------------
+app/src/main/kotlin/org/sosnet/ui/
+├── MainActivity.kt — Compose screen con toggles Broadcast/Observe + mapa
+├── MapViewModel.kt — StateFlow identity/broadcasting/observing/messages
+└── Theme.kt
+
+2.6) Manifest + build
+--------------------------------------------------------------------------------
+app/src/main/AndroidManifest.xml — permisos BLUETOOTH (legacy ≤30),
+                                    BLUETOOTH_*/NEARBY_WIFI (≥31/33),
+                                    FGS connectedDevice, uses-feature BLE.
+app/build.gradle.kts              — deps: BouncyCastle, Compose, OSMDroid,
+                                    Room (KSP).
+
+2.7) Parche device Xiaomi
+--------------------------------------------------------------------------------
+scripts/ksu-modules/btconfix/
+├── module.prop        — metadata KernelSU module
+├── post-fs-data.sh    — restorecon -F /data/user/0 /data/user_de/0
+                        (corrige labels y desbloquea BT adapter)
+scripts/ksu-modules/README.md — install/verify instructions
+
+2.8) Scripts demo / verificación
+--------------------------------------------------------------------------------
+scripts/
+├── demo.sh            —driver e2e A/B
+├── logcat_pretty.py   —formatea logs SOSNet para demo
+└── tamper_test.py     —prueba que verify rechaza payloads alterados
+
+================================================================================
+3) FORMATO FRAME BLE (118 B service data)
+================================================================================
+
+Byte map (dentro de adData.getServiceData(SERVICE_UUID)):
+
+  Offset  Size  Field
+  ------  ----  ----------------------------------------------------------
+  0       4     latE7   int32 BE   (lat × 1e7, rango ±90_000_000)
+  4       4     lonE7   int32 BE   (lon × 1e7, rango ±180_000_000)
+  8       4     tsUnix  uint32 BE  (segundos desde epoch)
+  12      4     nodeId  4 raw bytes (primeros 4 de SHA-256(pubkey))
+  16      1     flags   bitfield:
+                         bit 0      has_heavy   (1 = payload pesado via Aware)
+                         bit 1      critical    (1 = amenaza vida)
+                         bits 2..3  battery     (0..3)
+                         bits 4..7  hop_ttl     (15 en origin, -1 por hop)
+  17      1     sosType uint8 enum (0=medical, 1=distress, 2=food, 3=water,
+                                    4=shelter, 5=fire, 6=violence, 7=other)
+  18      2     msgId   uint16 BE  (nonce flood dedupe)
+  20      2     crc16   uint16 BE  (CRC16-CCITT sobre bytes 0..19)
+  ----- Payload (22 B) termina -----
+  22      32    pubkey  Ed25519 public key del origin
+  54      64    sig     Ed25519 signature sobre bytes 0..21 (payload+CRC)
+  ----- Total 118 B -----
+
+Service UUID 128-bit: 8d3d0001-2a1b-4c8e-9c0f-1234567890ab
+Placeholder — rotar antes producción.
+
+================================================================================
+4) PARÁMETROS BLE FINALES (BleConfig.kt)
+================================================================================
+
+AdvertisingSetParameters:
+  connectable   = false   (jamás pair)
+  scannable     = false   (sin scan-response)
+  primaryPhy    = LE_1M   (discovery, compatible con todos)
+  secondaryPhy  = CODED   (extended ADV, escaneado por QTI Android 11)
+  interval      = INTERVAL_LOW   (~1 Hz, 160 × 0.625 ms = 100 ms)
+  txPower       = TX_POWER_HIGH  (máximo rango demo)
+
+ScanSettings (Observer):
+  scanMode      = SCAN_MODE_LOW_LATENCY
+  callbackType  = ALL_MATCHES
+  matchMode     = AGGRESSIVE
+  numOfMatches  = MAX_ADVERTISEMENT
+  legacy        = false (SDK ≥ O)  ← captura extended ADV
+  phy           = default (255 ALL_SUPPORTED, controller filtra)
+
+Filtro UUID: software (no hardware ScanFilter). Razón: muchos stacks
+omiten extended service-data del ScanRecord cuando filtran en silicon.
+
+================================================================================
+5) MODO DE REPRODUCIR DEMO
+================================================================================
+
+Pre-requisitos:
+  - A y B conectados por adb (`adb devices` lista ambos)
+  - JDK 17 instalado (/usr/lib/jvm/java-17-openjdk)
+  - BT encendido en ambos (Xiaomi auto-ON con btconfix)
+  - Permisos runtime concedidos (la app los pide en primer launch)
+
+Build + install:
+  cd /home/edgar/SOSNet
+  JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew assembleDebug
+  adb -s 1 install -r app/build/outputs/apk/debug/app-debug.apk
+  adb -s 2     install -r app/build/outputs/apk/debug/app-debug.apk
+
+Test e2e (A broadcast, B observe):
+  adb -s 1 shell am start -n org.sosnet/.ui.MainActivity
+  adb -s 2     shell am start -n org.sosnet/.ui.MainActivity
+  # UI A: tap "Broadcast SOS"
+  # UI B: tap "Observe"
+  # Esperar 5-10s
+
+Verificación:
+  adb -s 2 logcat -d | grep sosnet.ble.Observer
+  # debe mostrar "frame rssi=... src=..."
+
+Logs formateados (demo):
+  python3 scripts/logcat_pretty.py
+
+Reset (si estado stuck):
+  adb -s <dev> shell am force-stop org.sosnet
+  adb -s <dev> logcat -c
+
+================================================================================
+6) ESTADO PERSISTENTE POST-FIX
+================================================================================
+
+Whitelist battery Xiaomi:
+  - dumpsys deviceidle whitelist incluye org.sosnet
+  - cmd appops set org.sosnet RUN_ANY_IN_BACKGROUND allow
+
+Buffer logcat Xiaomi:
+  - Ampliado a 16 MiB (default MIUI 128 KiB trunca logs SOSNet)
+  - Persistente hasta reboot
+
+APK instalado (ambos):
+  - /data/app/~~.../org.sosnet-.../base.apk
+  - Build 2026-06-26 23:24 con los 3 fixes
+
+================================================================================
+7) LIMITACIONES CONOCIDAS / PRÓXIMOS PASOS
+================================================================================
+
+- lat/lon hardcoded a (0,0) en SosForegroundService.startBroadcasting
+  (TODO comment: wire a LocationManager FUSED).
+- Wi-Fi Aware (NanMessenger, NanDataPath) sin exercer en este par — solo
+  BLE validado. Bloqueado hasta que se requiera payload > 118 B.
+- No rotation de payload: broadcaster emite el mismo frame hasta Stop.
+  FloodRouter llama swap() pero la rotación de msgId/time no está cableada
+  al origin (solo al relay). Ver startBroadcasting().
+- Realme no tiene root — no se puede reset BT por adb si chip se queda
+  pegado. Mitigación: force-stop app + esperar ~30s para cleanup stack.
+
+================================================================================
