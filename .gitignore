@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+.DS_Store
+
+# Expo
+app/.expo/
+app/android/
+app/ios/
+
+# Backend keys (never commit)
+backend/keys/

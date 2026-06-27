@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Guacamaya Red",
+    "slug": "guacamaya-red",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "platforms": ["android"],
+    "android": {
+      "package": "net.guacamaya.red",
+      "permissions": [
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_ADVERTISE",
+        "ACCESS_FINE_LOCATION",
+        "RECEIVE_SMS",
+        "READ_SMS",
+        "SEND_SMS"
+      ]
+    },
+    "plugins": ["expo-sqlite"]
+  }
+}

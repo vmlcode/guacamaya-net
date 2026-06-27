@@ -1,0 +1,17 @@
+{
+  "name": "@guacamaya/shared",
+  "version": "0.1.0",
+  "private": true,
+  "module": "./src/index.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^2.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

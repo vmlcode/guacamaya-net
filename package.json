@@ -1,0 +1,17 @@
+{
+  "name": "guacamaya-net",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "backend",
+    "app"
+  ],
+  "scripts": {
+    "dev:backend": "bun run dev --cwd backend",
+    "build": "bun run build --cwd packages/shared && bun run build --cwd backend",
+    "test": "bun test"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  }
+}
