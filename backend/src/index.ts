@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import { channelRoutes } from "./channels/routes.js";
+import { locationRoutes } from "./locations/routes.js";
 import { initWebSocketServer } from "./ws/server.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -14,6 +15,7 @@ await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
 
 // Register routes
 await app.register(channelRoutes);
+await app.register(locationRoutes);
 
 app.get("/health", async () => ({ ok: true }));
 

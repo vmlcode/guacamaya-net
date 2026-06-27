@@ -1,0 +1,412 @@
+{
+  "info": {
+    "name": "Guacamaya Net — Backend",
+    "description": "Endpoint tests for the @guacamaya/backend Fastify HTTP server.\n\nSet the `baseUrl` collection variable (default `http://localhost:3000`).\n\nTwo feature domains:\n- **channels** — emergency broadcast channels (alertas, refugios, etc.)\n- **locations** — GPS trajectory history for the moving-map dashboard\n\nIDs are recomputed server-side (SHA-256 of canonical content), so client-supplied `id` values on ingest are ignored for dedup purposes.\n\nNote: the WebSocket endpoint (`/ws`) is not testable from a standard Postman REST request; use Postman's WebSocket request type and connect to `ws://localhost:3000/ws`, then send `{\"type\":\"subscribe\",\"channel\":\"alertas\"}`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "channelId",
+      "value": "alertas",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Meta",
+      "item": [
+        {
+          "name": "GET / — root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Welcome message. Confirms the server is reachable."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has welcome message', () => pm.expect(pm.response.json()).to.have.property('message'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /health — health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Liveness probe. Returns { ok: true }."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ok is true', () => pm.expect(pm.response.json().ok).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /pubkey — backend public key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pubkey",
+              "host": ["{{baseUrl}}"],
+              "path": ["pubkey"]
+            },
+            "description": "Returns the backend's Ed25519 public identity key (hex) used by clients to verify signed official records."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns publicKey', () => pm.expect(pm.response.json()).to.have.property('publicKey'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Channels",
+      "item": [
+        {
+          "name": "GET /channels — list channels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/channels",
+              "host": ["{{baseUrl}}"],
+              "path": ["channels"]
+            },
+            "description": "Lists the available emergency channels and whether each accepts only verified (official) records."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns a non-empty array', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /channels/:id/records — create official record",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": {\n    \"title\": \"Evacuación inmediata\",\n    \"body\": \"Diríjase al refugio más cercano por la ruta norte.\",\n    \"severity\": \"high\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/channels/{{channelId}}/records",
+              "host": ["{{baseUrl}}"],
+              "path": ["channels", "{{channelId}}", "records"]
+            },
+            "description": "Creates a backend-signed (verified) record on the given channel, persists it, and broadcasts it to live WebSocket subscribers. The server sets timestamp, ttl, author, signature and the content-hash id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const rec = pm.response.json();",
+                  "pm.test('record has id and signature', () => {",
+                  "  pm.expect(rec).to.have.property('id');",
+                  "  pm.expect(rec).to.have.property('sig');",
+                  "  pm.expect(rec.verified).to.eql(true);",
+                  "});",
+                  "if (rec && rec.timestamp) {",
+                  "  pm.collectionVariables.set('lastRecordTimestamp', rec.timestamp);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /channels/:id/records — missing payload (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/channels/{{channelId}}/records",
+              "host": ["{{baseUrl}}"],
+              "path": ["channels", "{{channelId}}", "records"]
+            },
+            "description": "Validation case: a request body without a `payload` field is rejected with 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('has error message', () => pm.expect(pm.response.json()).to.have.property('error'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /channels/:id/records — list records since",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/channels/{{channelId}}/records?since=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["channels", "{{channelId}}", "records"],
+              "query": [
+                {
+                  "key": "since",
+                  "value": "0",
+                  "description": "unix ms; return only records with timestamp > since (default 0 = all)"
+                }
+              ]
+            },
+            "description": "Retrieves records for a channel created after the `since` timestamp."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /ingest — data-mule channel records upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": [\n    {\n      \"id\": \"client-supplied-id-ignored-for-dedup\",\n      \"channel\": \"estoy-bien\",\n      \"timestamp\": 1719500000000,\n      \"ttl\": 3,\n      \"author\": \"device-abc123\",\n      \"verified\": false,\n      \"payload\": { \"text\": \"Estoy bien en el sector 5\" }\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ingest",
+              "host": ["{{baseUrl}}"],
+              "path": ["ingest"]
+            },
+            "description": "Accepts a batch of device-originated channel records from a data mule. Records are stored as-is (verified:false), deduped by id, and forwarded to WebSocket subscribers. Returns the count actually ingested (new, non-duplicate)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success true with ingested count', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b).to.have.property('ingested');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /ingest — invalid records array (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"records\": \"not-an-array\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ingest",
+              "host": ["{{baseUrl}}"],
+              "path": ["ingest"]
+            },
+            "description": "Validation case: `records` missing or not an array returns 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('has error message', () => pm.expect(pm.response.json()).to.have.property('error'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Locations",
+      "item": [
+        {
+          "name": "POST /ingest/locations — data-mule batch upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"locations\": [\n    {\n      \"deviceId\": \"device-abc123\",\n      \"lat\": 14.6349,\n      \"lon\": -90.5069,\n      \"timestamp\": 1719500000000,\n      \"accuracy\": 12.5\n    },\n    {\n      \"deviceId\": \"device-abc123\",\n      \"lat\": 14.6360,\n      \"lon\": -90.5081,\n      \"timestamp\": 1719500600000\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ingest/locations",
+              "host": ["{{baseUrl}}"],
+              "path": ["ingest", "locations"]
+            },
+            "description": "Uploads a batch of GPS fixes. Invalid points (bad lat/lon, non-positive or far-future timestamp, missing deviceId) are filtered out. The server computes each point's content-hash id, dedups, persists, and broadcasts to `locations` WebSocket subscribers. `received` is the raw count sent; `ingested` is the count of new valid points stored."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('reports ingested and received', () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b).to.have.property('ingested');",
+                  "  pm.expect(b).to.have.property('received');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /ingest/locations — invalid locations array (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"locations\": null\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ingest/locations",
+              "host": ["{{baseUrl}}"],
+              "path": ["ingest", "locations"]
+            },
+            "description": "Validation case: `locations` missing or not an array returns 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('has error message', () => pm.expect(pm.response.json()).to.have.property('error'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /locations — moving-map query",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/locations?since=0&deviceId=device-abc123",
+              "host": ["{{baseUrl}}"],
+              "path": ["locations"],
+              "query": [
+                {
+                  "key": "since",
+                  "value": "0",
+                  "description": "unix ms; return only points with timestamp > since (default 0 = all)"
+                },
+                {
+                  "key": "deviceId",
+                  "value": "device-abc123",
+                  "description": "optional; filter to a single device's trajectory. Remove to get all devices.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Returns location points for the moving-map dashboard, optionally filtered by `since` and `deviceId`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
