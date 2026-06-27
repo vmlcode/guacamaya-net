@@ -15,6 +15,7 @@ import kotlinx.coroutines.cancel
  * NDP wiring is not integrated into [org.sosnet.service.SosForegroundService] yet.
  * This stub keeps the module compiling on devices without Wi-Fi Aware hardware.
  */
+@Suppress("UNUSED_PARAMETER")
 class NanDataPath private constructor(
     private val context: Context,
     private val session: WifiAwareSession,

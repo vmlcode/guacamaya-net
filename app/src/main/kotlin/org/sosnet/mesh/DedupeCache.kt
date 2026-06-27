@@ -29,7 +29,7 @@ class DedupeCache(
 
     /** Returns true if this key is new (or its TTL expired). */
     fun admit(nodeId: ByteArray, msgId: Int): Boolean {
-        val key = Key(nodeId.contentToString(), msgId)
+        val key = Key(nodeId, msgId)
         val ts = now()
         synchronized(lock) {
             val prev = seen[key]
@@ -46,11 +46,24 @@ class DedupeCache(
     /** For tests — make the cache look full. */
     internal fun seed(nodeId: ByteArray, msgId: Int, ts: Long) {
         synchronized(lock) {
-            seen[Key(nodeId.contentToString(), msgId)] = ts
+            seen[Key(nodeId, msgId)] = ts
         }
     }
 
-    private data class Key(val nodeIdHex: String, val msgId: Int)
+    private class Key(val nodeId: ByteArray, val msgId: Int) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+            other as Key
+            if (msgId != other.msgId) return false
+            if (!nodeId.contentEquals(other.nodeId)) return false
+            return true
+        }
+
+        override fun hashCode(): Int {
+            return 31 * msgId + nodeId.contentHashCode()
+        }
+    }
 
     companion object {
         const val DEFAULT_CAPACITY = 1024

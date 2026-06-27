@@ -10,14 +10,16 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 import kotlinx.coroutines.flow.Flow
 
-/**
- * Persistent record of every verified SOS frame received. See docs/protocol-flows.md
- * Flow 2 — written only after the reject cascade passes (CRC, ts-skew, hop-ttl,
- * pubkey-binding, signature).
- */
+object MessageChannel {
+    const val SOS = "SOS"
+    const val CHAT = "CHAT"
+}
+
 @Entity(tableName = "messages")
 data class MessageEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -35,10 +37,53 @@ data class MessageEntity(
     @ColumnInfo(name = "payload_raw") val payloadRaw: ByteArray,
     @ColumnInfo(name = "rssi") val rssi: Int,
     @ColumnInfo(name = "received_at") val receivedAt: Long,
+    @ColumnInfo(name = "body_text") val bodyText: String? = null,
+    @ColumnInfo(name = "channel") val channel: String = MessageChannel.SOS,
 ) {
-    // Room needs equals/hashCode for ByteArray fields.
-    override fun equals(other: Any?): Boolean = this === other
-    override fun hashCode(): Int = System.identityHashCode(this)
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as MessageEntity
+        if (id != other.id) return false
+        if (!nodeId.contentEquals(other.nodeId)) return false
+        if (msgId != other.msgId) return false
+        if (tsUnix != other.tsUnix) return false
+        if (latE7 != other.latE7) return false
+        if (lonE7 != other.lonE7) return false
+        if (sosType != other.sosType) return false
+        if (critical != other.critical) return false
+        if (hasHeavy != other.hasHeavy) return false
+        if (hopTtl != other.hopTtl) return false
+        if (batteryBucket != other.batteryBucket) return false
+        if (!pubkey.contentEquals(other.pubkey)) return false
+        if (!payloadRaw.contentEquals(other.payloadRaw)) return false
+        if (rssi != other.rssi) return false
+        if (receivedAt != other.receivedAt) return false
+        if (bodyText != other.bodyText) return false
+        if (channel != other.channel) return false
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = id.hashCode()
+        result = 31 * result + nodeId.contentHashCode()
+        result = 31 * result + msgId
+        result = 31 * result + tsUnix.hashCode()
+        result = 31 * result + latE7
+        result = 31 * result + lonE7
+        result = 31 * result + sosType
+        result = 31 * result + critical.hashCode()
+        result = 31 * result + hasHeavy.hashCode()
+        result = 31 * result + hopTtl
+        result = 31 * result + batteryBucket
+        result = 31 * result + pubkey.contentHashCode()
+        result = 31 * result + payloadRaw.contentHashCode()
+        result = 31 * result + rssi
+        result = 31 * result + receivedAt.hashCode()
+        result = 31 * result + (bodyText?.hashCode() ?: 0)
+        result = 31 * result + channel.hashCode()
+        return result
+    }
 }
 
 @Dao
@@ -57,12 +102,19 @@ interface MessageDao {
     suspend fun clear()
 }
 
-@Database(entities = [MessageEntity::class], version = 1, exportSchema = false)
+@Database(entities = [MessageEntity::class], version = 2, exportSchema = false)
 abstract class SOSNetDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
 
     companion object {
         @Volatile private var instance: SOSNetDatabase? = null
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN body_text TEXT")
+                db.execSQL("ALTER TABLE messages ADD COLUMN channel TEXT NOT NULL DEFAULT 'SOS'")
+            }
+        }
 
         fun get(context: Context): SOSNetDatabase =
             instance ?: synchronized(this) {
@@ -70,7 +122,10 @@ abstract class SOSNetDatabase : RoomDatabase() {
                     context.applicationContext,
                     SOSNetDatabase::class.java,
                     "sosnet.db"
-                ).fallbackToDestructiveMigration().build().also { instance = it }
+                )
+                    .addMigrations(MIGRATION_1_2)
+                    .fallbackToDestructiveMigration()
+                    .build().also { instance = it }
             }
     }
 }

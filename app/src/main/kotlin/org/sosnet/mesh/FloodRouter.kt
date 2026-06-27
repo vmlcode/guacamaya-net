@@ -9,6 +9,7 @@ import org.sosnet.ble.Broadcaster
 import org.sosnet.crypto.Signer
 import org.sosnet.proto.Flags
 import org.sosnet.proto.Payload
+import org.sosnet.mesh.MessageChannel
 import java.security.MessageDigest
 
 /**
@@ -95,6 +96,7 @@ class FloodRouter(
             payloadRaw = payload22,
             rssi = rssi,
             receivedAt = now(),
+            channel = MessageChannel.SOS,
         )
         dao.insert(entity)
         Log.i(tag, "OK  node=${payload.nodeId.toHex()} msg=${payload.msgId} type=${payload.sosType} rssi=$rssi fresh=$fresh hops_left=${payload.flags.hopTtl}")

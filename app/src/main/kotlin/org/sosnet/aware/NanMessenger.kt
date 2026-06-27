@@ -1,5 +1,6 @@
 package org.sosnet.aware
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.wifi.aware.AttachCallback
 import android.net.wifi.aware.DiscoverySessionCallback
@@ -28,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference
  *
  * See docs/protocol-flows.md Flow 4.
  */
+@SuppressLint("MissingPermission")
 class NanMessenger private constructor(
     private val manager: WifiAwareManager,
 ) {

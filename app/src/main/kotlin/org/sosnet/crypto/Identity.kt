@@ -97,7 +97,7 @@ class Identity private constructor(
                 .putString(SEED_KEY, android.util.Base64.encodeToString(blob, android.util.Base64.NO_WRAP))
                 .putString(IV_KEY, android.util.Base64.encodeToString(iv, android.util.Base64.NO_WRAP))
                 .putString(PUB_KEY, android.util.Base64.encodeToString(pub, android.util.Base64.NO_WRAP))
-                .commit()
+                .apply()
         }
 
         private fun ensureMasterKey(): SecretKey {

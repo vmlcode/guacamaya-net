@@ -1,39 +1,32 @@
 package org.sosnet.ble
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanRecord
 import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
 import android.content.Context
-import android.os.Build
-import android.os.ParcelUuid
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 
-/**
- * BLE GAP Observer. Software filter on the SOSNet Service UUID in [ScanRecord] —
- * hardware ScanFilter is avoided because many stacks omit extended service-data
- * from the record when filtering in silicon. See docs/protocol-flows.md Flow 2.
- *
- * On match, extracts the 22 B payload + 64 B signature from the service-data block
- * and forwards to a [FrameListener]. The expensive Ed25519 verify happens downstream
- * in `mesh.FloodRouter`, not here.
- */
+@SuppressLint("MissingPermission")
 class Observer private constructor(
     private val adapter: BluetoothAdapter,
 ) {
     private val tag = "sosnet.ble.Observer"
+    private val handler = Handler(Looper.getMainLooper())
 
     @Volatile private var scanning = false
+    @Volatile private var foregroundMode = false
+    @Volatile private var retryAttempt = 0
+    @Volatile private var wantsScan = false
 
-    /** Called on every SOSNet-shaped frame. Implementations must be thread-safe. */
     fun interface FrameListener {
         fun onFrame(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, rssi: Int)
     }
 
     private var listener: FrameListener? = null
-
     fun setListener(l: FrameListener) { listener = l }
 
     private val callback = object : ScanCallback() {
@@ -48,50 +41,80 @@ class Observer private constructor(
         override fun onScanFailed(errorCode: Int) {
             Log.e(tag, "scan failed code=$errorCode")
             scanning = false
+            if (wantsScan) scheduleRetry()
         }
 
         private fun handle(result: ScanResult) {
             val rec = result.scanRecord ?: return
             if (rec.serviceUuids?.contains(BleConfig.SERVICE_PARCEL_UUID) != true) return
 
-            val blob: ByteArray? = rec.serviceData?.get(BleConfig.SERVICE_PARCEL_UUID)
-            if (blob == null || blob.size != BleConfig.SERVICE_DATA_SIZE) {
-                Log.w(tag, "SOSNet UUID seen but serviceData size=${blob?.size ?: -1} (need ${BleConfig.SERVICE_DATA_SIZE}) rssi=${result.rssi}")
-                return
-            }
-            val payload22 = blob.copyOfRange(0, 22)
-            val pub32 = blob.copyOfRange(22, 22 + 32)
-            val sig64 = blob.copyOfRange(22 + 32, 22 + 32 + 64)
-            Log.d(tag, "frame rssi=${result.rssi} src=${result.device.address}")
-            listener?.onFrame(payload22, pub32, sig64, result.rssi)
+            val blob = rec.serviceData?.get(BleConfig.SERVICE_PARCEL_UUID) ?: return
+            if (blob.size != BleConfig.SERVICE_DATA_SIZE) return
+
+            listener?.onFrame(
+                blob.copyOfRange(0, 22),
+                blob.copyOfRange(22, 54),
+                blob.copyOfRange(54, 118),
+                result.rssi,
+            )
         }
     }
 
-    /** Begin scanning. Idempotent. */
-    fun start() {
-        if (scanning) return
-        val settingsBuilder = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-            .setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
-            .setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
-        // Broadcaster uses BLE 5 extended ADV (118 B). Legacy-only scan misses it.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            settingsBuilder.setLegacy(false)
-            settingsBuilder.setPhy(ScanSettings.PHY_LE_ALL_SUPPORTED)
+    fun start(foreground: Boolean = false) {
+        wantsScan = true
+        val modeChanged = scanning && foregroundMode != foreground
+        foregroundMode = foreground
+        if (scanning) {
+            if (modeChanged) {
+                stopInternal()
+            } else {
+                return
+            }
         }
-        val settings = settingsBuilder.build()
-        // No hardware ScanFilter: many stacks match the UUID in silicon but omit
-        // extended service-data from ScanRecord. Filter in software instead.
+        retryAttempt = 0
+        startInternal()
+    }
+
+    private fun startInternal() {
+        val settings = BleConfig.scanSettings(foregroundMode)
         adapter.bluetoothLeScanner?.startScan(null, settings, callback) ?: run {
-            Log.e(tag, "BluetoothLeScanner is null — is BT off?")
+            Log.e(tag, "BluetoothLeScanner is null")
+            if (wantsScan) scheduleRetry()
             return
         }
         scanning = true
-        Log.i(tag, "scan started (software filter), service=${BleConfig.SERVICE_UUID}")
+        Log.i(tag, "scan started foreground=$foregroundMode")
+    }
+
+    private fun scheduleRetry() {
+        if (retryAttempt >= MAX_RETRIES) {
+            Log.e(tag, "scan retry exhausted")
+            return
+        }
+        val delayMs = minOf((1 shl retryAttempt) * 1000L, 30_000L)
+        retryAttempt++
+        handler.postDelayed({
+            if (wantsScan && !scanning) startInternal()
+        }, delayMs)
+    }
+
+    fun setForegroundMode(foreground: Boolean) {
+        if (foregroundMode == foreground) return
+        foregroundMode = foreground
+        if (wantsScan && scanning) {
+            stopInternal()
+            startInternal()
+        }
     }
 
     fun stop() {
+        wantsScan = false
+        retryAttempt = 0
+        handler.removeCallbacksAndMessages(null)
+        stopInternal()
+    }
+
+    private fun stopInternal() {
         if (!scanning) return
         adapter.bluetoothLeScanner?.stopScan(callback)
         scanning = false
@@ -101,16 +124,12 @@ class Observer private constructor(
     val isScanning: Boolean get() = scanning
 
     companion object {
+        private const val MAX_RETRIES = 6
+
         fun create(context: Context): Observer? {
             val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-            val adapter = bm?.adapter ?: run {
-                Log.w("sosnet.ble.Observer", "no BluetoothManager")
-                return null
-            }
-            if (adapter.bluetoothLeScanner == null) {
-                Log.w("sosnet.ble.Observer", "null BluetoothLeScanner — is BT off?")
-                return null
-            }
+            val adapter = bm?.adapter ?: return null
+            if (adapter.bluetoothLeScanner == null) return null
             return Observer(adapter)
         }
     }

@@ -13,14 +13,9 @@ import org.sosnet.crypto.Identity
 import org.sosnet.mesh.MessageDao
 import org.sosnet.mesh.MessageEntity
 import org.sosnet.mesh.SOSNetDatabase
+import org.sosnet.permissions.PermissionHelper
+import org.sosnet.service.BleServiceState
 
-/**
- * Top-level UI state. Owns:
- *  - the local [Identity] (for the node-id card)
- *  - the message store flow (recent verified SOS)
- *  - broadcast / observe toggles (UI-driven; the actual radio lifecycle is
- *    owned by [SosForegroundService] once the user starts it)
- */
 class MapViewModel(app: Application) : AndroidViewModel(app) {
 
     private val dao: MessageDao = SOSNetDatabase.get(app).messageDao()
@@ -31,18 +26,29 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     private val _identity = MutableStateFlow<Identity?>(null)
     val identity: StateFlow<Identity?> = _identity.asStateFlow()
 
-    private val _broadcasting = MutableStateFlow(false)
-    val broadcasting: StateFlow<Boolean> = _broadcasting.asStateFlow()
+    val serviceState: StateFlow<BleServiceState.Snapshot> = BleServiceState.state
 
-    private val _observing = MutableStateFlow(false)
-    val observing: StateFlow<Boolean> = _observing.asStateFlow()
+    private val _canOperate = MutableStateFlow(false)
+    val canOperate: StateFlow<Boolean> = _canOperate.asStateFlow()
+
+    private val _blockingReason = MutableStateFlow<PermissionHelper.BlockingReason?>(null)
+    val blockingReason: StateFlow<PermissionHelper.BlockingReason?> = _blockingReason.asStateFlow()
 
     init {
         viewModelScope.launch {
             _identity.value = Identity.loadOrCreate(app)
         }
+        refreshReadiness()
     }
 
-    fun setBroadcasting(on: Boolean) { _broadcasting.value = on }
-    fun setObserving(on: Boolean) { _observing.value = on }
+    fun refreshReadiness() {
+        val ctx = getApplication<Application>()
+        _canOperate.value = PermissionHelper.canOperateBle(ctx)
+        _blockingReason.value = PermissionHelper.blockingReason(ctx)
+    }
+
+    fun isBluetoothEnabled(): Boolean = PermissionHelper.isBluetoothEnabled(getApplication())
+    fun hasAllPermissions(): Boolean = PermissionHelper.hasAllPermissions(getApplication())
+    fun isIgnoringBatteryOptimizations(): Boolean =
+        PermissionHelper.isIgnoringBatteryOptimizations(getApplication())
 }
