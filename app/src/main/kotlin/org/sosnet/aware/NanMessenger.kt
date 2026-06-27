@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicReference
  * Two roles:
  *  - [publish] — radiate the SSI as part of the NAN service discovery frame.
  *    Any subscriber in range receives it via the MAC layer without IP or auth.
- *  - [subscribe] — listen for SOSNet publishers; the [Listener] fires per match.
+ *  - [subscribe] — listen for Guacamaya-net publishers; the [Listener] fires per match.
  *
  * Wi-Fi Aware must be available on the device (feature `android.hardware.wifi.aware`)
  * and enabled in system settings. Caller is responsible for runtime permission.
@@ -76,7 +76,7 @@ class NanMessenger private constructor(
     }
 
     /**
-     * Publish [ssi] (max 255 B) as the SOSNet service. Subscribers in range
+     * Publish [ssi] (max 255 B) as the Guacamaya-net service. Subscribers in range
      * receive it via onServiceDiscovered without any pairing.
      *
      * Re-publishing with a new SSI calls updatePublish on the existing session
@@ -120,7 +120,7 @@ class NanMessenger private constructor(
     }
 
     /**
-     * Subscribe to the SOSNet service. The [Listener] fires for every publisher
+     * Subscribe to the Guacamaya-net service. The [Listener] fires for every publisher
      * seen, including their SSI bytes.
      */
     fun subscribe() {

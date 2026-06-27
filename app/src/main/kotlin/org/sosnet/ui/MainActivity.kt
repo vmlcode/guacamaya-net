@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
         )
 
         requestMissingPermissions()
-        setContent { SOSNetTheme { Surface(Modifier.fillMaxSize()) { Screen() } } }
+        setContent { GuacamayaNetTheme { Surface(Modifier.fillMaxSize()) { Screen() } } }
     }
 
     override fun onResume() {
@@ -389,7 +389,7 @@ private var overlaysCache: MapView? = null
 @Composable
 private fun IdentityCard(nodeIdHex: String) {
     Column(Modifier.fillMaxWidth().background(Color(0xFF161C2C)).padding(12.dp)) {
-        Text("SOSNet", color = Color(0xFFE6E8F0), style = MaterialTheme.typography.titleLarge)
+        Text("Guacamaya-net", color = Color(0xFFE6E8F0), style = MaterialTheme.typography.titleLarge)
         Text("${stringResource(R.string.node_id_label)} = $nodeIdHex", color = Color(0xFF7C5CFF))
     }
 }

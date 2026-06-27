@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SOSNet"
+rootProject.name = "Guacamaya-net"
 include(":app")

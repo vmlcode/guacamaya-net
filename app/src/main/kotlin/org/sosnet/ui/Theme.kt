@@ -12,9 +12,9 @@ import android.os.Build
 
 /**
  * Tiny dark-first Material3 theme. The app is dark-only — fits the radio-beacon
- * aesthetic and matches the parent Activity theme (`Theme.SOSNet`).
+ * aesthetic and matches the parent Activity theme (`Theme.GuacamayaNet`).
  */
-private val SOSNetColors = darkColorScheme(
+private val GuacamayaNetColors = darkColorScheme(
     primary = Color(0xFF7C5CFF),
     onPrimary = Color.White,
     secondary = Color(0xFFFF5C7C),
@@ -25,9 +25,9 @@ private val SOSNetColors = darkColorScheme(
 )
 
 @Composable
-fun SOSNetTheme(content: @Composable () -> Unit) {
+fun GuacamayaNetTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = SOSNetColors,
+        colorScheme = GuacamayaNetColors,
         content = content,
     )
 }

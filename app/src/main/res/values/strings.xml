@@ -1,8 +1,8 @@
 <resources>
-    <string name="app_name">SOSNet</string>
+    <string name="app_name">Guacamaya-net</string>
     <string name="app_tagline">Red mesh SOS sin conexión</string>
 
-    <string name="perm_rationale_bluetooth">SOSNet necesita Bluetooth para emitir y escuchar señales SOS. Sin emparejamiento — los frames viajan por BLE Extended Advertising.</string>
+    <string name="perm_rationale_bluetooth">Guacamaya-net necesita Bluetooth para emitir y escuchar señales SOS. Sin emparejamiento — los frames viajan por BLE Extended Advertising.</string>
     <string name="perm_rationale_location">Android exige ubicación para escanear anuncios BLE (política del sistema, no usamos tu ubicación).</string>
     <string name="perm_rationale_notifications">Las notificaciones mantienen activa la escucha SOS en segundo plano.</string>
     <string name="perm_rationale_aware">Wi-Fi Aware (NAN) transportará mensajes pesados sin emparejamiento.</string>
@@ -17,11 +17,11 @@
     <string name="node_id_label">ID de nodo</string>
     <string name="empty_inbox">Aún no se recibió ningún SOS.</string>
 
-    <string name="channel_name">Servicio SOSNet</string>
+    <string name="channel_name">Servicio Guacamaya-net</string>
     <string name="channel_desc">Mantiene BLE activo escuchando señales SOS en segundo plano.</string>
     <string name="channel_sos_name">Alerta SOS activa</string>
     <string name="channel_sos_desc">Señal de emergencia en emisión.</string>
-    <string name="service_running">SOSNet activo — escuchando</string>
+    <string name="service_running">Guacamaya-net activo — escuchando</string>
 
     <string name="status_listening">Escuchando la red mesh</string>
     <string name="status_broadcasting">Emitiendo señal SOS</string>

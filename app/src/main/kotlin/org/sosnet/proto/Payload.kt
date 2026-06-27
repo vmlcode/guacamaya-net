@@ -4,7 +4,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * SOSNet application payload — 22 bytes, big-endian.
+ * Guacamaya-net application payload — 22 bytes, big-endian.
  *
  * See docs/payload-binary-layout.md for the byte map. The 2-byte CRC16 at the end
  * is computed over bytes 0..19 (cheap reject before the expensive Ed25519 verify).

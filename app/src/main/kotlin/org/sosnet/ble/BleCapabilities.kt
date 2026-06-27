@@ -5,7 +5,7 @@ import android.content.Context
 import android.os.Build
 
 /**
- * Probes chip capabilities for BLE 5 extended advertising used by SOSNet.
+ * Probes chip capabilities for BLE 5 extended advertising used by Guacamaya-net.
  */
 object BleCapabilities {
 
