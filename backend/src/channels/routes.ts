@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { ChannelId } from "@guacamaya/shared";
-import { channelsStore } from "./store.js";
+import { channelsRepo } from "../db/channelsRepo.js";
 import { signRecord } from "../crypto/signer.js";
 import { broadcastRecord } from "../ws/server.js";
 import { publicKeyHex } from "../crypto/keys.js";
@@ -28,7 +28,7 @@ export async function channelRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const channelId = request.params.id as ChannelId;
       const since = Number(request.query.since ?? 0);
-      return channelsStore.getRecords(channelId, since);
+      return channelsRepo.getRecords(channelId, since);
     }
   );
 
@@ -53,7 +53,7 @@ export async function channelRoutes(fastify: FastifyInstance) {
 
       try {
         const signed = await signRecord(unsigned);
-        channelsStore.addRecord(signed);
+        await channelsRepo.addRecord(signed);
         broadcastRecord(signed); // Push update to live websockets
         return signed;
       } catch (err) {
@@ -84,7 +84,7 @@ export async function channelRoutes(fastify: FastifyInstance) {
           typeof rec.author === "string" &&
           rec.payload !== undefined
         ) {
-          const added = channelsStore.addRecord(rec);
+          const added = await channelsRepo.addRecord(rec);
           if (added) {
             ingestedCount++;
             broadcastRecord(rec); // Forward to websocket connections

@@ -12,6 +12,7 @@
     "@guacamaya/shared": "workspace:*",
     "@noble/ed25519": "^2.1.0",
     "@noble/hashes": "^2.2.0",
+    "@supabase/supabase-js": "^2.108.0",
     "fastify": "^4.27.0",
     "ws": "^8.17.0"
   },
