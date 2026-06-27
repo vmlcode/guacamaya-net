@@ -1,132 +1,136 @@
 # SOSNet
 
-Connectionless L2 messaging mesh for SOS dissemination. Phones behave as radio
-beacons, not peers: **no pairing, no handshake, no credentials exchange**.
-Two planes carry the data — BLE for discovery + telemetry, Wi-Fi Aware (NAN)
-for medium and heavy payloads — and authenticity is relocated from the link
-layer to the application layer via **Ed25519 signatures**.
+Malla de mensajería L2 sin conexión para difusión de SOS. Los teléfonos
+funcionan como balizas de radio, no como pares: **sin pairing, sin handshake,
+sin intercambio de credenciales**. Dos planos transportan los datos — BLE para
+descubrimiento + telemetría, Wi-Fi Aware (NAN) para cargas medianas y pesadas —
+y la autenticidad se traslada de la capa de enlace a la capa de aplicación
+mediante **firmas Ed25519**.
 
 ---
 
-## Thesis
+## Tesis
 
-Commercial messaging apps open dedicated channels between two endpoints and
-authenticate at the link layer (pairing, WPA2, …). SOSNet discards that model.
-The link is intentionally open — this is a public SOS, anyone in range should
-receive and relay it. Trust lives at the payload layer: every 22-byte frame is
-signed Ed25519, and any tampering breaks the signature so the next hop silently
-drops the packet.
+Las apps de mensajería comerciales abren canales dedicados entre dos
+endpoints y autentican en la capa de enlace (pairing, WPA2, …). SOSNet
+descarta ese modelo. El enlace es intencionalmente abierto — esto es un SOS
+público, cualquiera en alcance debe recibirlo y retransmitirlo. La confianza
+vive en la capa de payload: cada frame de 22 bytes va firmado con Ed25519, y
+cualquier manipulación rompe la firma de modo que el siguiente salto
+silenciosamente descarta el paquete.
 
-The result is an asynchronous, opportunistic, connectionless mesh. Phones emit
-structured bursts into the air and listen to what floats by. No connection to
-drop, no credential to leak, no infrastructure to fail.
+El resultado es una malla asíncrona, oportunista, sin conexión. Los teléfonos
+emiten ráfagas estructuradas al aire y escuchan lo que flota. Sin conexión que
+caer, sin credencial que filtrar, sin infraestructura que falle.
 
 ---
 
-## Architecture
+## Arquitectura
 
-| Plane | Radio | Payload size | Standard |
+| Plano | Radio | Tamaño payload | Estándar |
 |---|---|---|---|
-| Control | BLE GAP Broadcaster / Observer | 22 B + 32 B pubkey + 64 B sig (118 B service data) | BLE 5 Extended Advertising (`ADV_EXT_IND`, 1M/Coded PHY) |
-| Data (light) | Wi-Fi Aware (NAN) | ≤ 255 B | NAN Service Discovery Action Frame |
-| Data (heavy) | Wi-Fi Aware (NAN) | > 255 B | NAN Data Path (NDP), auto-negotiated, ephemeral |
+| Control | BLE GAP Broadcaster / Observer | 22 B + 32 B pubkey + 64 B sig (118 B service data) | BLE 5 Extended Advertising (`ADV_EXT_IND`, PHY 1M/Coded) |
+| Datos (ligero) | Wi-Fi Aware (NAN) | ≤ 255 B | NAN Service Discovery Action Frame |
+| Datos (pesado) | Wi-Fi Aware (NAN) | > 255 B | NAN Data Path (NDP), auto-negociado, efímero |
 
-See [`docs/protocol-flows.md`](docs/protocol-flows.md) for the seven formal
-flows with sequence diagrams and FSMs.
+Ver [`docs/protocol-flows.md`](docs/protocol-flows.md) para los siete flujos
+formales con diagramas de secuencia y FSMs.
 
 ---
 
-## Build the APK
+## Compilar el APK
 
-### Prerequisites
+### Requisitos
 
-- **JDK 17** (`java --version` shows 17.x)
-- **Android SDK** with `platform-android-34` and `build-tools;34.0.0`
-  - Easiest path: install **Android Studio**, which bundles both. On first
-    project open it will pull the rest automatically.
-- **Python 3** (only used by the optional tamper demo script)
+- **JDK 17** (`java --version` muestra 17.x)
+- **Android SDK** con `platform-android-34` y `build-tools;34.0.0`
+  - Ruta más fácil: instalar **Android Studio**, que incluye ambos. En la
+    primera apertura del proyecto traccionará el resto automáticamente.
+- **Python 3** (solo para el script opcional de demo de tampering)
 
-### Option A — Android Studio (recommended)
+### Opción A — Android Studio (recomendado)
 
-1. Open this folder in Android Studio: `File → Open → SOSNet`.
-2. Wait for Gradle sync (first run downloads dependencies).
+1. Abrir esta carpeta en Android Studio: `File → Open → SOSNet`.
+2. Esperar al Gradle sync (la primera vez descarga dependencias).
 3. `Build → Build Bundle(s)/APK(s) → Build APK(s)`.
-4. APK lands at `app/build/outputs/apk/debug/app-debug.apk`.
+4. El APK queda en `app/build/outputs/apk/debug/app-debug.apk`.
 
-### Option B — Command line
+### Opción B — Línea de comandos
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-APK at `app/build/outputs/apk/debug/app-debug.apk`.
+APK en `app/build/outputs/apk/debug/app-debug.apk`.
 
-> If `./gradlew` complains the wrapper is missing, run
-> `gradle wrapper --gradle-version 8.7` once (system `gradle` required), then retry.
+> Si `./gradlew` se queja de que falta el wrapper, ejecutar una vez
+> `gradle wrapper --gradle-version 8.7` (requiere `gradle` del sistema),
+> luego reintentar.
 
-### Install on a phone (API 26+, Wi-Fi Aware capable)
+### Instalar en un teléfono (API 26+, con Wi-Fi Aware)
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Two phones recommended for the demo (one broadcaster, one observer).
+Para la demo se recomiendan dos teléfonos (un broadcaster y un observer).
 
 ---
 
-## Demo runner (one-shot build + install)
+## Demo runner (build + instalación en un paso)
 
 ```bash
-./scripts/demo.sh install     # build APK + adb install on the connected phone
-./scripts/demo.sh tamper      # generate tampered frame, push to /sdcard
-./scripts/demo.sh logcat      # stream colorized logcat from the phone
+./scripts/demo.sh install     # build del APK + adb install en el teléfono conectado
+./scripts/demo.sh tamper      # generar frame manipulado, push a /sdcard
+./scripts/demo.sh logcat      # stream colorizado de logcat del teléfono
 ```
 
-Full narrative with timing — see [`docs/demo-runbook.md`](docs/demo-runbook.md).
+Narrativa completa con tiempos — ver [`docs/demo-runbook.md`](docs/demo-runbook.md).
 
-### Verify the tamper math on host
+### Verificar la matemática de tampering en el host
 
 ```bash
 python3 scripts/tamper_test.py
 ```
 
-Prints `verify=True` for the valid frame and `verify=False` for the tampered
-one (one bit flipped in payload byte 5). Writes `/tmp/sosnet_test_frames.json`.
+Imprime `verify=True` para el frame válido y `verify=False` para el
+manipulado (un bit flipeado en el byte 5 del payload). Escribe
+`/tmp/sosnet_test_frames.json`.
 
 ---
 
-## Documentation
+## Documentación
 
-- [`docs/protocol-flows.md`](docs/protocol-flows.md) — the seven formal protocol
-  flows (mermaid sequence diagrams + FSMs).
-- [`docs/payload-binary-layout.md`](docs/payload-binary-layout.md) — byte map of
-  the 118 B BLE service-data frame.
-- [`docs/crypto.md`](docs/crypto.md) — Ed25519 signing scope, key handling,
-  threat model.
-- [`docs/demo-runbook.md`](docs/demo-runbook.md) — 90 s demo script for the
-  operator.
+- [`docs/protocol-flows.md`](docs/protocol-flows.md) — los siete flujos formales
+  del protocolo (diagramas de secuencia mermaid + FSMs).
+- [`docs/payload-binary-layout.md`](docs/payload-binary-layout.md) — mapa de
+  bytes del frame BLE service-data de 118 B.
+- [`docs/crypto.md`](docs/crypto.md) — alcance del firmado Ed25519, manejo de
+  claves, modelo de amenazas.
+- [`docs/demo-runbook.md`](docs/demo-runbook.md) — guión de demo de 90 s para
+  el operador.
 
 ---
 
-## Repo layout
+## Estructura del repo
 
 ```
 SOSNet/
 ├── README.md
-├── docs/                       # spec — the jury deliverable
-├── app/                        # Android Studio Gradle project
+├── docs/                       # spec — entregable para el jurado
+├── app/                        # proyecto Gradle Android Studio
 │   └── src/main/kotlin/org/sosnet/
-│       ├── crypto/             # Ed25519 identity, sign/verify
-│       ├── proto/              # 22 B payload codec + CRC16
+│       ├── crypto/             # identidad Ed25519, sign/verify
+│       ├── proto/              # codec payload 22 B + CRC16
 │       ├── ble/                # Broadcaster (ADV_EXT_IND, 1M/Coded) + Observer
 │       ├── aware/              # NAN messenger + NAN Data Path
-│       ├── mesh/               # FloodRouter, dedupe, persistence
-│       ├── service/            # Foreground service holding radios alive
-│       └── ui/                 # Jetpack Compose + OSMDroid map
+│       ├── mesh/               # FloodRouter, dedupe, persistencia
+│       ├── service/            # foreground service mantiene radios vivos
+│       └── ui/                 # Jetpack Compose + mapa OSMDroid
 ├── scripts/
-│   ├── demo.sh                 # build + install + tamper + logcat helper
-│   ├── tamper_test.py          # bit-flip injection for sig-break demo
-│   └── logcat_pretty.py        # colorized logcat filter
+│   ├── demo.sh                 # helper build + install + tamper + logcat
+│   ├── tamper_test.py          # inyección de bit-flip para demo de rotura de firma
+│   └── logcat_pretty.py        # filtro colorizado de logcat
 ├── gradlew / gradlew.bat
 ├── gradle/                     # wrapper + version catalog (libs.versions.toml)
 ├── build.gradle.kts
@@ -135,16 +139,16 @@ SOSNet/
 
 ---
 
-## Platform
+## Plataforma
 
-- **Min SDK**: 26 (Wi-Fi Aware since Android 8.0).
+- **Min SDK**: 26 (Wi-Fi Aware desde Android 8.0).
 - **Target SDK**: 34.
 - **Kotlin**: 1.9.x. **AGP**: 8.5.x. **Compose BOM**: 2024.06.
-- **Crypto**: BouncyCastle 1.78.1 (Ed25519 below API 33).
-- **Map**: OSMDroid (offline-capable).
+- **Crypto**: BouncyCastle 1.78.1 (Ed25519 por debajo de API 33).
+- **Mapa**: OSMDroid (offline-capable).
 
 ---
 
-## License
+## Licencia
 
-TBD before submission.
+Por definir antes de la entrega.
