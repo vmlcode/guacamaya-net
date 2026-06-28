@@ -29,6 +29,8 @@ class Broadcaster private constructor(
     @Volatile private var currentServiceData: ByteArray = ByteArray(BleConfig.SERVICE_DATA_SIZE)
     @Volatile private var activeCallback: AdvertisingSetCallback? = null
     @Volatile private var pendingPayload: Quad? = null
+    @Volatile private var activeParams: android.bluetooth.le.AdvertisingSetParameters = BleConfig.parametersCompat
+    @Volatile private var activeLabel: String = "1M/1M"
 
     private data class Quad(val p22: ByteArray, val pub: ByteArray, val sig: ByteArray, val ttl: Int)
 
@@ -47,6 +49,8 @@ class Broadcaster private constructor(
 
     private fun beginAdvertising(params: android.bluetooth.le.AdvertisingSetParameters, label: String) {
         val pending = pendingPayload ?: return
+        activeParams = params
+        activeLabel = label
         val combined = frame(pending.p22, pending.pub, pending.sig, pending.ttl)
         currentServiceData = combined
 
@@ -97,9 +101,11 @@ class Broadcaster private constructor(
      * stop+start and avoids the controller re-arming delay.
      */
     fun swap(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int = BleConfig.ORIGIN_HOP_TTL) {
-        val set = activeSet.get() ?: run {
-            Log.w(tag, "swap called while not advertising; calling start() instead")
-            start(payload22, pub32, sig64, ttl)
+        pendingPayload = Quad(payload22, pub32, sig64, ttl)
+        val set = activeSet.get()
+        if (set == null) {
+            Log.w(tag, "swap while not advertising — restarting")
+            beginAdvertising(activeParams, activeLabel)
             return
         }
         val combined = frame(payload22, pub32, sig64, ttl)
@@ -111,7 +117,13 @@ class Broadcaster private constructor(
             .addServiceUuid(BleConfig.SERVICE_PARCEL_UUID)
             .addServiceData(BleConfig.SERVICE_PARCEL_UUID, combined)
             .build()
-        set.setAdvertisingData(data)
+        try {
+            set.setAdvertisingData(data)
+        } catch (e: RuntimeException) {
+            Log.w(tag, "swap failed (${e.javaClass.simpleName}) — restart ADV")
+            activeSet.set(null)
+            beginAdvertising(activeParams, "$activeLabel-restart")
+        }
     }
 
     /** Assemble the 119-byte service-data blob: [ttl][payload][pubkey][sig]. */

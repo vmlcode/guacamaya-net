@@ -87,8 +87,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         ensurePermissions()
-        setContent { GuacamayaTheme { Surface(Modifier.fillMaxSize()) { Screen() } } }
         dispatchServiceAction(intent?.action)
+        setContent { GuacamayaTheme { Surface(Modifier.fillMaxSize()) { Screen() } } }
     }
 
     override fun onNewIntent(intent: Intent) {

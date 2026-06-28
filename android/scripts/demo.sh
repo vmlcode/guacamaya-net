@@ -319,9 +319,11 @@ case "${1:-help}" in
       serial="$(adb_serial "$hint")"
       dev="$(adb -s "$serial" shell getprop ro.product.device | tr -d '\r\n')"
       adb -s "$serial" logcat -c 2>/dev/null || true
-      adb -s "$serial" shell am start -n "$ACTIVITY" >/dev/null || true
+      adb -s "$serial" shell am force-stop "$PKG" 2>/dev/null || true
+      sleep 1
       adb -s "$serial" shell am start -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
-      sleep 6
+      adb -s "$serial" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
+      sleep 10
       echo "=== $label ($dev $serial) ==="
       adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -4 || true
     done
@@ -330,19 +332,26 @@ case "${1:-help}" in
   ble-reverse-test)
     REALME="${DEVICE_TEST_TX:-6LRGONDE6LRG9XCY}"
     SWEET="${DEVICE_TEST_RX:-sweet}"
-    echo "[ble-reverse] sweet TX → Realme RX"
+    echo "[ble-reverse] install + force-stop both"
     JAVA_HOME="$JAVA_HOME" ./gradlew :app:installDebug -q
+    adb -s "$(adb_serial "$REALME")" shell am force-stop "$PKG" 2>/dev/null || true
+    adb -s "$(adb_serial "$SWEET")" shell am force-stop "$PKG" 2>/dev/null || true
+    sleep 2
+    echo "[ble-reverse] sweet TX → Realme RX (heartbeat 70s)"
     adb -s "$(adb_serial "$REALME")" logcat -c 2>/dev/null || true
     adb -s "$(adb_serial "$SWEET")" shell am start -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
     adb -s "$(adb_serial "$REALME")" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
-    sleep 25
+    sleep 70
     ./scripts/demo.sh received "$REALME"
-    echo "[ble-reverse] Realme TX → sweet RX"
+    echo "[ble-reverse] Realme TX → sweet RX (heartbeat 70s)"
+    adb -s "$(adb_serial "$SWEET")" shell am force-stop "$PKG" 2>/dev/null || true
+    sleep 2
     adb -s "$(adb_serial "$SWEET")" logcat -c 2>/dev/null || true
     adb -s "$(adb_serial "$REALME")" shell am start -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
     adb -s "$(adb_serial "$SWEET")" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
-    sleep 25
+    sleep 70
     ./scripts/demo.sh received "$SWEET"
+    adb -s "$(adb_serial "$SWEET")" logcat -d -s guacamaya.ble.Observer:I guacamaya.service:I 2>/dev/null | tail -8 || true
     ;;
 
   *)

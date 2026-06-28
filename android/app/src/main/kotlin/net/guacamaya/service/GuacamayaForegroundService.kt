@@ -12,7 +12,9 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
@@ -51,6 +53,8 @@ class GuacamayaForegroundService : Service() {
 
     private val tag = "guacamaya.service"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var observeRetryPosted = false
 
     private var broadcaster: Broadcaster? = null
     private var observer: Observer? = null
@@ -62,6 +66,7 @@ class GuacamayaForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         ensureForeground()
+        Log.i(tag, "onStartCommand action=${intent?.action}")
         when (intent?.action) {
             ACTION_START -> startDistressBroadcast()
             ACTION_STOP -> stopBroadcasting()
@@ -226,7 +231,24 @@ class GuacamayaForegroundService : Service() {
 
     private fun startObserving() {
         ensureObserverAndRouter()
-        observer?.start()
+        val obs = observer
+        if (obs == null) {
+            scheduleObserveRetry()
+            return
+        }
+        if (obs.isScanning) obs.restart() else obs.start()
+        Log.i(tag, "observing on (scanning=${obs.isScanning})")
+        if (!obs.isScanning) scheduleObserveRetry()
+    }
+
+    private fun scheduleObserveRetry() {
+        if (observeRetryPosted) return
+        observeRetryPosted = true
+        mainHandler.postDelayed({
+            observeRetryPosted = false
+            Log.i(tag, "observe retry")
+            startObserving()
+        }, 2_500L)
     }
 
     private fun stopObserving() {

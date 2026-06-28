@@ -53,3 +53,28 @@ guacamaya.probe: heading=0 lat=16.74… lon=-92.62… acc_m=26 speed=0.17 target
 - BLE: diagnosticar por qué sweet no recibe frames Realme (Observer LEGACY_STACK vs ADV Realme).
 - sweet: calibración magnética + probe con app en foreground ≥10 s.
 - Brújula cruzada: comparar `heading` de ambos con teléfonos paralelos.
+
+---
+
+## Iteración 3 — 2026-06-28 (loop 10m, tick 2)
+
+### Diagnóstico BLE Realme→sweet
+| Hallazgo | Detalle |
+|----------|---------|
+| Realme `swap()` | `DeadObjectException` en heartbeat — ADV muerto; **fix:** restart en `Broadcaster.swap()` |
+| Scan sweet | `MATCH_NUM_ONE` en LEGACY bloqueaba otros emisores → **MAX_ADVERTISEMENT** |
+| Perfil scan | sweet ahora **AGGRESSIVE** primero; fallback LEGACY vía watchdog |
+| adb MIUI | `am start -n` + `OBSERVE_ON` separado **no arranca observer**; usar un solo intent con action |
+| Realme→sweet | Sigue **0 OK** en test automático; observer a veces no escanea (FGS sin scan tras cold start lento) |
+
+### Cambios
+- `Broadcaster.kt`: recuperación en `swap()` tras `DeadObjectException`
+- `BleConfig.kt` + `Observer.kt`: scan AGGRESSIVE default, LEGACY alternado
+- `GuacamayaForegroundService`: retry observe 2.5 s, log `onStartCommand`
+- `FunctionalProbe.kt`: snapshot (no reinicia cada sensor tick)
+- `demo.sh`: intents directos, force-stop sweet fase 2, waits 70 s
+
+### Pendiente tick 3
+- Confirmar Realme→sweet con intent único + retry observe
+- Brújula sweet: `magnet=bad` — calibración en campo
+- Comparar headings paralelos sweet vs Realme

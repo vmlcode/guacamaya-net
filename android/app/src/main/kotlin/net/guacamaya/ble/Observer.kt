@@ -117,11 +117,8 @@ class Observer private constructor(
         startInternal()
     }
 
-    /** Redmi Note 10 (sweet) and similar Xiaomi stacks need the conservative profile up front. */
-    private fun defaultScanProfile(): BleConfig.ScanProfile {
-        if (isXiaomiLegacyStack()) return BleConfig.ScanProfile.LEGACY_STACK
-        return BleConfig.ScanProfile.AGGRESSIVE
-    }
+    /** Prefer AGGRESSIVE; Xiaomi falls back to LEGACY via watchdog if no frames arrive. */
+    private fun defaultScanProfile(): BleConfig.ScanProfile = BleConfig.ScanProfile.AGGRESSIVE
 
     private fun isXiaomiLegacyStack(): Boolean {
         val mfr = Build.MANUFACTURER.lowercase()
@@ -198,16 +195,21 @@ class Observer private constructor(
             if (!scanning) return
             val now = SystemClock.elapsedRealtime()
             val legacy = scanProfile == BleConfig.ScanProfile.LEGACY_STACK
-            val idle = now - if (legacy) lastGuacamayaFrameAt else lastCallbackAt
+            val idleCallbacks = now - lastCallbackAt
+            val idleGuacamaya = now - lastGuacamayaFrameAt
             val threshold = if (legacy) LEGACY_FRAME_STALL_MS else STALL_THRESHOLD_MS
             val interval = if (legacy) LEGACY_WATCHDOG_INTERVAL_MS else WATCHDOG_INTERVAL_MS
-            if (idle >= threshold) {
+            val stalled = if (legacy) idleGuacamaya >= threshold else idleCallbacks >= threshold
+            if (stalled || (isXiaomiLegacyStack() && idleGuacamaya >= LEGACY_FRAME_STALL_MS)) {
                 Log.w(
                     tag,
-                    "scan stalled ${idle}ms (legacy=$legacy guacamaya=${now - lastGuacamayaFrameAt}ms) — restarting",
+                    "scan stalled callbacks=${idleCallbacks}ms guacamaya=${idleGuacamaya}ms " +
+                        "profile=$scanProfile — restarting",
                 )
-                if (scanProfile == BleConfig.ScanProfile.AGGRESSIVE) {
+                if (isXiaomiLegacyStack() && scanProfile == BleConfig.ScanProfile.AGGRESSIVE) {
                     scanProfile = BleConfig.ScanProfile.LEGACY_STACK
+                } else if (scanProfile == BleConfig.ScanProfile.LEGACY_STACK) {
+                    scanProfile = BleConfig.ScanProfile.AGGRESSIVE
                 }
                 restart()
             }

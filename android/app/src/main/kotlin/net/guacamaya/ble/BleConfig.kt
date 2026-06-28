@@ -123,7 +123,8 @@ object BleConfig {
                 }
                 ScanProfile.LEGACY_STACK -> {
                     builder.setMatchMode(ScanSettings.MATCH_MODE_STICKY)
-                    builder.setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
+                    // ONE locks onto the first extended ADV — blocks other phones (Realme→sweet).
+                    builder.setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
                     builder.setPhy(
                         if (adapter.isLeCodedPhySupported) ScanSettings.PHY_LE_ALL_SUPPORTED
                         else BluetoothDevice.PHY_LE_1M,
