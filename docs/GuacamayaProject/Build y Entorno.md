@@ -1,58 +1,74 @@
 # Build y Entorno
 
-Cómo compilar y correr las dos partes de [[GuacamayaProject]].
+Cómo compilar y correr las dos mitades del monorepo [[GuacamayaProject]] (rama `develop`).
 
 ## Ubicaciones locales
 
 | Qué | Ruta | Rama |
 |---|---|---|
-| App Android (trabajo actual) | `~/AndroidStudioProjects/guacamaya-net` | `init-sosnet` |
-| Backend (git worktree) | `~/AndroidStudioProjects/guacamaya-develop` | `develop` |
+| Monorepo principal (Android, layout viejo standalone) | `~/AndroidStudioProjects/guacamaya-net` | `init-sosnet` |
+| Monorepo `develop` (Android + backend consolidados, git worktree) | `~/AndroidStudioProjects/guacamaya-develop` | `develop` |
 | Remoto | `github.com/vmlcode/guacamaya-net` | — |
 
-El worktree de `develop` se creó con `git worktree add` para no perturbar los cambios sin commitear
-de la app Android. Comparte el mismo repo `.git`.
+> `develop` es ahora el **monorepo consolidado**: contiene `android/` **y** `backend/` + `packages/`.
+> El worktree comparte el mismo `.git`. La rama `init-sosnet` quedó con el layout viejo (la app en la
+> raíz, sin backend) — atrasada. Ver [[Arquitectura y Decisiones]] §2.
 
 ## [[Guacamaya (Android)]] — compilar
 
-Requiere **JDK 17+** (AGP 8.5.2 corre bien en JDK 21) y Android SDK con `platform-android-34` +
-`build-tools;34.0.0`. Apuntar Gradle al SDK con `local.properties` (`sdk.dir=...`, está en
-.gitignore) o `ANDROID_HOME`.
+Proyecto Gradle autocontenido en `android/`. **Abrir `android/` en Android Studio, no la raíz.**
+Requiere **JDK 17+** (AGP corre bien en JDK 21) y Android SDK con `platform-android-34` +
+`build-tools;34.0.0`. Apuntar Gradle al SDK con `local.properties` (`sdk.dir=...`, gitignored) o
+`ANDROID_HOME`.
 
 ```bash
+cd android
 export JAVA_HOME=/opt/android-studio/jbr        # JBR de Android Studio (JDK 21) sirve
 export ANDROID_HOME=~/Android/Sdk
 ./gradlew :app:assembleDebug                     # APK → app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest                 # tests JVM (proto, crypto)
+./gradlew :app:testDebugUnitTest                 # tests JVM (proto, crypto, ui geo/compass)
+./gradlew :app:testDebugUnitTest --tests "net.guacamaya.proto.PayloadTest"
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Helper de demo (`scripts/demo.sh` auto-resuelve el JDK: `JAVA_HOME` → JBR → `java` en PATH):
+Helper de demo (`android/scripts/demo.sh` auto-resuelve el JDK: `JAVA_HOME` → JBR → `java` en PATH).
+Creció mucho con el sprint de campo dual-device:
 
 ```bash
-./scripts/demo.sh install   # build + adb install en el dispositivo conectado
-./scripts/demo.sh logcat    # logcat coloreado
-./scripts/demo.sh tamper    # genera un frame con bit-flip para demostrar el rechazo de firma
+./scripts/demo.sh install         # build + adb install
+./scripts/demo.sh logcat          # logcat coloreado
+./scripts/demo.sh tamper          # frame con bit-flip para demostrar rechazo de firma
+./scripts/demo.sh device-test     # prueba BLE mesh bidireccional adb (nodes/frames/target)
+./scripts/demo.sh functional-compass   # sonda de brújula + mesh en paralelo
+./scripts/demo.sh compass-miui sweet   # calibración figura-8 del magnetómetro en MIUI
 ```
 
-Para la demo completa: dos teléfonos API 26+ con Wi-Fi Aware (un broadcaster, un observer).
+Para la demo completa: dos teléfonos API 26+ (un broadcaster, un observer). Usar `ANDROID_SERIAL` para
+elegir entre varios dispositivos. En MIUI/Xiaomi, los comandos adb se enrutan vía `AdbCommandReceiver`.
 
-> Setup inicial que hubo que hacer: instalar `platform-android-34` + `build-tools;34.0.0` vía
-> `sdkmanager` (se bajaron las cmdline-tools de Google porque no estaban), crear `local.properties`,
-> y patchar `demo.sh` para que no dependa de un JDK 17 hardcodeado.
+> El paquete es `net.guacamaya` (antes `org.sosnet`). El nombre de la DB Room es `guacamaya.db`.
 
 ## [[Backend Data-Mule]] — correr (Bun-first, nunca npm/node)
 
-Bun instalado en `~/.bun/bin`. Desde la raíz del worktree de `develop`:
+Bun instalado en `~/.bun/bin`. Desde la **raíz del worktree de `develop`**:
 
 ```bash
 bun install
 bun run dev:backend     # bun --watch backend/src/index.ts  → HTTP + WS en :3000
-bun test                # tests del paquete shared
+bun test                # tests del paquete shared (incluye resolve)  → 23 pass al 2026-06-28
 bun run build           # typecheck/build de shared + backend
+bun run keygen          # genera API keys / identidad estable
 ```
 
 Corre sin base de datos (fallback en memoria si Supabase no está configurado). Copiar
-`backend/.env.example` a `backend/.env` y fijar `BACKEND_PRIVATE_KEY_HEX` para identidad estable.
+`backend/.env.example` a `backend/.env` y fijar:
+
+- `BACKEND_PRIVATE_KEY_HEX` — identidad Ed25519 estable del servidor.
+- `GUACAMAYA_ADMIN_KEY` (y opcional `GUACAMAYA_READ_KEY`, `GUACAMAYA_WS_KEY`) — **obligatorio en
+  producción** (`NODE_ENV=production` no arranca sin admin key). Ver [[Seguridad Backend]].
+- `CORS_ORIGINS` — lista de orígenes; nunca `*` en prod.
+- `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — opcionales; sin ellos, store en memoria.
+
+> `android/` **no** es un workspace de Bun — mantenerlo fuera de los workspaces del `package.json` raíz.
 
 Estado actual y trabajo abierto: [[Estado y Pendientes]].

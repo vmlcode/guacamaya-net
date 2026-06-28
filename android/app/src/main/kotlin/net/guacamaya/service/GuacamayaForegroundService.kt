@@ -28,6 +28,7 @@ import net.guacamaya.R
 import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.ble.Broadcaster
 import net.guacamaya.crypto.Identity
+import net.guacamaya.ingest.IngestUploadWorker
 import kotlinx.coroutines.flow.first
 import net.guacamaya.mesh.GuacamayaDatabase
 import net.guacamaya.proto.Flags
@@ -87,6 +88,9 @@ class GuacamayaForegroundService : Service() {
             ACTION_HEARTBEAT_OFF -> stopPresenceHeartbeat()
         }
         if (wantObserving) startObserving() else stopObserving()
+        // Best-effort data-mule flush: WorkManager waits for connectivity, so this is
+        // a no-op until the phone regains Wi-Fi/LTE. Unique work, so it won't pile up.
+        IngestUploadWorker.enqueue(this)
         return START_STICKY
     }
 

@@ -107,6 +107,7 @@ class FloodRouter(
             batteryBucket = payload.flags.batteryBucket,
             pubkey = pub32,
             payloadRaw = payload22,
+            sig = sig64,
             rssi = rssi,
             receivedAt = now(),
         )
