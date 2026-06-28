@@ -42,7 +42,7 @@ están en código y verificados *headless*. Lo que falta, en orden:
    - Compilar debug apuntando ahí: `./gradlew :app:assembleDebug -PBACKEND_BASE_URL=http://<IP-LAN>:3000` (o emulador con el default `10.0.2.2`).
    - **Uplink**: Observe recoge un frame BLE → al recuperar red el `IngestUploadWorker` hace POST → confirmar `{ ingested }` y `GET /locations`.
    - **Downlink**: crear una alerta oficial (`POST /channels/alertas/records` con admin key) → en la app debe aparecer el **banner de alertas verificadas**.
-2. [ ] **WebSocket `/ws`** en la app: suscribir `solicito-ayuda` para SOS comunitarios en vivo (sin polling). Es el siguiente nivel de wiring. Ver `backend_final.md` §4.10 y [[Downlink Alertas Oficiales]].
+2. [ ] **WebSocket en vivo** — cliente Android **hecho** (`net.guacamaya.backend.ws`: `WsFrame` testeado + `LiveSosClient` + `LiveSosIndicator` UI), pero **bloqueado por el backend**: el server **no hace upgrade WS bajo Bun** 🔴 (1006, sin log; verificado con curl crudo y `WebSocket` de Bun). Arreglar el WS del backend (Bun.serve nativo / Node / plugin compatible) — afecta también al dashboard si usa `/ws`. Ver [[Downlink Alertas Oficiales]].
 3. [ ] **Reconciliar `backend_final.md`** (doc del equipo, desactualizado): dice que el `IngestClient` no existe y usa `org.sosnet`/`BACKEND_BASE_URL`. Alinear con la realidad.
 
 ## Trabajo abierto (backlog)

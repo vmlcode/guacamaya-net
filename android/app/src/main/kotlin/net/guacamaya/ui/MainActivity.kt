@@ -247,6 +247,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     val devicesReceived by vm.devicesReceived.collectAsState()
     val totalFrames by vm.totalFrames.collectAsState()
     val alerts by vm.alerts.collectAsState()
+    val liveSos by vm.liveSos.collectAsState()
     val ctx = LocalContext.current
     val probeCompass = rememberCompassState()
     val probeLocation = rememberLiveLocation(ctx, highAccuracy = false)
@@ -316,6 +317,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
                 latestNodes = latestNodes,
                 devicesReceived = devicesReceived,
                 alerts = alerts,
+                liveSosCount = liveSos.size,
                 onPower = { onPower() },
                 onSelectMode = { onSelectMode(it) },
                 broadcastSupported = vm.broadcastSupported,
@@ -353,6 +355,7 @@ private fun HomeScreen(
     latestNodes: List<MessageEntity>,
     devicesReceived: Int,
     alerts: List<OfficialAlert>,
+    liveSosCount: Int,
     onPower: () -> Unit,
     onSelectMode: (MeshMode) -> Unit,
     broadcastSupported: Boolean,
@@ -385,6 +388,11 @@ private fun HomeScreen(
         if (alerts.isNotEmpty()) {
             Spacer(Modifier.height(Space.sm))
             AlertsBanner(alerts = alerts)
+        }
+
+        if (liveSosCount > 0) {
+            Spacer(Modifier.height(Space.sm))
+            LiveSosIndicator(count = liveSosCount)
         }
 
         if (showBatteryHint) {
@@ -559,6 +567,32 @@ private fun AlertsBanner(alerts: List<OfficialAlert>) {
             Spacer(Modifier.height(Space.xxs))
             Text("+${alerts.size - 3} más", color = TextLo, style = MaterialTheme.typography.bodySmall)
         }
+    }
+}
+
+/**
+ * Compact live indicator for community SOS streamed from the backend over WebSocket
+ * (downlink). Amber per DESIGN.md — unconfirmed community reports, distinct from the
+ * blue verified-official alerts and the local BLE-mesh SOS list.
+ */
+@Composable
+private fun LiveSosIndicator(count: Int) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(GuacamayaPalette.WarningSoft)
+            .border(1.dp, GuacamayaPalette.Warning.copy(alpha = 0.55f), MaterialTheme.shapes.medium)
+            .padding(horizontal = Space.sm, vertical = Space.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(GuacamayaPalette.Warning))
+        Spacer(Modifier.size(Space.xs))
+        Text(
+            "$count SOS en vivo vía red",
+            color = GuacamayaPalette.Warning,
+            style = MaterialTheme.typography.titleSmall,
+        )
     }
 }
 
