@@ -103,3 +103,26 @@ MIUI/API 30 inicia FGS desde shell en background → scan BLE no arranca. Mitiga
 ### Pendiente tick 6
 - Realme→sweet: validar tras `onResume` fix con teléfono despierto en foreground
 - sweet brújula: figura-8 / `tap-calibrate-north` vía adb
+
+---
+
+## Iteración 5 — 2026-06-28 (loop 10m, tick 6)
+
+### Cambios
+- **demo.sh `am_start_action`**: `timeout 12` en `-W` (evita hang MIUI — task 892594)
+- **`kickObserve()`**: MainActivity.onResume fuerza scan BLE con activity foreground
+- **`armAdbSession`**: FLAG_KEEP_SCREEN_ON en intents adb
+- **`functional-compass-calibrate`**: taps radar + calibrar norte en sweet
+
+### Prueba adb
+| Test | Resultado |
+|------|-----------|
+| Realme→sweet (40s, kickObserve) | **0 OK** — `allowWhileInUsePermissionInFgs=false`, probe sin `observing` |
+| sweet probe | `magnet=bad usable=false` — sensores sin calibrar |
+
+### Nota task 892594
+`am start -W` en sweet colgó >90 s → reemplazado por `timeout 12` + fallback sin `-W`.
+
+### Pendiente tick 7
+- Realme→sweet: probar con pantalla sweet encendida manualmente (app visible ≥60 s)
+- `./scripts/demo.sh functional-compass-calibrate sweet`

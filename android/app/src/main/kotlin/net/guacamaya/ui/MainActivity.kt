@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -69,7 +70,7 @@ import com.google.android.gms.location.LocationServices
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.mesh.NodeCatalog
 import net.guacamaya.service.GuacamayaForegroundService
-import net.guacamaya.util.BatteryHelper
+import android.util.Log
 import kotlin.math.roundToInt
 
 /**
@@ -87,14 +88,31 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         ensurePermissions()
+        armAdbSession(intent?.action)
         dispatchServiceAction(intent?.action)
         setContent { GuacamayaTheme { Surface(Modifier.fillMaxSize()) { Screen() } } }
     }
 
     override fun onResume() {
         super.onResume()
-        // MIUI/API 30: FGS+BLE need a foreground activity; adb cold start often stops before onCreate finishes.
-        dispatchServiceAction(intent?.action)
+        val action = intent?.action
+        dispatchServiceAction(action)
+        if (action == GuacamayaForegroundService.ACTION_OBSERVE_ON ||
+            action == GuacamayaForegroundService.ACTION_START
+        ) {
+            Log.i("guacamaya.probe", "onResume kickObserve action=$action")
+            GuacamayaForegroundService.kickObserve(this)
+        }
+    }
+
+    /** Keep screen on for adb functional tests — MIUI stops FGS+BLE if activity hides instantly. */
+    private fun armAdbSession(action: String?) {
+        if (action.isNullOrBlank() || !action.startsWith("net.guacamaya.action.")) return
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

@@ -69,17 +69,28 @@ tap_pct() {
   adb_cmd shell input tap "$x" "$y"
 }
 
-launch_app() {
-  adb_cmd shell am start -W -a "${1:-}" -n "$ACTIVITY" 2>/dev/null || \
-    adb_cmd shell am start -W -n "$ACTIVITY" >/dev/null
+am_start_action() {
+  local serial="$1"
+  local action="$2"
+  adb -s "$serial" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
+  # MIUI sweet: `am start -W` can hang indefinitely — cap wait, then retry without -W.
+  if timeout 12 adb -s "$serial" shell am start -W -a "$action" -n "$ACTIVITY" >/dev/null 2>&1; then
+    :
+  else
+    adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" >/dev/null 2>&1 || true
+  fi
+  sleep 1
+  # Second dispatch triggers MainActivity.onResume → FGS foreground on MIUI.
+  adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" >/dev/null 2>&1 || true
   sleep 1
 }
 
+launch_app() {
+  am_start_action "$(adb_serial "${DEVICE_HINT:-}")" "${1:-net.guacamaya.action.OBSERVE_ON}"
+}
+
 launch_action() {
-  local action="$1"
-  adb_cmd shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
-  adb_cmd shell am start -W -a "$action" -n "$ACTIVITY" >/dev/null
-  sleep 2
+  am_start_action "$(adb_serial "${DEVICE_HINT:-}")" "$1"
 }
 
 start_fg_service() {
@@ -329,12 +340,27 @@ case "${1:-help}" in
       adb -s "$serial" logcat -c 2>/dev/null || true
       adb -s "$serial" shell am force-stop "$PKG" 2>/dev/null || true
       sleep 1
-      adb -s "$serial" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
-      adb -s "$serial" shell am start -W -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
+      am_start_action "$serial" "${PKG}.action.HEARTBEAT_ON"
       sleep 12
       echo "=== $label ($dev $serial) ==="
       adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -4 || true
     done
+    ;;
+
+  functional-compass-calibrate)
+    DEVICE_HINT="${2:-sweet}"
+    serial="$(adb_serial "$DEVICE_HINT")"
+    echo "[functional-compass-calibrate] $DEVICE_HINT ($serial)"
+    am_start_action "$serial" "${PKG}.action.HEARTBEAT_ON"
+    sleep 2
+    DEVICE_HINT="$DEVICE_HINT" ./scripts/demo.sh tap-mode-both
+    DEVICE_HINT="$DEVICE_HINT" ./scripts/demo.sh tap-power
+    sleep 2
+    DEVICE_HINT="$DEVICE_HINT" ./scripts/demo.sh tap-radar
+    sleep 4
+    DEVICE_HINT="$DEVICE_HINT" ./scripts/demo.sh tap-calibrate-north
+    sleep 3
+    ./scripts/demo.sh probe-dump "$DEVICE_HINT"
     ;;
 
   ble-reverse-test)
@@ -347,19 +373,23 @@ case "${1:-help}" in
     sleep 2
     echo "[ble-reverse] sweet TX → Realme RX (heartbeat 70s)"
     adb -s "$(adb_serial "$REALME")" logcat -c 2>/dev/null || true
-    adb -s "$(adb_serial "$SWEET")" shell am start -W -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
-    adb -s "$(adb_serial "$REALME")" shell am start -W -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
+    am_start_action "$(adb_serial "$SWEET")" "${PKG}.action.HEARTBEAT_ON"
+    am_start_action "$(adb_serial "$REALME")" "${PKG}.action.OBSERVE_ON"
     sleep 70
     ./scripts/demo.sh received "$REALME"
-    echo "[ble-reverse] Realme TX → sweet RX (heartbeat 70s)"
+    echo "[ble-reverse] Realme TX → sweet RX (START 70s, sweet foreground)"
     adb -s "$(adb_serial "$SWEET")" shell am force-stop "$PKG" 2>/dev/null || true
     sleep 2
     adb -s "$(adb_serial "$SWEET")" logcat -c 2>/dev/null || true
-    adb -s "$(adb_serial "$REALME")" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
-    adb -s "$(adb_serial "$REALME")" shell am start -W -a "${PKG}.action.START" -n "$ACTIVITY" >/dev/null || true
-    adb -s "$(adb_serial "$SWEET")" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
-    adb -s "$(adb_serial "$SWEET")" shell am start -W -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
-    sleep 70
+    am_start_action "$(adb_serial "$REALME")" "${PKG}.action.START"
+    am_start_action "$(adb_serial "$SWEET")" "${PKG}.action.OBSERVE_ON"
+    SWEET_SERIAL="$(adb_serial "$SWEET")"
+    for _ in 1 2 3 4; do
+      sleep 15
+      adb -s "$SWEET_SERIAL" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
+      adb -s "$SWEET_SERIAL" shell input tap 540 1100 2>/dev/null || true
+    done
+    sleep 10
     ./scripts/demo.sh received "$SWEET"
     SPID="$(adb -s "$(adb_serial "$SWEET")" shell pidof "$PKG" 2>/dev/null | tr -d '\r\n' || true)"
     if [ -n "$SPID" ]; then

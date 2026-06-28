@@ -68,6 +68,11 @@ class GuacamayaForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         probeLog("onStartCommand action=${intent?.action} startId=$startId")
         ensureForeground()
@@ -265,7 +270,7 @@ class GuacamayaForegroundService : Service() {
             return
         }
         if (obs.isScanning) obs.restart() else obs.start()
-        Log.i(tag, "observing on (scanning=${obs.isScanning})")
+        probeLog("observing scanning=${obs.isScanning}")
         if (!obs.isScanning) scheduleObserveRetry()
         ensureObserveHealthLoop()
     }
@@ -303,6 +308,7 @@ class GuacamayaForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (instance === this) instance = null
         observer?.stop()
         broadcaster?.stop()
         stopPresenceHeartbeat()
@@ -310,6 +316,24 @@ class GuacamayaForegroundService : Service() {
     }
 
     companion object {
+        @Volatile private var instance: GuacamayaForegroundService? = null
+
+        /** Called from MainActivity.onResume while foreground — MIUI needs this for BLE scan. */
+        fun kickObserve(context: Context) {
+            val svc = instance
+            if (svc != null) {
+                svc.setWantObserving(true)
+                svc.startObserving()
+            } else {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, GuacamayaForegroundService::class.java).apply {
+                        action = ACTION_OBSERVE_ON
+                    },
+                )
+            }
+        }
+
         const val ACTION_START = "net.guacamaya.action.START"
         const val ACTION_STOP = "net.guacamaya.action.STOP"
         const val ACTION_OBSERVE_ON = "net.guacamaya.action.OBSERVE_ON"
