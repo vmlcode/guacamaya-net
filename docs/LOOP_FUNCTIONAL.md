@@ -1,0 +1,33 @@
+# Loop funcional (10 min) — brújula, posición, plano cartesiano
+
+**Regla:** no mejorar UI; solo funcionalidad y precisión. Validar con `adb` + `guacamaya.probe`.
+
+## Iteración 1 — 2026-06-28
+
+### Cambios
+- **ENU cartesiano** (`CartesianGeo.kt`): offsets east/north vía `Location.distanceBetween` (bearing+distance), más preciso a corta distancia que delta lat/lon.
+- **GPS** (`LocationTracker.kt`): rechazo de outliers, `setWaitForAccurateLocation`, intervalos más rápidos en alta precisión.
+- **Brújula** (`CompassHeading.kt`): remapeo portrait, gate de inclinación (pitch/roll), suavizado adaptativo según accuracy del magnetómetro.
+- **Mapa/plano** (`GridMap.kt`): cuadrícula ENU rotada con `-heading` (norte geográfico alineado con brújula); círculo de incertidumbre GPS en origen; escala `fitScaleMeters` incluye `accuracy`.
+- **Probe adb** (`FunctionalProbe.kt`): log cada 2 s tag `guacamaya.probe` (heading, lat, lon, acc_m).
+- **demo.sh**: `functional-test`, `tap-*`, `probe-dump` para interacción sin tocar pantalla.
+
+### Prueba adb (sweet e06518dd)
+```bash
+cd android
+./scripts/demo.sh functional-test sweet
+./scripts/demo.sh probe-dump sweet
+```
+
+Resultado iteración 1:
+```
+guacamaya.probe: heading=0 lat=16.74… lon=-92.62… acc_m=26 speed=0.17 target=da70d303 dist_m=0 bearing=50 rel=0 co_loc=true
+```
+- Probe activo con app en foreground (sin depender del estado UI «running»).
+- `co_loc=true` con ±26 m GPS — distancia «junto» coherente.
+- Taps adb abren radar (calibrar norte) y mapa cartesiano.
+
+### Pendiente siguiente tick
+- Validar brújula entre sweet y Realme tras calibración.
+- BLE asimétrico Realme→sweet (0 OK).
+- Probe: log bearing relativo al nodo más cercano (sin UI).

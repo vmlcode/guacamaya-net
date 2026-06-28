@@ -1,9 +1,8 @@
 package net.guacamaya.ui
 
 import android.location.Location
-import kotlin.math.cos
 import kotlin.math.max
-import kotlin.math.sin
+import kotlin.math.min
 
 /** Local east/north offsets in meters from an origin lat/lon. */
 data class GridPoint(
@@ -16,15 +15,11 @@ data class GridPoint(
 )
 
 object GeoGrid {
-    private const val EARTH_RADIUS_M = 6_371_000.0
+    private const val EARTH_RADIUS_M = 6_371_000.0 // legacy ref only
 
     fun offsetMeters(originLat: Double, originLon: Double, lat: Double, lon: Double): Pair<Float, Float> {
-        val dLat = Math.toRadians(lat - originLat)
-        val dLon = Math.toRadians(lon - originLon)
-        val cosLat = cos(Math.toRadians(originLat))
-        val east = (dLon * cosLat * EARTH_RADIUS_M).toFloat()
-        val north = (dLat * EARTH_RADIUS_M).toFloat()
-        return east to north
+        val enu = CartesianGeo.enuMeters(originLat, originLon, lat, lon)
+        return enu.eastM.toFloat() to enu.northM.toFloat()
     }
 
     fun bounds(points: List<GridPoint>): Pair<Float, Float> {

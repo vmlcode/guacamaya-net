@@ -8,8 +8,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
@@ -35,6 +33,7 @@ fun GridMap(
     modifier: Modifier = Modifier,
 ) {
     val scene = remember(userLocation, messages) { buildGridScene(userLocation, messages) }
+    val accuracyM = userLocation?.takeIf { it.hasAccuracy() }?.accuracy ?: 0f
 
     Canvas(modifier.fillMaxSize()) {
         if (scene.points.isEmpty() && userLocation == null) return@Canvas
@@ -46,53 +45,49 @@ fun GridMap(
         val cy = pad + h / 2f
 
         val (maxE, maxN) = GeoGrid.bounds(scene.points)
-        val maxExtent = maxOf(maxE, maxN, 2f)
-        val scale = min(w, h) / (maxExtent * 2.4f)
-        val stepM = GeoGrid.gridStepM(maxExtent)
+        val spanM = CartesianGeo.fitScaleMeters(maxE, maxN, accuracyM)
+        val scale = min(w, h) / (spanM * 2.4f)
+        val stepM = GeoGrid.gridStepM(spanM)
 
         drawRect(GridBg)
 
-        // Grid lines (north = up on screen)
-        val lines = (maxExtent / stepM).toInt().coerceAtLeast(1) + 1
-        for (i in -lines..lines) {
-            val offsetPx = i * stepM * scale
-            val major = i % 5 == 0
-            val color = if (major) GridLineMajor else GridLine
-            val stroke = if (major) 1.5f else 1f
-            drawLine(color, Offset(cx + offsetPx, pad), Offset(cx + offsetPx, pad + h), strokeWidth = stroke)
-            drawLine(color, Offset(pad, cy - offsetPx), Offset(pad + w, cy - offsetPx), strokeWidth = stroke)
+        // ENU plane rotated so geographic north matches compass (cartesian truth)
+        rotate(-heading, pivot = Offset(cx, cy)) {
+            val lines = (spanM / stepM).toInt().coerceAtLeast(1) + 1
+            for (i in -lines..lines) {
+                val offsetPx = i * stepM * scale
+                val major = i % 5 == 0
+                val color = if (major) GridLineMajor else GridLine
+                val stroke = if (major) 1.5f else 1f
+                drawLine(color, Offset(cx + offsetPx, cy - h / 2), Offset(cx + offsetPx, cy + h / 2), strokeWidth = stroke)
+                drawLine(color, Offset(cx - w / 2, cy - offsetPx), Offset(cx + w / 2, cy - offsetPx), strokeWidth = stroke)
+            }
+
+            drawLine(GridLineMajor, Offset(cx - 12f, cy), Offset(cx + 12f, cy), strokeWidth = 2f)
+            drawLine(GridLineMajor, Offset(cx, cy - 12f), Offset(cx, cy + 12f), strokeWidth = 2f)
+
+            if (accuracyM > 0f) {
+                drawCircle(
+                    YouDot.copy(alpha = 0.12f),
+                    radius = accuracyM * scale,
+                    center = Offset(cx, cy),
+                )
+            }
+            drawCircle(YouDot, radius = 8.dp.toPx(), center = Offset(cx, cy))
+            drawCircle(Color.White.copy(alpha = 0.35f), radius = 8.dp.toPx(), center = Offset(cx, cy), style = Stroke(2f))
+
+            for (p in scene.points) {
+                val px = cx + p.eastM * scale
+                val py = cy - p.northM * scale
+                val color = if (p.critical) NodeSos else NodeFind
+                drawCircle(color, radius = 7.dp.toPx(), center = Offset(px, py))
+                drawCircle(color.copy(alpha = 0.25f), radius = 14.dp.toPx(), center = Offset(px, py))
+            }
         }
 
-        // Crosshair at origin (you)
-        drawLine(GridLineMajor, Offset(cx - 12f, cy), Offset(cx + 12f, cy), strokeWidth = 2f)
-        drawLine(GridLineMajor, Offset(cx, cy - 12f), Offset(cx, cy + 12f), strokeWidth = 2f)
-        drawCircle(YouDot, radius = 8.dp.toPx(), center = Offset(cx, cy))
-        drawCircle(Color.White.copy(alpha = 0.35f), radius = 8.dp.toPx(), center = Offset(cx, cy), style = Stroke(2f))
-
-        for (p in scene.points) {
-            val px = cx + p.eastM * scale
-            val py = cy - p.northM * scale
-            val color = if (p.critical) NodeSos else NodeFind
-            drawCircle(color, radius = 7.dp.toPx(), center = Offset(px, py))
-            drawCircle(color.copy(alpha = 0.25f), radius = 14.dp.toPx(), center = Offset(px, py))
-        }
-
-        // North indicator (rotates with compass so it matches radar)
-        drawNorthIndicator(cx, pad + 18f, heading)
+        // Fixed screen-top north label (geo north when phone aligned)
+        drawLine(NorthNeedle.copy(alpha = 0.6f), Offset(cx, pad), Offset(cx, pad + 20f), strokeWidth = 2f)
     }
-}
-
-private fun DrawScope.drawNorthIndicator(cx: Float, topY: Float, heading: Float) {
-    rotate(-heading, pivot = Offset(cx, topY)) {
-        val path = Path().apply {
-            moveTo(cx, topY + 14f)
-            lineTo(cx - 8f, topY + 28f)
-            lineTo(cx + 8f, topY + 28f)
-            close()
-        }
-        drawPath(path, NorthNeedle)
-    }
-    drawCircle(NorthNeedle.copy(alpha = 0.5f), radius = 3f, center = Offset(cx, topY + 22f))
 }
 
 private data class GridScene(val points: List<GridPoint>)

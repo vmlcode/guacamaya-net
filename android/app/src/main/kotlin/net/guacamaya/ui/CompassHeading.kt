@@ -23,7 +23,11 @@ object CompassMath {
     private const val PREFS = "guacamaya_compass"
     private const val KEY_OFFSET = "heading_offset_deg"
 
-    fun remappedAzimuth(rotationMatrix: FloatArray, displayRotation: Int): Float {
+    fun remappedAzimuth(rotationMatrix: FloatArray, displayRotation: Int): Float =
+        remappedOrientation(rotationMatrix, displayRotation)[0]
+
+    /** Azimuth°, pitch°, roll° — portrait upright. */
+    fun remappedOrientation(rotationMatrix: FloatArray, displayRotation: Int): FloatArray {
         val remapped = FloatArray(9)
         val (axisX, axisY) = CompassAxes.forDisplayRotation(displayRotation)
         if (!SensorManager.remapCoordinateSystem(rotationMatrix, axisX, axisY, remapped)) {
@@ -31,12 +35,20 @@ object CompassMath {
         }
         val orientation = FloatArray(3)
         SensorManager.getOrientation(remapped, orientation)
-        return normalizeDegrees(Math.toDegrees(orientation[0].toDouble()).toFloat())
+        return floatArrayOf(
+            normalizeDegrees(Math.toDegrees(orientation[0].toDouble()).toFloat()),
+            Math.toDegrees(orientation[1].toDouble()).toFloat(),
+            Math.toDegrees(orientation[2].toDouble()).toFloat(),
+        )
     }
 
-    fun smooth(previous: Float, raw: Float): Float {
+    fun smooth(previous: Float, raw: Float, alpha: Float = SMOOTH_ALPHA): Float {
         val delta = shortestDelta(previous, raw)
-        return normalizeDegrees(previous + delta * SMOOTH_ALPHA)
+        return normalizeDegrees(previous + delta * alpha)
+    }
+
+    fun isOrientationUsable(pitchDeg: Float, rollDeg: Float): Boolean {
+        return pitchDeg in -65f..65f && rollDeg in -75f..75f
     }
 
     fun normalizeDegrees(v: Float): Float = ((v % 360f) + 360f) % 360f
@@ -87,9 +99,19 @@ fun rememberCompassHeading(reloadKey: Int = 0): Float {
         var hasAccel = false
         var hasMagnet = false
 
-        fun publish(raw: Float) {
-            val corrected = CompassMath.normalizeDegrees(raw + offset)
-            heading = CompassMath.smooth(heading, corrected)
+        var magnetAccuracy = SensorManager.SENSOR_STATUS_ACCURACY_HIGH
+
+        fun publishFromMatrix() {
+            val o = CompassMath.remappedOrientation(rotMatrix, displayRotation)
+            if (!CompassMath.isOrientationUsable(o[1], o[2])) return
+            val alpha = when (magnetAccuracy) {
+                SensorManager.SENSOR_STATUS_UNRELIABLE -> 0.06f
+                SensorManager.SENSOR_STATUS_ACCURACY_LOW -> 0.10f
+                SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> 0.14f
+                else -> 0.20f
+            }
+            val corrected = CompassMath.normalizeDegrees(o[0] + offset)
+            heading = CompassMath.smooth(heading, corrected, alpha)
         }
 
         val listener = object : SensorEventListener {
@@ -100,7 +122,7 @@ fun rememberCompassHeading(reloadKey: Int = 0): Float {
                     Sensor.TYPE_GAME_ROTATION_VECTOR,
                     -> {
                         SensorManager.getRotationMatrixFromVector(rotMatrix, event.values)
-                        publish(CompassMath.remappedAzimuth(rotMatrix, displayRotation))
+                        publishFromMatrix()
                     }
                     Sensor.TYPE_ACCELEROMETER -> {
                         System.arraycopy(event.values, 0, accelValues, 0, 3)
@@ -118,10 +140,12 @@ fun rememberCompassHeading(reloadKey: Int = 0): Float {
             private fun tryMagnetFallback() {
                 if (rotation != null || !hasAccel || !hasMagnet) return
                 if (!SensorManager.getRotationMatrix(rotMatrix, null, accelValues, magnetValues)) return
-                publish(CompassMath.remappedAzimuth(rotMatrix, displayRotation))
+                publishFromMatrix()
             }
 
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+                if (sensor?.type == Sensor.TYPE_MAGNETIC_FIELD) magnetAccuracy = accuracy
+            }
         }
 
         val rate = SensorManager.SENSOR_DELAY_GAME

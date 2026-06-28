@@ -49,6 +49,31 @@ adb_cmd() {
   adb -s "$serial" "$@"
 }
 
+screen_wh() {
+  adb_cmd shell wm size 2>/dev/null | sed -n 's/.*Physical size: \([0-9]*\)x\([0-9]*\).*/\1 \2/p' | head -1
+}
+
+tap_pct() {
+  local px="${1:?}" py="${2:?}"
+  local wh w h x y
+  wh="$(screen_wh)"
+  w="${wh%% *}"
+  h="${wh##* }"
+  if [ -z "$w" ] || [ -z "$h" ]; then
+    echo "Could not read screen size (wm size)." >&2
+    exit 1
+  fi
+  x=$(( w * px / 100 ))
+  y=$(( h * py / 100 ))
+  echo "tap $x,$y (${px}%,${py}%) serial=$(adb_serial "${DEVICE_HINT:-}")"
+  adb_cmd shell input tap "$x" "$y"
+}
+
+launch_app() {
+  adb_cmd shell am start -n "$ACTIVITY" >/dev/null || true
+  sleep 1
+}
+
 start_fg_service() {
   local action="$1"
   # Shell uid cannot start FGS on API 30+; bounce through MainActivity in-app.
@@ -217,6 +242,72 @@ case "${1:-help}" in
     adb -s "$serial" logcat -v time | python3 scripts/logcat_pretty.py
     ;;
 
+  tap-pct)
+    tap_pct "${2:?}" "${3:?}"
+    ;;
+
+  tap-power)
+    tap_pct 50 46
+    ;;
+
+  tap-mode-both)
+    tap_pct 83 17
+    ;;
+
+  tap-radar)
+    tap_pct 50 78
+    ;;
+
+  tap-map)
+    tap_pct 50 88
+    ;;
+
+  tap-back)
+    tap_pct 14 6
+    ;;
+
+  tap-calibrate-north)
+    tap_pct 50 82
+    ;;
+
+  probe-dump)
+    serial="$(adb_serial "$DEVICE_HINT")"
+    dev="$(adb -s "$serial" shell getprop ro.product.device | tr -d '\r\n')"
+    echo "=== guacamaya.probe ($dev) ==="
+    adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -15 || true
+    ;;
+
+  functional-test)
+    serial="$(adb_serial "$DEVICE_HINT")"
+    dev="$(adb -s "$serial" shell getprop ro.product.device | tr -d '\r\n')"
+    echo "[functional-test] build+install → $dev ($serial)"
+    JAVA_HOME="$JAVA_HOME" ./gradlew :app:installDebug -q
+    adb -s "$serial" logcat -c 2>/dev/null || true
+    launch_app
+    echo "[functional-test] encender Ambos vía intent (observe + heartbeat)"
+    adb -s "$serial" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
+    adb -s "$serial" shell am start -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
+    sleep 4
+    echo "[functional-test] abrir radar"
+    tap_pct 50 78
+    sleep 6
+    tap_pct 50 82
+    sleep 2
+    probe_lines="$(adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | grep -c heading || true)"
+    echo "[functional-test] probe lines=$probe_lines"
+    if [ "${probe_lines:-0}" -lt 2 ]; then
+      echo "[functional-test] WARN — pocos logs guacamaya.probe (¿servicio encendido?)" >&2
+    fi
+    adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -10 || true
+    echo "[functional-test] volver + mapa cartesiano"
+    tap_pct 14 6
+    sleep 0.8
+    tap_pct 50 88
+    sleep 4
+    adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -10 || true
+    echo "[functional-test] done"
+    ;;
+
   *)
     cat <<USAGE
 Guacamaya demo runner.
@@ -236,6 +327,10 @@ Commands:
   battery-miui [dev]       abrir Autostart MIUI manualmente
   tamper        run tamper_test.py, push JSON to /sdcard if device attached
   logcat [dev]  stream colorized guacamaya logcat
+  tap-pct X Y [dev]  tap at screen percent (0-100)
+  tap-power / tap-mode-both / tap-radar / tap-map / tap-back / tap-calibrate-north
+  probe-dump [dev]  last guacamaya.probe logcat lines
+  functional-test [dev]  install + adb taps (radar/map/brújula) + probe dump
 
 Environment:
   JAVA_HOME         JDK 17 path (default /usr/lib/jvm/java-17-openjdk)

@@ -66,10 +66,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.Priority
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.mesh.NodeCatalog
 import net.guacamaya.service.GuacamayaForegroundService
@@ -160,10 +156,13 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     val devicesReceived by vm.devicesReceived.collectAsState()
     val totalFrames by vm.totalFrames.collectAsState()
     val ctx = LocalContext.current
+    val probeHeading = rememberCompassHeading()
+    val probeLocation = rememberLiveLocation(ctx, highAccuracy = false)
 
     var showMap by remember { mutableStateOf(false) }
     var showRadar by remember { mutableStateOf(false) }
     val running = broadcasting || observing
+    FunctionalProbe(headingDeg = probeHeading, location = probeLocation, nodes = latestNodes)
 
     fun send(action: String) {
         val intent = Intent(ctx, GuacamayaForegroundService::class.java).apply { this.action = action }
@@ -732,18 +731,21 @@ private fun rememberLiveLocation(ctx: Context, highAccuracy: Boolean): Location?
             onDispose { }
         } else {
             val client = LocationServices.getFusedLocationProviderClient(ctx)
-            val request = LocationRequest.Builder(
-                if (highAccuracy) Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                if (highAccuracy) 1_000L else 5_000L,
-            ).setMinUpdateIntervalMillis(if (highAccuracy) 500L else 2_000L).build()
-            val callback = object : LocationCallback() {
-                override fun onLocationResult(result: LocationResult) {
-                    val raw = result.lastLocation ?: return
-                    location = GeoProximity.smoothLocation(location, raw)
+            var current = location
+            val callback = LocationTracker.listen(
+                client,
+                highAccuracy,
+                ctx.mainLooper,
+            ) { raw ->
+                current = LocationTracker.smoothFix(current, raw)
+                location = current
+            }
+            client.lastLocation.addOnSuccessListener { fix ->
+                if (fix != null) {
+                    current = LocationTracker.smoothFix(current, fix)
+                    location = current
                 }
             }
-            client.lastLocation.addOnSuccessListener { if (it != null) location = GeoProximity.smoothLocation(location, it) }
-            client.requestLocationUpdates(request, callback, ctx.mainLooper)
             onDispose { client.removeLocationUpdates(callback) }
         }
     }
