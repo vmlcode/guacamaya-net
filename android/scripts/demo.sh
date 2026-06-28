@@ -75,15 +75,17 @@ am_start_action() {
   # MIUI sweet: stale task stacks (PowerDetailActivity) swallow adb intents — clear task.
   local flags="0x14008000"
   adb -s "$serial" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
+  # Broadcast starts BLE/FGS without MainActivity lifecycle (logd also flaky on sweet).
+  adb -s "$serial" shell am broadcast -a "$action" -n "${PKG}/.adb.AdbCommandReceiver" >/dev/null 2>&1 || true
   # MIUI sweet: `am start -W` can hang indefinitely — cap wait, then retry without -W.
-  if timeout 12 adb -s "$serial" shell am start -W -a "$action" -n "$ACTIVITY" -f "$flags" >/dev/null 2>&1; then
+  if timeout 12 adb -s "$serial" shell am start -W -a "$action" -n "$ACTIVITY" -f "$flags" --es guacamaya_adb_action "$action" >/dev/null 2>&1; then
     :
   else
-    adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" -f "$flags" >/dev/null 2>&1 || true
+    adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" -f "$flags" --es guacamaya_adb_action "$action" >/dev/null 2>&1 || true
   fi
   sleep 1
   # Second dispatch triggers MainActivity.onResume → FGS foreground on MIUI.
-  adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" -f "$flags" >/dev/null 2>&1 || true
+  adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" -f "$flags" --es guacamaya_adb_action "$action" >/dev/null 2>&1 || true
   sleep 1
 }
 
@@ -392,7 +394,8 @@ case "${1:-help}" in
     for _ in 1 2 3 4 5 6 7; do
       sleep 10
       adb -s "$SWEET_SERIAL" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
-      adb -s "$SWEET_SERIAL" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null 2>&1 || true
+      adb -s "$SWEET_SERIAL" shell am broadcast -a "${PKG}.action.OBSERVE_ON" -n "${PKG}/.adb.AdbCommandReceiver" >/dev/null 2>&1 || true
+      adb -s "$SWEET_SERIAL" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" -f 0x14008000 --es guacamaya_adb_action "${PKG}.action.OBSERVE_ON" >/dev/null 2>&1 || true
       adb -s "$SWEET_SERIAL" shell input tap 540 1100 2>/dev/null || true
     done
     sleep 5

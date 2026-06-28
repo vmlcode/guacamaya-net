@@ -146,8 +146,14 @@ class Observer private constructor(
         val callback = newCallback()
         activeCallback.set(callback)
         val settings = BleConfig.scanSettings(adapter, scanProfile)
-        adapter.bluetoothLeScanner?.startScan(null, settings, callback) ?: run {
-            Log.e(tag, "BluetoothLeScanner is null — is BT off?")
+        try {
+            adapter.bluetoothLeScanner?.startScan(null, settings, callback) ?: run {
+                Log.e(tag, "BluetoothLeScanner is null — is BT off?")
+                activeCallback.set(null)
+                return
+            }
+        } catch (e: SecurityException) {
+            Log.e(tag, "startScan denied — location/BT permission? ${e.message}")
             activeCallback.set(null)
             return
         }

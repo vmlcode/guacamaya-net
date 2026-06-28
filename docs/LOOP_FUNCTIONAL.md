@@ -180,3 +180,29 @@ adb -s e06518dd logcat -d -s guacamaya.probe:I guacamaya.ble.Observer:I
 - Realme→sweet: mantener sweet en foreground + permisos ubicación/BT concedidos manualmente
 - Brújula sweet: calibración física + `functional-compass-calibrate sweet`
 - Si scan activo pero 0 OK: alinear PHY scan Realme (1M coded) vs sweet AGGRESSIVE
+
+---
+
+## Iteración 8 — 2026-06-28 (loop 10m, tick 9)
+
+### Cambios
+- **`AdbCommandReceiver`**: adb vía `am broadcast` — evita MainActivity/singleTop/MIUI task stacks
+- **`MainActivity`**: extra `guacamaya_adb_action` + prefs + retry permisos; logs `routeAdbIntent`
+- **`demo.sh`**: broadcast antes de `am start`; extras en todos los intents adb
+- **`Observer`**: log `SecurityException` si scan denegado
+
+### Prueba adb (`ble-reverse-test`)
+| Test | Resultado |
+|------|-----------|
+| sweet→Realme | **0 OK** |
+| Realme→sweet | **0 OK** |
+| Scan sweet | **confirmado** — `guacamaya.ble.Observer: scan started profile=AGGRESSIVE` (×5 en logcat) |
+| logd MIUI | Inestable en sweet (`logcat: Unexpected EOF`) — usar `--pid=` o broadcast |
+
+### Hallazgo clave
+El broadcast receiver **sí arranca el scan** en sweet; el bloqueo anterior era routing adb → MainActivity, no PHY. Con scan activo y 0 OK: investigar frames Realme (extended ADV / service-data en stack sweet).
+
+### Pendiente tick 10
+- Realme→sweet con scan confirmado: capturar `saw UUID` / `FloodRouter: OK` en logcat PID
+- Evitar restart scan en ráfaga (5× `scan started` simultáneos)
+- Brújula sweet: calibración física

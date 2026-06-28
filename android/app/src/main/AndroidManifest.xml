@@ -72,5 +72,19 @@
             android:name=".service.GuacamayaForegroundService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <!-- adb: am broadcast -a net.guacamaya.action.OBSERVE_ON -n net.guacamaya/.adb.AdbCommandReceiver -->
+        <receiver
+            android:name=".adb.AdbCommandReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="net.guacamaya.action.OBSERVE_ON" />
+                <action android:name="net.guacamaya.action.OBSERVE_OFF" />
+                <action android:name="net.guacamaya.action.START" />
+                <action android:name="net.guacamaya.action.STOP" />
+                <action android:name="net.guacamaya.action.HEARTBEAT_ON" />
+                <action android:name="net.guacamaya.action.HEARTBEAT_OFF" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

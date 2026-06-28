@@ -88,7 +88,11 @@ class MainActivity : ComponentActivity() {
 
     private val permsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* result handled by recomposing; nothing else to do */ }
+    ) { granted ->
+        if (granted.values.any { it }) {
+            routeAdbIntent(getIntent())
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,14 +108,31 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun routeAdbIntent(source: Intent?) {
-        val action = source?.action
+        val action = resolveAdbAction(source)
+        Log.i("guacamaya.probe", "routeAdbIntent raw=${source?.action} resolved=$action")
         armAdbSession(action)
         dispatchServiceAction(action)
         if (action == GuacamayaForegroundService.ACTION_OBSERVE_ON ||
             action == GuacamayaForegroundService.ACTION_START
         ) {
-            adbHandler.postDelayed({ dispatchServiceAction(getIntent()?.action) }, 800L)
+            adbHandler.postDelayed({ dispatchServiceAction(resolveAdbAction(getIntent())) }, 800L)
+            adbHandler.postDelayed({ dispatchServiceAction(resolveAdbAction(getIntent())) }, 3_000L)
         }
+    }
+
+    /** MIUI/singleTop often drops intent.action; extra + prefs survive adb redispatch. */
+    private fun resolveAdbAction(source: Intent?): String? {
+        source?.getStringExtra(EXTRA_ADB_ACTION)?.let { extra ->
+            if (extra.startsWith("net.guacamaya.action.")) {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_ADB_ACTION, extra).apply()
+                return extra
+            }
+        }
+        source?.action?.takeIf { it.startsWith("net.guacamaya.action.") }?.let { act ->
+            getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_ADB_ACTION, act).apply()
+            return act
+        }
+        return getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_ADB_ACTION, null)
     }
 
     /** Keep screen on for adb functional tests — MIUI stops FGS+BLE if activity hides instantly. */
@@ -167,6 +188,12 @@ class MainActivity : ComponentActivity() {
         }
         if (missing.isNotEmpty()) permsLauncher.launch(missing.toTypedArray())
         // No auto-popup: MIUI abre PowerDetailActivity y rompe adb/UI. Banner in-app opcional.
+    }
+
+    companion object {
+        const val EXTRA_ADB_ACTION = "guacamaya_adb_action"
+        private const val PREFS = "guacamaya_adb"
+        private const val KEY_ADB_ACTION = "last_action"
     }
 }
 
