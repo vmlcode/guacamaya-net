@@ -16,6 +16,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -24,7 +28,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -35,8 +38,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -62,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -231,9 +233,6 @@ private val InfoC = GuacamayaPalette.Info           // presence / official-verif
 private val DangerC = GuacamayaPalette.Danger       // critical SOS content
 private val OffRing = GuacamayaPalette.HairlineStrong
 
-private const val MAP_RENDER_LIMIT = 300
-private const val LIST_RENDER_LIMIT = 500
-
 @Composable
 private fun Screen(vm: MapViewModel = viewModel()) {
     val identity by vm.identity.collectAsState()
@@ -249,7 +248,6 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     val probeCompass = rememberCompassState()
     val probeLocation = rememberLiveLocation(ctx, highAccuracy = false)
 
-    var showMap by remember { mutableStateOf(false) }
     var showRadar by remember { mutableStateOf(false) }
     val running = broadcasting || observing
     FunctionalProbe(compass = probeCompass, location = probeLocation, nodes = latestNodes, totalFrames = totalFrames)
@@ -305,9 +303,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
             .background(Canvas0)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        if (showMap) {
-            MapScreen(latestNodes, totalFrames = totalFrames, onBack = { showMap = false })
-        } else if (showRadar) {
+        if (showRadar) {
             RadarScreen(latestNodes = latestNodes, onBack = { showRadar = false })
         } else {
             HomeScreen(
@@ -319,7 +315,6 @@ private fun Screen(vm: MapViewModel = viewModel()) {
                 alerts = alerts,
                 onPower = { onPower() },
                 onSelectMode = { onSelectMode(it) },
-                onOpenMap = { showMap = true },
                 onOpenRadar = { showRadar = true },
             )
         }
@@ -356,7 +351,6 @@ private fun HomeScreen(
     alerts: List<OfficialAlert>,
     onPower: () -> Unit,
     onSelectMode: (MeshMode) -> Unit,
-    onOpenMap: () -> Unit,
     onOpenRadar: () -> Unit,
 ) {
     val lastNode = latestNodes.firstOrNull()
@@ -418,10 +412,6 @@ private fun HomeScreen(
         Spacer(Modifier.height(Space.sm))
 
         RadarEntry(latestNodes = latestNodes, onClick = onOpenRadar)
-
-        Spacer(Modifier.height(Space.sm))
-
-        MapEntryButton(devices = devicesReceived, onClick = onOpenMap)
     }
 }
 
@@ -579,25 +569,50 @@ private fun Header(nodeIdHex: String?) {
 
 @Composable
 private fun PowerButton(active: Boolean, onClick: () -> Unit) {
-    // Flat hero button — no gradient, no glow (prototype-aligned). Active = solid brand
-    // yellow with a black SOS asterisk; idle = flat dark surface with a muted asterisk.
+    // Flat hero button (prototype-aligned). Active = solid brand yellow + black SOS asterisk
+    // with an expanding beacon pulse; idle = flat dark surface + muted asterisk.
     val fill by animateColorAsState(if (active) Brand else CardElevated, tween(250), label = "fill")
     val glyph = if (active) OnBrand else TextLo
 
+    Box(contentAlignment = Alignment.Center) {
+        if (active) {
+            val pulse = rememberInfiniteTransition(label = "pulse")
+            val p by pulse.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing)),
+                label = "pulseProgress",
+            )
+            // Two staggered rings emanating from the button edge — "broadcasting" beacon.
+            PulseRing(progress = p)
+            PulseRing(progress = (p + 0.5f) % 1f)
+        }
+        Box(
+            Modifier
+                .size(200.dp)
+                .clip(CircleShape)
+                .background(fill)
+                .then(if (active) Modifier else Modifier.border(2.dp, OffRing, CircleShape))
+                .clickable(
+                    onClick = onClick,
+                    onClickLabel = if (active) "Apagar la malla" else "Encender la malla",
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            SosAsteriskGlyph(color = glyph)
+        }
+    }
+}
+
+/** Expanding ring that fades as it grows — the connected-state beacon pulse. */
+@Composable
+private fun PulseRing(progress: Float) {
     Box(
         Modifier
             .size(200.dp)
-            .clip(CircleShape)
-            .background(fill)
-            .then(if (active) Modifier else Modifier.border(2.dp, OffRing, CircleShape))
-            .clickable(
-                onClick = onClick,
-                onClickLabel = if (active) "Apagar la malla" else "Encender la malla",
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        SosAsteriskGlyph(color = glyph)
-    }
+            .scale(1f + progress * 0.45f)
+            .border(3.dp, Brand.copy(alpha = (1f - progress) * 0.5f), CircleShape),
+    )
 }
 
 /** SOS beacon mark — an 8-spoke asterisk (✳), drawn flat. */
@@ -861,111 +876,6 @@ private fun BackButton(onBack: () -> Unit) {
         colors = ButtonDefaults.filledTonalButtonColors(containerColor = CardBg, contentColor = TextHi),
         shape = MaterialTheme.shapes.medium,
     ) { Text("‹ Volver", style = MaterialTheme.typography.labelLarge) }
-}
-
-@Composable
-private fun MapEntryButton(devices: Int, onClick: () -> Unit) {
-    FilledTonalButton(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().height(50.dp),
-        colors = ButtonDefaults.filledTonalButtonColors(containerColor = CardBg, contentColor = TextHi),
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Text(
-            if (devices > 0) "Ver mapa ($devices dispositivo${if (devices == 1) "" else "s"})" else "Ver mapa",
-            style = MaterialTheme.typography.labelLarge,
-        )
-    }
-}
-
-private data class NodeListItem(
-    val nodeIdHex: String,
-    val kind: String,
-    val lat: Double,
-    val lon: Double,
-    val rssi: Int,
-    val lastHeartbeat: String,
-)
-
-@Composable
-private fun MapScreen(latestNodes: List<MessageEntity>, totalFrames: Int, onBack: () -> Unit) {
-    val ctx = LocalContext.current
-    val userLocation = rememberLiveLocation(ctx, highAccuracy = false)
-    val heading = rememberCompassHeading()
-    val mapNodes = latestNodes.take(MAP_RENDER_LIMIT)
-    val listItems = remember(latestNodes) {
-        latestNodes.take(LIST_RENDER_LIMIT).map { msg ->
-            NodeListItem(
-                nodeIdHex = msg.nodeId.toHex().take(8),
-                kind = NodeCatalog.signalKind(msg),
-                lat = msg.latE7 / 1e7,
-                lon = msg.lonE7 / 1e7,
-                rssi = msg.rssi,
-                lastHeartbeat = NodeCatalog.formatLastHeartbeat(msg.receivedAt),
-            )
-        }
-    }
-    val nodesOnGrid = mapNodes.count { it.latE7 != 0 || it.lonE7 != 0 }
-
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(Space.md),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            BackButton(onBack)
-            Column(horizontalAlignment = Alignment.End) {
-                Text("Dispositivos: ${latestNodes.size}", color = TextHi, style = MaterialTheme.typography.titleSmall)
-                Text("Cuadrícula · $nodesOnGrid GPS · $totalFrames frames", color = TextLo, style = MaterialTheme.typography.labelSmall)
-            }
-        }
-
-        Box(Modifier.fillMaxWidth().weight(1f).background(Canvas0)) {
-            if (nodesOnGrid == 0 && userLocation == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Sin nodos con GPS aún.", color = TextLo, style = MaterialTheme.typography.bodyMedium)
-                }
-            } else {
-                GridMap(userLocation = userLocation, messages = mapNodes, heading = heading)
-            }
-        }
-
-        LazyColumn(
-            Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(horizontal = Space.md, vertical = Space.xs),
-        ) {
-            items(listItems, key = { it.nodeIdHex }, contentType = { "node" }) { item ->
-                NodeRow(item)
-            }
-        }
-    }
-}
-
-@Composable
-private fun NodeRow(item: NodeListItem) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = Space.xxs)
-            .clip(MaterialTheme.shapes.medium)
-            .background(CardBg)
-            .padding(horizontal = Space.sm, vertical = Space.xs),
-        horizontalArrangement = Arrangement.spacedBy(Space.xs),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            item.nodeIdHex,
-            color = TextHi,
-            style = MaterialTheme.typography.titleSmall,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.weight(0.45f),
-        )
-        Column(Modifier.weight(1f)) {
-            Text("${item.kind} · ${item.lastHeartbeat}", color = InfoC, style = MaterialTheme.typography.labelMedium)
-            Text("(${item.lat}, ${item.lon})", color = TextLo, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
-        }
-        Text("${item.rssi}", color = TextLo, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(0.25f))
-    }
 }
 
 private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
