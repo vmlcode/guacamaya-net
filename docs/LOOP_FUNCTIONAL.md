@@ -410,3 +410,28 @@ Sigue requiriendo **calibración física** (`magnet=bad`). Código ahora permite
 ### Pendiente tick 19
 - Calibración magnética sweet en campo
 - Comparar `rel=` con teléfonos paralelos apuntando al mismo objetivo
+
+---
+
+## Iteración 18 — 2026-06-28 (loop 10m, tick 19)
+
+### Prueba adb
+| Test | Resultado |
+|------|-----------|
+| `functional-compass` | sweet **0° magnet=bad**; Realme sin probe en ventana (logd intermitente) |
+| `device-test` | **PASS** probe @5 s (`nodes=2 frames=47`) |
+
+### Cambios
+- **`functional-compass`**: poll extendido a **36 s** por dispositivo
+
+### Resumen loop (~19 ticks)
+| Área | Estado |
+|------|--------|
+| BLE mesh bidireccional | ✅ `ble-reverse-test` + `device-test` |
+| ENU/GPS probe | ✅ lat/lon/acc/bearing/`rel=` |
+| Brújula Realme | ✅ ~87–109° `magnet=high` |
+| Brújula sweet | ❌ `magnet=bad` — **acción manual** `compass-miui` + figura-8 |
+
+### Pendiente (post-loop)
+- Calibrar sweet en campo → `functional-compass` con Δheading ≈ 0° en paralelo
+- Validar `rel=` cruzado con brújula usable en ambos

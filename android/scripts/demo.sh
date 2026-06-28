@@ -449,7 +449,7 @@ case "${1:-help}" in
       am_start_action "$serial" "${PKG}.action.HEARTBEAT_ON"
       echo "=== $label ($dev $serial) ==="
       line=""
-      for _ in 1 2 3 4 5 6 7 8 9; do
+      for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
         sleep 3
         snap="$(probe_snapshot "$serial")"
         line="$(printf '%s\n' "$snap" | grep 'heading=' | tail -1 || true)"
@@ -463,7 +463,7 @@ case "${1:-help}" in
         echo "  → heading=${h:-?}° usable=${usable:-?} magnet=${magnet:-?}"
         if [ "$label" = "sweet" ]; then SWEET_H="$h"; else REALME_H="$h"; fi
       else
-        echo "  (sin probe heading en 27 s — usar: ./scripts/demo.sh compass-miui $hint)"
+        echo "  (sin probe heading en 36 s — usar: ./scripts/demo.sh compass-miui $hint)"
       fi
     done
     if [ -n "$SWEET_H" ] && [ -n "$REALME_H" ]; then
