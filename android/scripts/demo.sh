@@ -93,7 +93,7 @@ am_start_action() {
 probe_rx_ok() {
   local serial="$1"
   local probe nodes frames targets
-  probe="$(adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -5 || true)"
+  probe="$(adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -10 || true)"
   nodes="$(printf '%s\n' "$probe" | sed -n 's/.*nodes=\([0-9]*\).*/\1/p' | tail -1)"
   frames="$(printf '%s\n' "$probe" | sed -n 's/.*frames=\([0-9]*\).*/\1/p' | tail -1)"
   # FGS health loop logs "mesh nodes=N frames=M" without UI foreground.
@@ -212,9 +212,15 @@ case "${1:-help}" in
     dev="$(adb -s "$serial" shell getprop ro.product.device | tr -d '\r\n')"
     ok="$(adb -s "$serial" logcat -d -s guacamaya.mesh.FloodRouter:I 2>/dev/null | grep -c ' OK ' || true)"
     drop="$(adb -s "$serial" logcat -d -s guacamaya.mesh.FloodRouter:I 2>/dev/null | grep -c ' DROP' || true)"
-    probe="$(adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -1 || true)"
-    probe_nodes="$(printf '%s' "$probe" | sed -n 's/.*nodes=\([0-9]*\).*/\1/p')"
-    probe_frames="$(printf '%s' "$probe" | sed -n 's/.*frames=\([0-9]*\).*/\1/p')"
+    probe="$(adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -10 || true)"
+    probe_nodes="$(printf '%s\n' "$probe" | sed -n 's/.*nodes=\([0-9]*\).*/\1/p' | tail -1)"
+    probe_frames="$(printf '%s\n' "$probe" | sed -n 's/.*frames=\([0-9]*\).*/\1/p' | tail -1)"
+    if [ -z "$probe_nodes" ]; then
+      probe_nodes="$(printf '%s\n' "$probe" | sed -n 's/.*mesh nodes=\([0-9]*\).*/\1/p' | tail -1)"
+    fi
+    if [ -z "$probe_frames" ]; then
+      probe_frames="$(printf '%s\n' "$probe" | sed -n 's/.*frames=\([0-9]*\).*/\1/p' | tail -1)"
+    fi
     echo "device=$dev serial=$serial  Received(OK)=$ok  Dropped=$drop  probe_nodes=${probe_nodes:-?} probe_frames=${probe_frames:-?}"
     adb -s "$serial" logcat -d -s guacamaya.mesh.FloodRouter:I 2>/dev/null | grep ' OK ' | tail -5 || true
     [ -n "$probe" ] && echo "$probe"
@@ -424,8 +430,11 @@ case "${1:-help}" in
     sleep 70
     ./scripts/demo.sh received "$REALME"
     echo "[ble-reverse] Realme TX → sweet RX (START 70s, sweet foreground)"
+    adb -s "$(adb_serial "$SWEET")" shell am force-stop "$PKG" 2>/dev/null || true
+    adb -s "$(adb_serial "$REALME")" shell am force-stop "$PKG" 2>/dev/null || true
+    sleep 2
     adb -s "$(adb_serial "$SWEET")" logcat -c 2>/dev/null || true
-    # Sweet observer first so scan is up before Realme SOS ADV.
+    # Sweet RX-only; Realme SOS TX.
     am_start_action "$(adb_serial "$SWEET")" "${PKG}.action.OBSERVE_ON"
     sleep 8
     am_start_action "$(adb_serial "$REALME")" "${PKG}.action.START"
@@ -437,7 +446,8 @@ case "${1:-help}" in
       adb -s "$SWEET_SERIAL" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" -f 0x14008000 --es guacamaya_adb_action "${PKG}.action.OBSERVE_ON" >/dev/null 2>&1 || true
       adb -s "$SWEET_SERIAL" shell input tap 540 1100 2>/dev/null || true
     done
-    sleep 5
+    am_start_action "$SWEET_SERIAL" "${PKG}.action.OBSERVE_ON"
+    sleep 25
     ./scripts/demo.sh received "$SWEET"
     SWEET_OK="$(rx_ok_count "$(adb_serial "$SWEET")")"
     if [ "${SWEET_OK:-0}" -ge 1 ]; then

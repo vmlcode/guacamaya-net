@@ -256,3 +256,26 @@ logd en sweet pierde logs `FloodRouter`/`Observer`; usar `guacamaya.probe` con `
 ### Pendiente tick 12
 - Brújula sweet: calibración física + `functional-compass-calibrate sweet`
 - Estabilizar Realme→sweet en `ble-reverse-test` completo (140 s)
+
+---
+
+## Iteración 11 — 2026-06-28 (loop 10m, tick 12)
+
+### Cambios
+- **`ble-reverse-test` fase 2**: force-stop ambos + sweet OBSERVE antes de Realme START
+- **`received`**: parse `mesh nodes=` FGS; tail 10 líneas probe
+- **Fase 2 cierre**: redispatch OBSERVE + **25 s** wait (probe MIUI tarda ~30 s en primer tick)
+
+### Prueba adb (`ble-reverse-test`)
+| Fase | Resultado |
+|------|-----------|
+| sweet→Realme | **97 OK**, probe `nodes=2 frames=64` |
+| Realme→sweet (automático) | FAIL en script — logcat vacío al instante de `received` |
+| Realme→sweet (+25 s manual) | probe `nodes=2 frames=42` (RX mesh activo; lag logcat) |
+
+### Brújula sweet
+`functional-compass-calibrate sweet`: taps OK; probe sigue `magnet=bad usable=false` — requiere figura-8 física.
+
+### Pendiente tick 13
+- Poll `received` hasta probe/mesh visible (timeout 45 s) en fase 2
+- Brújula sweet en campo
