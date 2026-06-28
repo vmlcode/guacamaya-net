@@ -592,3 +592,25 @@ Loop continúa en modo vigilancia; sin avance posible sin intervención manual (
 1. Reconectar Realme por USB
 2. Figura-8 en sweet
 3. `ble-reverse-test` + `functional-compass` con ambos dispositivos
+
+---
+
+## Iteración 26 — 2026-06-28 (loop 10m, tick 80)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| Dispositivos | Solo **sweet**; Realme ausente (ticks 38–80) |
+| `device-test` | **PASS** parcial @0 s — sweet `nodes=2 frames=69` |
+| `functional-compass` | sweet **0° magnet=bad**; Realme N/A |
+
+### Resumen loop (80 ticks, ~13 h)
+| Área | Estado |
+|------|--------|
+| BLE bidireccional | ✅ Validado ticks 1–37 |
+| Validación degradada | ⚠️ Ticks 38–80 (43 ticks) — solo sweet |
+| Brújula sweet | ❌ `magnet=bad` — sin calibración manual |
+| Fixes en loop | BLE/adb MIUI, device-test hardening, JDK 17 fallback |
+
+### Recomendación
+Detener loop hasta reconectar Realme y calibrar brújula sweet; ticks 38–80 no aportan avance funcional.
