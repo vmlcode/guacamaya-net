@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Guacamaya Net — Backend",
-    "description": "Endpoint tests for the @guacamaya/backend Fastify HTTP server.\n\nSet the `baseUrl` collection variable (default `http://localhost:3000`).\n\nTwo feature domains:\n- **channels** — emergency broadcast channels (alertas, refugios, etc.)\n- **locations** — GPS trajectory history for the moving-map dashboard\n\nIDs are recomputed server-side (SHA-256 of canonical content), so client-supplied `id` values on ingest are ignored for dedup purposes.\n\nNote: the WebSocket endpoint (`/ws`) is not testable from a standard Postman REST request; use Postman's WebSocket request type and connect to `ws://localhost:3000/ws`, then send `{\"type\":\"subscribe\",\"channel\":\"alertas\"}`.",
+    "description": "Endpoint tests for the @guacamaya/backend Fastify HTTP server.\n\nSet the `baseUrl` collection variable (default `http://localhost:3000`).\n\nTwo feature domains:\n- **channels** — emergency broadcast channels (alertas, refugios, etc.)\n- **locations** — GPS trajectory history for the moving-map dashboard\n\n**Data-mule ingest is binary + zero-trust.** `POST /ingest` takes `{ \"frames\": [\"<base64>\"] }` — each frame is a signed 118 B Guacamaya mesh frame (22 B payload + 32 B pubkey + 64 B signature; a 119 B frame with the leading hop-TTL byte is also tolerated). Every frame is re-verified server-side (CRC16 → pubkey↔node_id binding → Ed25519) before anything is persisted; the backend never trusts the client. Verified frames become `verified:false` community records on `solicito-ayuda`, and the lat/lon inside the signed payload is persisted as a `LocationPoint` on the SAME path. **There is no trusted-JSON location ingest** — `GET /locations` is read-only.\n\nThe `validFrame` / `validFrame2` collection variables hold real signed frames (deterministic dev key) so the ingest request passes verification out of the box. Regenerate them with the script in `backend/scripts/gen-postman-frames.ts` if the wire format changes.\n\nIDs are recomputed server-side (SHA-256 of canonical content), so client-supplied `id` values are ignored for dedup purposes.\n\nNote: the WebSocket endpoint (`/ws`) is not testable from a standard Postman REST request; use Postman's WebSocket request type and connect to `ws://localhost:3000/ws`, then send `{\"type\":\"subscribe\",\"channel\":\"solicito-ayuda\"}` (or `\"locations\"` for the moving map).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -14,6 +14,30 @@
       "key": "channelId",
       "value": "alertas",
       "type": "string"
+    },
+    {
+      "key": "deviceId",
+      "value": "device-9af220d724884841c19ba0285cf30c272b480e78c75977893daedec2184cb1f2",
+      "type": "string",
+      "description": "Origin device of the sample frames (= device-<origin pubkey>). Used by the GET /locations filter."
+    },
+    {
+      "key": "validFrame",
+      "value": "CLkbyMoNvjhmfXzgzhRfxAIAEJKmEpryINckiEhBwZugKFzzDCcrSA54x1l3iT2u3sIYTLHyn2HsQ2oy60F1dkEPOc6sG3rkEKB+VkIWB/U8pHrhvqM1aL3YIm3KJWlWPshPV7YhQHLiUkmcZMUUMuyiLUSrCA==",
+      "type": "string",
+      "description": "A real signed 118 B mesh frame (medical SOS, critical, Guatemala City). Passes CRC + pubkey binding + Ed25519."
+    },
+    {
+      "key": "validFrame2",
+      "value": "CLlGwMoNj1hmfX84zhRfxBADEJMaYZryINckiEhBwZugKFzzDCcrSA54x1l3iT2u3sIYTLHyT/SPSe6pMwdxnPgl1YIg6ZDAUYMxFCgppgEeK92srUvlX30aLurHpI6bFsdrhd6bHdTvUhT8AfP3rhod3mnyDQ==",
+      "type": "string",
+      "description": "A second signed frame (water request) — different payload, different content-hash id."
+    },
+    {
+      "key": "tamperedFrame",
+      "value": "AAkbyMoNvjhmfXzgzhRfxAIAEJKmEpryINckiEhBwZugKFzzDCcrSA54x1l3iT2u3sIYTLHyn2HsQ2oy60F1dkEPOc6sG3rkEKB+VkIWB/U8pHrhvqM1aL3YIm3KJWlWPshPV7YhQHLiUkmcZMUUMuyiLUSrCA==",
+      "type": "string",
+      "description": "validFrame with a flipped payload byte — fails verification (rejected, not persisted)."
     }
   ],
   "item": [
@@ -231,7 +255,7 @@
           ]
         },
         {
-          "name": "POST /ingest — data-mule channel records upload",
+          "name": "POST /ingest — data-mule signed frame upload",
           "request": {
             "method": "POST",
             "header": [
@@ -239,14 +263,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"records\": [\n    {\n      \"id\": \"client-supplied-id-ignored-for-dedup\",\n      \"channel\": \"estoy-bien\",\n      \"timestamp\": 1719500000000,\n      \"ttl\": 3,\n      \"author\": \"device-abc123\",\n      \"verified\": false,\n      \"payload\": { \"text\": \"Estoy bien en el sector 5\" }\n    }\n  ]\n}"
+              "raw": "{\n  \"frames\": [\n    \"{{validFrame}}\",\n    \"{{validFrame2}}\"\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/ingest",
               "host": ["{{baseUrl}}"],
               "path": ["ingest"]
             },
-            "description": "Accepts a batch of device-originated channel records from a data mule. Records are stored as-is (verified:false), deduped by id, and forwarded to WebSocket subscribers. Returns the count actually ingested (new, non-duplicate)."
+            "description": "Uploads a batch of signed binary mesh frames (Base64) collected by a data mule. ZERO TRUST: each frame is re-decoded and its Ed25519 signature re-verified server-side (CRC16 → pubkey↔node_id binding → Ed25519) before anything is persisted. Verified frames become `verified:false` community records on `solicito-ayuda` (id = SHA-256 of the signed payload), and the lat/lon inside each payload is persisted as a LocationPoint on the same path. Response: `{ success, ingested, duplicate, rejected, locationsIngested, reasons }`.\n\nThe two sample frames pass verification. Run this once for `ingested:2`; run it again and the same frames dedup to `duplicate:2, ingested:0`."
           },
           "event": [
             {
@@ -255,10 +279,17 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('success true with ingested count', () => {",
-                  "  const b = pm.response.json();",
+                  "const b = pm.response.json();",
+                  "pm.test('success with full ingest report', () => {",
                   "  pm.expect(b.success).to.eql(true);",
                   "  pm.expect(b).to.have.property('ingested');",
+                  "  pm.expect(b).to.have.property('duplicate');",
+                  "  pm.expect(b).to.have.property('rejected');",
+                  "  pm.expect(b).to.have.property('locationsIngested');",
+                  "});",
+                  "pm.test('valid frames are not rejected', () => pm.expect(b.rejected).to.eql(0));",
+                  "pm.test('each ingested record also yields a location', () => {",
+                  "  pm.expect(b.locationsIngested).to.eql(b.ingested);",
                   "});"
                 ]
               }
@@ -266,7 +297,7 @@
           ]
         },
         {
-          "name": "POST /ingest — invalid records array (400)",
+          "name": "POST /ingest — tampered frame is rejected",
           "request": {
             "method": "POST",
             "header": [
@@ -274,14 +305,50 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"records\": \"not-an-array\"\n}"
+              "raw": "{\n  \"frames\": [\n    \"{{tamperedFrame}}\"\n  ]\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/ingest",
               "host": ["{{baseUrl}}"],
               "path": ["ingest"]
             },
-            "description": "Validation case: `records` missing or not an array returns 400."
+            "description": "Zero-trust gate: a frame with a flipped payload byte fails verification and is counted under `rejected` with a `reasons` breakdown — nothing is persisted. Demonstrates the backend never takes the client's word for authenticity."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('nothing ingested', () => pm.expect(b.ingested).to.eql(0));",
+                  "pm.test('frame rejected with a reason', () => {",
+                  "  pm.expect(b.rejected).to.eql(1);",
+                  "  pm.expect(Object.keys(b.reasons)).to.have.length.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /ingest — invalid frames array (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"frames\": \"not-an-array\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ingest",
+              "host": ["{{baseUrl}}"],
+              "path": ["ingest"]
+            },
+            "description": "Validation case: `frames` missing or not an array returns 400."
           },
           "event": [
             {
@@ -300,81 +367,15 @@
     },
     {
       "name": "Locations",
+      "description": "Location history is read-only at the HTTP edge. Points are NOT ingested here — they are derived from Ed25519-verified mesh frames in `POST /ingest` (see the Channels folder). The old `POST /ingest/locations` trusted-JSON endpoint was removed; the same crypto gate that guards records guards positions, and `deviceId` always comes from the verified origin pubkey.",
       "item": [
-        {
-          "name": "POST /ingest/locations — data-mule batch upload",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"locations\": [\n    {\n      \"deviceId\": \"device-abc123\",\n      \"lat\": 14.6349,\n      \"lon\": -90.5069,\n      \"timestamp\": 1719500000000,\n      \"accuracy\": 12.5\n    },\n    {\n      \"deviceId\": \"device-abc123\",\n      \"lat\": 14.6360,\n      \"lon\": -90.5081,\n      \"timestamp\": 1719500600000\n    }\n  ]\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/ingest/locations",
-              "host": ["{{baseUrl}}"],
-              "path": ["ingest", "locations"]
-            },
-            "description": "Uploads a batch of GPS fixes. Invalid points (bad lat/lon, non-positive or far-future timestamp, missing deviceId) are filtered out. The server computes each point's content-hash id, dedups, persists, and broadcasts to `locations` WebSocket subscribers. `received` is the raw count sent; `ingested` is the count of new valid points stored."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('reports ingested and received', () => {",
-                  "  const b = pm.response.json();",
-                  "  pm.expect(b.success).to.eql(true);",
-                  "  pm.expect(b).to.have.property('ingested');",
-                  "  pm.expect(b).to.have.property('received');",
-                  "});"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "POST /ingest/locations — invalid locations array (400)",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"locations\": null\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/ingest/locations",
-              "host": ["{{baseUrl}}"],
-              "path": ["ingest", "locations"]
-            },
-            "description": "Validation case: `locations` missing or not an array returns 400."
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
-                  "pm.test('has error message', () => pm.expect(pm.response.json()).to.have.property('error'));"
-                ]
-              }
-            }
-          ]
-        },
         {
           "name": "GET /locations — moving-map query",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/locations?since=0&deviceId=device-abc123",
+              "raw": "{{baseUrl}}/locations?since=0&deviceId={{deviceId}}",
               "host": ["{{baseUrl}}"],
               "path": ["locations"],
               "query": [
@@ -385,13 +386,13 @@
                 },
                 {
                   "key": "deviceId",
-                  "value": "device-abc123",
-                  "description": "optional; filter to a single device's trajectory. Remove to get all devices.",
+                  "value": "{{deviceId}}",
+                  "description": "optional; filter to a single device's trajectory (= device-<origin pubkey>). Remove to get all devices. Run the /ingest frame upload first to populate data.",
                   "disabled": false
                 }
               ]
             },
-            "description": "Returns location points for the moving-map dashboard, optionally filtered by `since` and `deviceId`."
+            "description": "Returns location points for the moving-map dashboard, optionally filtered by `since` and `deviceId`. Read-only — positions are populated by POST /ingest from verified frames."
           },
           "event": [
             {
