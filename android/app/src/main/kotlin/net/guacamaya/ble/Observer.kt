@@ -76,6 +76,7 @@ class Observer private constructor(
         val sawUuid = rec.serviceUuids?.contains(BleConfig.SERVICE_PARCEL_UUID) == true
         if (sawUuid) {
             Log.i(tag, "saw UUID rssi=${result.rssi} legacy=${result.isLegacy} len=${rec.bytes?.size ?: 0}")
+            Log.i("guacamaya.probe", "saw_uuid rssi=${result.rssi} legacy=${result.isLegacy}")
         }
         val blob = extractServiceData(rec)
         if (blob == null || blob.size != BleConfig.SERVICE_DATA_SIZE) {

@@ -300,3 +300,27 @@ Sin cambio en sweet (`magnet=bad`); Realme `usable=true magnet=high`.
 ### Pendiente tick 14
 - Brújula sweet: figura-8 física
 - Confirmar `saw UUID` / FloodRouter OK en sweet fase 2 (logd `--pid=`)
+
+---
+
+## Iteración 13 — 2026-06-28 (loop 10m, tick 14)
+
+### Cambios
+- **`Observer`**: `saw_uuid` en tag `guacamaya.probe` (diagnóstico `--pid=`)
+- **`probe_snapshot()`**: logcat por PID → tag → grep full (MIUI)
+- **`wait_rx_probe`**: timeout **60 s**; fase 2 dump incluye `saw_uuid` / `mesh nodes`
+
+### Prueba adb (`ble-reverse-test` completo)
+| Fase | Resultado |
+|------|-----------|
+| sweet→Realme | OK (FloodRouter, ~57–92 según corrida) |
+| Realme→sweet | **PASS (probe poll @35 s)** — `nodes=2 frames=42 target=752de3df` |
+
+Bidireccional BLE mesh validado en script automatizado.
+
+### Brújula sweet
+Sigue `magnet=bad` — requiere figura-8 manual (no automatizable por adb).
+
+### Pendiente tick 15
+- Brújula sweet en campo
+- ENU/bearing cruzado entre dispositivos con brújula usable

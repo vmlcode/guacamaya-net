@@ -89,11 +89,28 @@ am_start_action() {
   sleep 1
 }
 
+# Fetch recent guacamaya.probe lines — PID filter first (MIUI drops tagged logcat).
+probe_snapshot() {
+  local serial="$1"
+  local pid probe
+  pid="$(adb -s "$serial" shell pidof "$PKG" 2>/dev/null | awk '{print $1}' | tr -d '\r\n' || true)"
+  if [ -n "$pid" ]; then
+    probe="$(adb -s "$serial" logcat -d --pid="$pid" 2>/dev/null | grep 'guacamaya.probe' | tail -15 || true)"
+  fi
+  if [ -z "$probe" ]; then
+    probe="$(adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -15 || true)"
+  fi
+  if [ -z "$probe" ]; then
+    probe="$(adb -s "$serial" logcat -d 2>/dev/null | grep 'guacamaya.probe' | tail -15 || true)"
+  fi
+  printf '%s\n' "$probe"
+}
+
 # MIUI sweet often drops FloodRouter logcat; treat probe mesh fields as RX success.
 probe_rx_ok() {
   local serial="$1"
   local probe nodes frames targets
-  probe="$(adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -10 || true)"
+  probe="$(probe_snapshot "$serial")"
   nodes="$(printf '%s\n' "$probe" | sed -n 's/.*nodes=\([0-9]*\).*/\1/p' | tail -1)"
   frames="$(printf '%s\n' "$probe" | sed -n 's/.*frames=\([0-9]*\).*/\1/p' | tail -1)"
   # FGS health loop logs "mesh nodes=N frames=M" without UI foreground.
@@ -120,7 +137,7 @@ rx_ok_count() {
 # Poll until FloodRouter OK or probe mesh fields appear (MIUI log lag on sweet).
 wait_rx_probe() {
   local serial="$1"
-  local timeout="${2:-45}"
+  local timeout="${2:-60}"
   local elapsed=0 ok
   echo "[wait-rx] serial=$serial timeout=${timeout}s"
   while [ "$elapsed" -lt "$timeout" ]; do
@@ -471,7 +488,7 @@ case "${1:-help}" in
       adb -s "$SWEET_SERIAL" shell input tap 540 1100 2>/dev/null || true
     done
     am_start_action "$SWEET_SERIAL" "${PKG}.action.OBSERVE_ON"
-    wait_rx_probe "$SWEET_SERIAL" 45
+    wait_rx_probe "$SWEET_SERIAL" 60
     SWEET_PROBE_OK=$?
     DEVICE_HINT=sweet ./scripts/demo.sh received
     SWEET_OK="$(rx_ok_count "$SWEET_SERIAL")"
@@ -486,7 +503,7 @@ case "${1:-help}" in
     fi
     SPID="$(adb -s "$(adb_serial "$SWEET")" shell pidof "$PKG" 2>/dev/null | tr -d '\r\n' || true)"
     if [ -n "$SPID" ]; then
-      adb -s "$(adb_serial "$SWEET")" logcat -d --pid="$SPID" 2>/dev/null | grep -E "scan started|scan callbacks|saw UUID|FloodRouter: OK" | tail -8 || true
+      adb -s "$(adb_serial "$SWEET")" logcat -d --pid="$SPID" 2>/dev/null | grep -E "scan started|scan callbacks|saw_uuid|FloodRouter: OK|mesh nodes" | tail -10 || true
     fi
     ;;
 
