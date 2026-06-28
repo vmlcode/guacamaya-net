@@ -273,33 +273,39 @@ case "${1:-help}" in
   device-test)
     REALME="${DEVICE_TEST_TX:-6LRGONDE6LRG9XCY}"
     SWEET="${DEVICE_TEST_RX:-sweet}"
-    echo "[device-test] install + BLE smoke: TX=$REALME → observe $SWEET"
+    echo "[device-test] install + BLE smoke: Realme START → sweet OBSERVE"
     JAVA_HOME="$JAVA_HOME" ./gradlew :app:installDebug -q
-    adb -s "$(adb_serial "$REALME")" shell am start -n "$ACTIVITY" >/dev/null || true
-    adb -s "$(adb_serial "$SWEET")" shell am start -n "$ACTIVITY" >/dev/null || true
+    adb -s "$(adb_serial "$REALME")" shell am force-stop "$PKG" 2>/dev/null || true
+    adb -s "$(adb_serial "$SWEET")" shell am force-stop "$PKG" 2>/dev/null || true
+    sleep 2
     adb -s "$(adb_serial "$SWEET")" logcat -c 2>/dev/null || true
-    start_fg_service() {
-      local serial action
-      serial="$1"; action="$2"
-      adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" >/dev/null
-    }
-    start_fg_service "$(adb_serial "$SWEET")" "${PKG}.action.OBSERVE_ON"
-    start_fg_service "$(adb_serial "$REALME")" "${PKG}.action.START"
-    echo "[device-test] waiting 20s..."
+    SWEET_SERIAL="$(adb_serial "$SWEET")"
+    am_start_action "$SWEET_SERIAL" "${PKG}.action.OBSERVE_ON"
+    sleep 8
+    am_start_action "$(adb_serial "$REALME")" "${PKG}.action.START"
+    echo "[device-test] waiting 20s + probe poll..."
     sleep 20
-    serial="$(adb_serial "$SWEET")"
+    wait_rx_probe "$SWEET_SERIAL" 40
+    PROBE_OK=$?
+    serial="$SWEET_SERIAL"
     ok="$(rx_ok_count "$serial")"
     echo "[device-test] sweet Received(OK)=$ok"
-    adb -s "$serial" logcat -d -s guacamaya.ble.Observer:D guacamaya.mesh.FloodRouter:I 2>/dev/null | tail -8 || true
-    if [ "${ok:-0}" -lt 1 ]; then
-      if probe_rx_ok "$serial"; then
-        echo "[device-test] PASS (probe fallback — MIUI logd gap on sweet)"
-        exit 0
-      fi
-      echo "[device-test] FAIL — expected ≥1 OK or probe RX on $SWEET" >&2
-      exit 1
+    adb -s "$serial" logcat -d --pid="$(adb -s "$serial" shell pidof "$PKG" 2>/dev/null | awk '{print $1}' | tr -d '\r\n')" 2>/dev/null | \
+      grep -E 'saw_uuid|FloodRouter: OK|mesh nodes' | tail -5 || true
+    if [ "${ok:-0}" -ge 1 ]; then
+      echo "[device-test] PASS (FloodRouter OK=$ok)"
+      exit 0
     fi
-    echo "[device-test] PASS"
+    if [ "$PROBE_OK" -eq 0 ]; then
+      echo "[device-test] PASS (probe poll)"
+      exit 0
+    fi
+    if probe_rx_ok "$serial"; then
+      echo "[device-test] PASS (probe fallback)"
+      exit 0
+    fi
+    echo "[device-test] FAIL — expected ≥1 OK or probe RX on $SWEET" >&2
+    exit 1
     ;;
 
   sweet)

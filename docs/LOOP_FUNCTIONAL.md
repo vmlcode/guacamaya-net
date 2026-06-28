@@ -387,3 +387,26 @@ Sigue requiriendo **calibración física** (`magnet=bad`). Código ahora permite
 ### Pendiente tick 18
 - `./scripts/demo.sh compass-miui sweet` + figura-8 → repetir `functional-compass`
 - Brújula usable en sweet para validar ENU `rel=` cruzado
+
+---
+
+## Iteración 17 — 2026-06-28 (loop 10m, tick 18)
+
+### Prueba adb
+| Test | Resultado |
+|------|-----------|
+| `functional-compass` | Realme **87°** usable/high; sweet **0°** magnet=bad; Δ≈87° |
+| `compass-miui sweet` | Abre `com.miui.compass` OK |
+| `device-test` | **PASS** (probe poll `nodes=2 frames=47`) tras fix routing |
+
+### Cambios
+- **`device-test`**: alineado con `am_start_action` + `wait_rx_probe` (antes FAIL por intents viejos)
+
+### Estado loop funcional (~18 ticks)
+- **BLE bidireccional**: validado (`ble-reverse-test` + `device-test`)
+- **Brújula sweet**: bloqueada en `magnet=bad` — requiere figura-8 manual
+- **GPS/ENU probe**: activo en ambos; `rel=` útil cuando sweet tenga brújula usable
+
+### Pendiente tick 19
+- Calibración magnética sweet en campo
+- Comparar `rel=` con teléfonos paralelos apuntando al mismo objetivo
