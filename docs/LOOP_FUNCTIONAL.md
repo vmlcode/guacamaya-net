@@ -435,3 +435,46 @@ Sigue requiriendo **calibración física** (`magnet=bad`). Código ahora permite
 ### Pendiente (post-loop)
 - Calibrar sweet en campo → `functional-compass` con Δheading ≈ 0° en paralelo
 - Validar `rel=` cruzado con brújula usable en ambos
+
+---
+
+## Iteración 19 — 2026-06-28 (loop 10m, tick 20 — cierre)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| `functional-compass` | sweet **0° magnet=bad** `nodes=2 frames=47`; Realme **103°** `magnet=high` `nodes=2 frames=73` |
+| `device-test` | **PASS** (`PROBE_RX_PASS` @10 s, `nodes=2 frames=47`) |
+
+### Resumen loop (20 ticks, ~3 h)
+| Área | Estado |
+|------|--------|
+| BLE mesh bidireccional | ✅ `ble-reverse-test`, `device-test`, probe `nodes`/`frames`/`target=` |
+| GPS/ENU probe | ✅ lat/lon/acc/bearing/`rel=`/`co_loc` en ambos |
+| Brújula Realme | ✅ ~87–109° `magnet=high` |
+| Brújula sweet | ❌ `magnet=bad` — requiere figura-8 (`./scripts/demo.sh compass-miui sweet`) |
+| UI | Sin cambios (alcance intencional) |
+
+### Entregables
+- Runtime BLE compartido + routing adb MIUI (`AdbCommandReceiver`, `am_start_action`)
+- Scripts: `ble-reverse-test`, `device-test`, `functional-compass`, `probe-dump`, `compass-miui`
+- Commits en `develop` (0155c04 … c29389a)
+
+### Siguiente paso manual
+1. Calibrar magnetómetro sweet (figura-8)
+2. `./scripts/demo.sh functional-compass` → esperar Δheading ≈ 0° con teléfonos paralelos
+3. Comparar `rel=` y `bearing` entre dispositivos
+
+---
+
+## Iteración 20 — 2026-06-28 (loop 10m, tick 21)
+
+### Prueba adb
+| Test | Resultado |
+|------|-----------|
+| `functional-compass` | sweet **0° magnet=bad**; Realme **97° magnet=high**; mesh `nodes=2` en ambos |
+| Ubicación | `co_loc=false` en sweet (`dist_m=248`) — teléfonos separados |
+
+### Notas
+- Sin cambio en brújula sweet; sigue bloqueada en calibración manual.
+- BLE mesh estable; sin cambios de código en este tick.
