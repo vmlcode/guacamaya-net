@@ -30,7 +30,7 @@ Foto del estado de [[GuacamayaProject]] al 2026-06-27.
 - [ ] **Fallback de ubicación sin Google Play Services**: FusedLocation depende de GMS; muchos teléfonos de gama baja del mercado objetivo no lo traen → devuelve null. Alternativa robusta: `LocationManager` de plataforma.
 - [ ] **Integrar Wi-Fi Aware** al servicio (publish/subscribe del `NanMessenger`).
 - [ ] **Script `bun run keygen`** en el backend (el `.env.example` lo menciona pero no existe; además referencia `npm`, debería ser `bun`).
-- [ ] **Endurecer `/ingest`**: rate-limit por origen además del global; considerar agregación/moderación de reportes de comunidad.
+- [ ] **Endurecer `/ingest`**: rate-limit por origen además del global — parcialmente hecho (límite por lote + 30/min por ruta).
 - [ ] **UUID de servicio BLE** en `BleConfig` es placeholder — cambiar antes de cualquier uso productivo.
 
 ## Riesgos conocidos

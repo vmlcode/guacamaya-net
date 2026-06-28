@@ -1,19 +1,22 @@
 import { FastifyInstance } from "fastify";
 import { locationsRepo } from "../db/locationsRepo.js";
+import { requireApiKey } from "../security/auth.js";
+import { effectiveReadKey } from "../security/config.js";
+import { isValidDeviceIdFilter, parseSinceParam } from "../security/validation.js";
 
 export async function locationRoutes(fastify: FastifyInstance) {
-  // GET /locations?since=<ms>&deviceId=<id> — trajectory history for the moving map.
-  //
-  // Read-only. Location *ingestion* is no longer a separate trusted-JSON endpoint:
-  // under the zero-trust data-mule model, points are derived from Ed25519-verified
-  // mesh frames in POST /ingest (see channels/routes.ts + mesh/frame.ts). The
-  // backend never persists a position it hasn't cryptographically authenticated.
   fastify.get<{ Querystring: { since?: string; deviceId?: string } }>(
     "/locations",
-    async (request) => {
-      const since = Number(request.query.since ?? 0);
+    { preHandler: requireApiKey(effectiveReadKey(), "location history") },
+    async (request, reply) => {
+      const since = parseSinceParam(request.query.since);
       const deviceId = request.query.deviceId;
+
+      if (!isValidDeviceIdFilter(deviceId)) {
+        return reply.code(400).send({ error: "Invalid deviceId filter" });
+      }
+
       return locationsRepo.getPoints(since, deviceId);
-    }
+    },
   );
 }

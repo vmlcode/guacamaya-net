@@ -1,0 +1,62 @@
+package net.guacamaya.ui
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import net.guacamaya.crypto.Identity
+import net.guacamaya.mesh.MessageDao
+import net.guacamaya.mesh.MessageEntity
+import net.guacamaya.mesh.GuacamayaDatabase
+
+/**
+ * Top-level UI state. Owns:
+ *  - the local [Identity] (for the node-id card)
+ *  - the message store flow (recent verified SOS)
+ *  - broadcast / observe toggles (UI-driven; the actual radio lifecycle is
+ *    owned by [GuacamayaForegroundService] once the user starts it)
+ */
+class MapViewModel(app: Application) : AndroidViewModel(app) {
+
+    private val dao: MessageDao = GuacamayaDatabase.get(app).messageDao()
+
+    val messages: StateFlow<List<MessageEntity>> = dao.observeRecent()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val totalReceived: StateFlow<Int> = dao.observeCount()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    val knownNodes: StateFlow<Int> = dao.observeNodeCount()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    private val _identity = MutableStateFlow<Identity?>(null)
+    val identity: StateFlow<Identity?> = _identity.asStateFlow()
+
+    private val _broadcasting = MutableStateFlow(false)
+    val broadcasting: StateFlow<Boolean> = _broadcasting.asStateFlow()
+
+    private val _observing = MutableStateFlow(false)
+    val observing: StateFlow<Boolean> = _observing.asStateFlow()
+
+    /** User-selected operating mode for the big power button. Default: BOTH. */
+    private val _mode = MutableStateFlow(MeshMode.BOTH)
+    val mode: StateFlow<MeshMode> = _mode.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            _identity.value = Identity.loadOrCreate(app)
+        }
+    }
+
+    fun setBroadcasting(on: Boolean) { _broadcasting.value = on }
+    fun setObserving(on: Boolean) { _observing.value = on }
+    fun setMode(m: MeshMode) { _mode.value = m }
+}
+
+/** What the big power button does when turned on. */
+enum class MeshMode { SOS, FIND, BOTH }

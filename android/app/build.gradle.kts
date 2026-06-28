@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "org.sosnet"
+    namespace = "net.guacamaya"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "org.sosnet"
+        applicationId = "net.guacamaya"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -84,7 +84,6 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
-    implementation(libs.osmdroid)
     implementation(libs.play.services.location)
 
     debugImplementation(libs.androidx.ui.tooling)

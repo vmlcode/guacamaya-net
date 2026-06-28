@@ -1,54 +1,68 @@
 import { FastifyInstance } from "fastify";
-import { ChannelId, LocationPoint } from "@guacamaya/shared";
+import { ChannelId, ChannelRecord, LocationPoint } from "@guacamaya/shared";
 import { channelsRepo } from "../db/channelsRepo.js";
 import { locationsRepo } from "../db/locationsRepo.js";
+import { resolvesRepo } from "../db/resolvesRepo.js";
 import { signRecord } from "../crypto/signer.js";
-import { broadcastRecord, broadcastLocation } from "../ws/server.js";
+import { broadcastRecord, broadcastLocation, broadcastResolve } from "../ws/server.js";
 import { publicKeyHex } from "../crypto/keys.js";
 import { decodeAndVerifyFrame } from "../mesh/frame.js";
+import { requireApiKey } from "../security/auth.js";
+import { securityConfig } from "../security/config.js";
+import {
+  isValidChannelId,
+  isValidFrameB64,
+  validateIngestBatch,
+  validateOfficialPayload,
+  parseSinceParam,
+} from "../security/validation.js";
+
+const OFFICIAL_CHANNELS = new Set(["alertas", "refugios", "ayuda-medica"]);
 
 export async function channelRoutes(fastify: FastifyInstance) {
-  // GET /pubkey -> returns backend's public identity key for client verification
-  fastify.get("/pubkey", async () => {
-    return { publicKey: publicKeyHex };
-  });
+  fastify.get("/pubkey", async () => ({ publicKey: publicKeyHex }));
 
-  // GET /channels -> lists available emergency channels
-  fastify.get("/channels", async () => {
-    return [
-      { id: "alertas", name: "Alertas Oficiales", verifiedOnly: true },
-      { id: "refugios", name: "Refugios y Recursos", verifiedOnly: true },
-      { id: "ayuda-medica", name: "Ayuda Médica", verifiedOnly: true },
-      { id: "estoy-bien", name: "Estoy Bien (Comunidad)", verifiedOnly: false },
-      { id: "solicito-ayuda", name: "Solicito Ayuda (Comunidad)", verifiedOnly: false },
-    ];
-  });
+  fastify.get("/channels", async () => [
+    { id: "alertas", name: "Alertas Oficiales", verifiedOnly: true },
+    { id: "refugios", name: "Refugios y Recursos", verifiedOnly: true },
+    { id: "ayuda-medica", name: "Ayuda Médica", verifiedOnly: true },
+    { id: "estoy-bien", name: "Estoy Bien (Comunidad)", verifiedOnly: false },
+    { id: "solicito-ayuda", name: "Solicito Ayuda (Comunidad)", verifiedOnly: false },
+  ]);
 
-  // GET /channels/:id/records -> retrieves records since a given timestamp
   fastify.get<{ Params: { id: string }; Querystring: { since?: string } }>(
     "/channels/:id/records",
     async (request, reply) => {
-      const channelId = request.params.id as ChannelId;
-      const since = Number(request.query.since ?? 0);
-      return channelsRepo.getRecords(channelId, since);
-    }
+      const channelId = request.params.id;
+      if (!isValidChannelId(channelId)) {
+        return reply.code(404).send({ error: "Unknown channel" });
+      }
+      const since = parseSinceParam(request.query.since);
+      return channelsRepo.getRecords(channelId as ChannelId, since);
+    },
   );
 
-  // POST /channels/:id/records -> creates and signs a new official update
-  fastify.post<{ Params: { id: string }; Body: { payload: unknown } }>(
+  fastify.post<{ Params: { id: string }; Body: { payload?: unknown } }>(
     "/channels/:id/records",
+    {
+      preHandler: requireApiKey(securityConfig.adminApiKey, "official records"),
+      config: { rateLimit: securityConfig.officialWriteRateLimit },
+    },
     async (request, reply) => {
-      const channelId = request.params.id as ChannelId;
-      const { payload } = request.body;
+      const channelId = request.params.id;
+      if (!isValidChannelId(channelId) || !OFFICIAL_CHANNELS.has(channelId)) {
+        return reply.code(403).send({ error: "Channel not allowed for official records" });
+      }
 
-      if (payload === undefined) {
-        return reply.code(400).send({ error: "Missing payload in request body" });
+      const { payload } = request.body ?? {};
+      if (!validateOfficialPayload(payload)) {
+        return reply.code(400).send({ error: "Invalid or missing payload" });
       }
 
       const unsigned = {
-        channel: channelId,
+        channel: channelId as ChannelId,
         timestamp: Date.now(),
-        ttl: 3, // Default mesh saltos limit
+        ttl: 3,
         author: "backend",
         payload,
       };
@@ -56,34 +70,28 @@ export async function channelRoutes(fastify: FastifyInstance) {
       try {
         const signed = await signRecord(unsigned);
         await channelsRepo.addRecord(signed);
-        broadcastRecord(signed); // Push update to live websockets
+        broadcastRecord(signed);
         return signed;
       } catch (err) {
         request.log.error(err, "Failed to sign official record");
         return reply.code(500).send({ error: "Failed to sign official record" });
       }
-    }
+    },
   );
 
-  // POST /ingest -> data-mule uploads from the Guacamaya Android mesh.
-  //
-  // The phone sends an array of Base64-encoded BLE frames (the 118 B Guacamaya frame:
-  // 22 B payload + 32 B pubkey + 64 B signature). ZERO TRUST: every frame is
-  // decoded and its Ed25519 signature is RE-VERIFIED here before anything is
-  // persisted — the backend never takes the client's word for authenticity.
-  //
-  // Every verified frame also carries a geolocated point (lat/lon live inside the
-  // signed 22 B payload), so the moving-map history is populated from the SAME
-  // zero-trust path — there is no separate trusted location ingest endpoint.
-  //
-  // Body: { frames: string[] }  (legacy { records: [...] } JSON ingestion removed)
   fastify.post<{ Body: { frames?: unknown } }>(
     "/ingest",
+    { config: { rateLimit: securityConfig.ingestRateLimit } },
     async (request, reply) => {
-      const { frames } = request.body;
+      const { frames } = request.body ?? {};
 
-      if (!Array.isArray(frames)) {
-        return reply.code(400).send({ error: "Missing or invalid 'frames' array" });
+      if (!validateIngestBatch(frames)) {
+        const tooMany = Array.isArray(frames) && frames.length > securityConfig.maxIngestBatch;
+        return reply.code(400).send({
+          error: tooMany
+            ? `Batch exceeds max ${securityConfig.maxIngestBatch} frames`
+            : "Missing or invalid 'frames' array",
+        });
       }
 
       let ingested = 0;
@@ -93,9 +101,9 @@ export async function channelRoutes(fastify: FastifyInstance) {
       const verifiedLocations: LocationPoint[] = [];
 
       for (const frame of frames) {
-        if (typeof frame !== "string") {
+        if (typeof frame !== "string" || !isValidFrameB64(frame)) {
           rejected++;
-          reasons["not a string"] = (reasons["not a string"] ?? 0) + 1;
+          reasons["invalid frame string"] = (reasons["invalid frame string"] ?? 0) + 1;
           continue;
         }
 
@@ -109,25 +117,22 @@ export async function channelRoutes(fastify: FastifyInstance) {
         const added = await channelsRepo.addRecord(result.record);
         if (added) {
           ingested++;
-          broadcastRecord(result.record); // push to live websocket subscribers
+          broadcastRecord(result.record);
+          await checkOriginatorVeto(result.record);
         } else {
           duplicate++;
         }
 
-        // Only frames that passed Ed25519 verification reach here — the location
-        // is authenticated to its origin device, not trusted from the client.
         if (result.location) {
           verifiedLocations.push(result.location);
         }
       }
 
-      // Persist the geolocated points in one batch. Dedup is by `id` (content
-      // hash) just like records, so overlapping mule uploads collapse cleanly.
       let locationsIngested = 0;
       if (verifiedLocations.length > 0) {
         locationsIngested = await locationsRepo.addPoints(verifiedLocations);
         for (const point of verifiedLocations) {
-          broadcastLocation(point); // push to live "locations" subscribers
+          broadcastLocation(point);
         }
       }
 
@@ -136,6 +141,26 @@ export async function channelRoutes(fastify: FastifyInstance) {
       }
 
       return { success: true, ingested, duplicate, rejected, locationsIngested, reasons };
-    }
+    },
   );
+}
+
+/**
+ * Originator veto — if a verified SOS frame arrives from a device that has a
+ * pending-clear on a *different* target, that pending clear is auto-disputed.
+ * The originator's device is presumed alive and re-broadcasting, which means
+ * the resolve was false (or premature). Evidence is preserved for review.
+ *
+ * Only fires on freshly-ingested frames (`added === true`) — re-uploads of the
+ * same frame id are dedupe-no-ops and must not flip a clear status.
+ */
+async function checkOriginatorVeto(record: ChannelRecord): Promise<void> {
+  if (!record.author.startsWith("device-")) return;
+  const pendingTarget = await resolvesRepo.findPendingClearForAuthor(record.author, record.id);
+  if (!pendingTarget) return;
+  await resolvesRepo.markDisputed(pendingTarget, "originator_refire");
+  const disputed = await resolvesRepo.getReceiptByTarget(pendingTarget);
+  if (disputed) {
+    broadcastResolve({ ...disputed, status: "disputed", disputedReason: "originator_refire" });
+  }
 }

@@ -15,23 +15,17 @@ The **`develop` branch is the consolidated Guacamaya monorepo** holding both hal
   the mesh side.
 
 The abandoned Expo app that used to live in `app/` has been removed. `android/` is **not** a Bun
-workspace — keep it out of the root `package.json` workspaces. (The mesh code still uses the legacy
-`org.sosnet.*` package and SOSNet-named docs under `android/`; see the Brand rules below — these are
-the documented exceptions, pending a rename at source.)
+workspace — keep it out of the root `package.json` workspaces.
 
 Working language of comments/docs is Spanish in places; code identifiers are English.
 
 ## Brand rules
 
-- The app / mesh product is called **Guacamaya** (the whole project is **Guacamaya Red** / Guacamaya
-  Net). **Never call it "SOSNet"** in prose, docs, comments, identifiers, or UI — that is a retired
-  name. New code and docs must use *Guacamaya*.
-- Exceptions, because they are real artifacts that still carry the old name (rename them at the source
-  before changing them here, or the reference breaks):
-  - the git branch **`init-sosnet`** (the mesh app lives there) — keep the literal branch name until
-    it is actually renamed.
-  - the Kotlin package **`org.sosnet.proto.*`** that `backend/src/mesh/frame.ts` mirrors — keep the
-    literal identifier until the mesh branch renames the package, then update both sides together.
+- The product is **Guacamaya Net** (mesh app + optional backend). Use *Guacamaya* in prose, docs,
+  comments, identifiers, and UI. **SOSNet** is a retired name — do not use it.
+- Wire-format constants live in `packages/shared/src/mesh/` and must stay byte-identical with
+  `net.guacamaya.proto.*` on Android.
+- Exception: the git branch name **`init-sosnet`** is a literal remote branch name until renamed.
 
 > **Context rule:** when a request touches anything under `backend/` or the shared user flow (API
 > contracts, data shapes shared between mesh and backend, WebSocket events, channel/location

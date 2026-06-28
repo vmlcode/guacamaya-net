@@ -35,6 +35,13 @@ export const channelsStore = {
   },
 
   /**
+   * Looks up a single record by id (used by /resolve gates). O(1).
+   */
+  getById(id: string): ChannelRecord | null {
+    return logStore.get(id) ?? null;
+  },
+
+  /**
    * Gets the total number of records currently stored.
    */
   size(): number {

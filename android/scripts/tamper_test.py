@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-SOSNet tamper demo.
+Guacamaya tamper demo.
 
-Generates one valid SOSNet BLE frame and one with a single bit flipped in the
+Generates one valid Guacamaya BLE frame and one with a single bit flipped in the
 22-byte payload, then verifies the math:
 
     python3 scripts/tamper_test.py
 
-Output: a JSON file at /tmp/sosnet_test_frames.json with two hex blobs:
+Output: a JSON file at /tmp/guacamaya_test_frames.json with two hex blobs:
 
     {
       "node_id_hex":   "...",            # 8 hex chars, SHA-256(pubkey)[0:4]
@@ -21,7 +21,7 @@ Output: a JSON file at /tmp/sosnet_test_frames.json with two hex blobs:
 
 Push to the phone and load via the app's Debug > Load test frame menu:
 
-    adb push /tmp/sosnet_test_frames.json /sdcard/sosnet_test_frames.json
+    adb push /tmp/guacamaya_test_frames.json /sdcard/guacamaya_test_frames.json
 
 Requires: pip install cryptography
 """
@@ -64,7 +64,7 @@ def crc16_ccitt(data: bytes) -> int:
     return crc
 
 
-# ---------- SOSNet 22-byte payload ---------------------------------------------------
+# ---------- Guacamaya 22-byte payload ---------------------------------------------------
 
 def build_payload(lat_e7: int, lon_e7: int, ts_unix: int, node_id: bytes,
                   has_heavy: bool, critical: bool, battery: int, hop_ttl: int,
@@ -99,7 +99,7 @@ def verify(pub: Ed25519PublicKey, payload22: bytes, sig: bytes) -> bool:
 # ---------- Demo -------------------------------------------------------------------
 
 def main() -> int:
-    out_path = Path("/tmp/sosnet_test_frames.json")
+    out_path = Path("/tmp/guacamaya_test_frames.json")
 
     # 1. Generate origin identity.
     priv = Ed25519PrivateKey.generate()
@@ -165,7 +165,7 @@ def main() -> int:
     print(f"tampered   = {len(tampered_frame)} B  verify={tampered_ok}")
     print()
     print("Push to the phone for the in-app tamper demo:")
-    print(f"  adb push {out_path} /sdcard/sosnet_test_frames.json")
+    print(f"  adb push {out_path} /sdcard/guacamaya_test_frames.json")
     return 0 if (valid_ok and not tampered_ok) else 1
 
 

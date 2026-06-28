@@ -1,4 +1,4 @@
-# SOSNet — Demo Runbook (90 s, two phones)
+# Guacamaya Net — Demo Runbook (90 s, two phones)
 
 The narrative the operator reads aloud while the demo runs. Each step links to
 the Flow it demonstrates. Jury sees the sequence diagrams side-by-side on a
@@ -14,7 +14,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk      # phone B
 
 # Pre-generate the tampered frame
 python3 scripts/tamper_test.py
-adb push /tmp/sosnet_test_frames.json /sdcard/sosnet_test_frames.json
+adb push /tmp/guacamaya_test_frames.json /sdcard/guacamaya_test_frames.json
 ```
 
 Open `nRF Connect` on a third phone or laptop — used to prove no pairing prompt.
@@ -37,7 +37,7 @@ Show: Phone A screen.
 
 Open `nRF Connect` on the third device. Highlight:
 
-- SOSNet Service UUID `8d3d0001-2a1b-4c8e-9c0f-1234567890ab`
+- Guacamaya service UUID `8d3d0001-2a1b-4c8e-9c0f-1234567890ab`
 - 118-byte service-data block (22 + 32 + 64)
 - **No pairing prompt anywhere on screen.**
 
@@ -53,7 +53,7 @@ Open app on Phone B. Tap **Observe**. Within ~5 seconds:
   OK  node=6f720ded msg=10633 type=DISTRESS rssi=-58 fresh=true hops_left=15
   ```
 
-> "The BLE stack scans with `legacy=false` and filters SOSNet UUIDs in software — hardware filters would drop the 118-byte extended service-data on some chips (e.g. Qualcomm on Android 11). The app verified the CRC, the ts window, the SHA-256 binding of pubkey to node_id, and finally the Ed25519 signature. The frame is authentic; the relay stores it and rebroadcasts the exact 118 bytes."
+> "The BLE stack scans with `legacy=false` and filters Guacamaya UUIDs in software — hardware filters would drop the 118-byte extended service-data on some chips (e.g. Qualcomm on Android 11). The app verified the CRC, the ts window, the SHA-256 binding of pubkey to node_id, and finally the Ed25519 signature. The frame is authentic; the relay stores it and rebroadcasts the exact 118 bytes."
 
 ## 0:40 — Flow 6: Battery duty cycle (5 s)
 
