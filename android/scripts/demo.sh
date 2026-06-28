@@ -431,10 +431,16 @@ case "${1:-help}" in
       adb -s "$serial" shell am force-stop "$PKG" 2>/dev/null || true
       sleep 1
       am_start_action "$serial" "${PKG}.action.HEARTBEAT_ON"
-      sleep 12
+      sleep 18
       echo "=== $label ($dev $serial) ==="
-      adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -4 || true
+      probe="$(adb -s "$serial" shell pidof "$PKG" 2>/dev/null | awk '{print $1}' | tr -d '\r\n')"
+      if [ -n "$probe" ]; then
+        adb -s "$serial" logcat -d --pid="$probe" 2>/dev/null | grep 'guacamaya.probe' | tail -4 || true
+      else
+        adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -4 || true
+      fi
     done
+    echo "[functional-compass] Coloca ambos teléfonos paralelos y compara heading en probe."
     ;;
 
   functional-compass-calibrate)

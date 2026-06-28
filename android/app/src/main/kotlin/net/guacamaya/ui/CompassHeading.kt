@@ -157,7 +157,7 @@ fun rememberCompassState(reloadKey: Int = 0): CompassState {
             }
 
             private fun tryMagnetFallback() {
-                if (rotation != null || !hasAccel || !hasMagnet) return
+                if (!hasAccel || !hasMagnet) return
                 if (!SensorManager.getRotationMatrix(rotMatrix, null, accelValues, magnetValues)) return
                 publishFromMatrix()
             }
@@ -170,6 +170,8 @@ fun rememberCompassState(reloadKey: Int = 0): CompassState {
         val rate = SensorManager.SENSOR_DELAY_GAME
         if (rotation != null) {
             sm.registerListener(listener, rotation, rate)
+            // Accel+magnet fallback when rotation vector stalls (common on MIUI sweet).
+            accel?.let { sm.registerListener(listener, it, rate) }
         } else {
             sm.registerListener(listener, accel, rate)
         }

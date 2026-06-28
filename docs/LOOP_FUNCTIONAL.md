@@ -324,3 +324,26 @@ Sigue `magnet=bad` — requiere figura-8 manual (no automatizable por adb).
 ### Pendiente tick 15
 - Brújula sweet en campo
 - ENU/bearing cruzado entre dispositivos con brújula usable
+
+---
+
+## Iteración 14 — 2026-06-28 (loop 10m, tick 15)
+
+### Cambios
+- **`CompassHeading`**: accel co-registrado con rotation vector; fallback magnet+accel aunque exista rotation (MIUI sweet)
+- **`functional-compass`**: wait 18 s + logcat `--pid=` para probe en sweet
+
+### Brújula cruzada (adb, teléfonos en mesa)
+| Dispositivo | heading | usable | magnet |
+|-------------|---------|--------|--------|
+| Realme | **90–103°** | true | high |
+| sweet | **0°** | false | bad |
+
+Delta no comparable hasta calibrar magnetómetro sweet (figura-8 en Ajustes o movimiento físico). `tap-calibrate-north` adb no corrige `magnet=bad`.
+
+### BLE
+Sin regresión — último `ble-reverse-test` bidireccional PASS (tick 14).
+
+### Pendiente tick 16
+- Calibración magnética sweet en campo → repetir `functional-compass`
+- Con sweet usable: comparar `rel=` en probe con teléfonos paralelos apuntando al mismo rumbo
