@@ -16,11 +16,13 @@ fun FunctionalProbe(
     compass: CompassState,
     location: Location?,
     nodes: List<net.guacamaya.mesh.MessageEntity> = emptyList(),
+    totalFrames: Int = 0,
 ) {
     val snapshot = remember { ProbeSnapshot() }
     snapshot.compass = compass
     snapshot.location = location
     snapshot.nodes = nodes
+    snapshot.totalFrames = totalFrames
 
     DisposableEffect(Unit) {
         val handler = Handler(Looper.getMainLooper())
@@ -43,10 +45,12 @@ fun FunctionalProbe(
                     Log.i(
                         TAG,
                         "heading=${c.headingDeg.roundToInt()} $orient lat=${loc.latitude} lon=${loc.longitude} " +
-                            "acc_m=${acc.roundToInt()} speed=${loc.speed}$extra",
+                            "acc_m=${acc.roundToInt()} speed=${loc.speed} nodes=${snapshot.nodes.size} " +
+                            "frames=${snapshot.totalFrames}$extra",
                     )
                 } else {
-                    Log.i(TAG, "heading=${c.headingDeg.roundToInt()} $orient lat=null lon=null")
+                    Log.i(TAG, "heading=${c.headingDeg.roundToInt()} $orient lat=null lon=null " +
+                        "nodes=${snapshot.nodes.size} frames=${snapshot.totalFrames}")
                 }
                 handler.postDelayed(this, INTERVAL_MS)
             }
@@ -60,6 +64,7 @@ private class ProbeSnapshot {
     var compass: CompassState = CompassState()
     var location: Location? = null
     var nodes: List<net.guacamaya.mesh.MessageEntity> = emptyList()
+    var totalFrames: Int = 0
 }
 
 private fun magnetLabel(accuracy: Int): String = when (accuracy) {

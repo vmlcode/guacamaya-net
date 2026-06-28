@@ -37,8 +37,12 @@ object BleMeshRuntime {
             router = r
         }
         val obs = observer ?: return false
-        if (obs.isScanning) obs.restart() else obs.start()
-        Log.i(PROBE, "BleMeshRuntime scanning=${obs.isScanning} profile=${Build.DEVICE}")
+        if (obs.isScanning) {
+            Log.i(PROBE, "BleMeshRuntime already scanning")
+            return true
+        }
+        obs.start()
+        Log.i(PROBE, "BleMeshRuntime scanning=${obs.isScanning} device=${Build.DEVICE}")
         return obs.isScanning
     }
 

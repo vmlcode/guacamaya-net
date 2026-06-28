@@ -184,8 +184,12 @@ case "${1:-help}" in
     dev="$(adb -s "$serial" shell getprop ro.product.device | tr -d '\r\n')"
     ok="$(adb -s "$serial" logcat -d -s guacamaya.mesh.FloodRouter:I 2>/dev/null | grep -c ' OK ' || true)"
     drop="$(adb -s "$serial" logcat -d -s guacamaya.mesh.FloodRouter:I 2>/dev/null | grep -c ' DROP' || true)"
-    echo "device=$dev serial=$serial  Received(OK)=$ok  Dropped=$drop"
+    probe="$(adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -1 || true)"
+    probe_nodes="$(printf '%s' "$probe" | sed -n 's/.*nodes=\([0-9]*\).*/\1/p')"
+    probe_frames="$(printf '%s' "$probe" | sed -n 's/.*frames=\([0-9]*\).*/\1/p')"
+    echo "device=$dev serial=$serial  Received(OK)=$ok  Dropped=$drop  probe_nodes=${probe_nodes:-?} probe_frames=${probe_frames:-?}"
     adb -s "$serial" logcat -d -s guacamaya.mesh.FloodRouter:I 2>/dev/null | grep ' OK ' | tail -5 || true
+    [ -n "$probe" ] && echo "$probe"
     ;;
 
   device-test)
@@ -385,11 +389,11 @@ case "${1:-help}" in
     sleep 70
     ./scripts/demo.sh received "$REALME"
     echo "[ble-reverse] Realme TX → sweet RX (START 70s, sweet foreground)"
-    adb -s "$(adb_serial "$SWEET")" shell am force-stop "$PKG" 2>/dev/null || true
-    sleep 2
     adb -s "$(adb_serial "$SWEET")" logcat -c 2>/dev/null || true
-    am_start_action "$(adb_serial "$REALME")" "${PKG}.action.START"
+    # Sweet observer first so scan is up before Realme SOS ADV.
     am_start_action "$(adb_serial "$SWEET")" "${PKG}.action.OBSERVE_ON"
+    sleep 8
+    am_start_action "$(adb_serial "$REALME")" "${PKG}.action.START"
     SWEET_SERIAL="$(adb_serial "$SWEET")"
     for _ in 1 2 3 4 5 6 7; do
       sleep 10
@@ -402,7 +406,7 @@ case "${1:-help}" in
     ./scripts/demo.sh received "$SWEET"
     SPID="$(adb -s "$(adb_serial "$SWEET")" shell pidof "$PKG" 2>/dev/null | tr -d '\r\n' || true)"
     if [ -n "$SPID" ]; then
-      adb -s "$(adb_serial "$SWEET")" logcat -d --pid="$SPID" 2>/dev/null | grep -E "scan started|FloodRouter: OK" | tail -5 || true
+      adb -s "$(adb_serial "$SWEET")" logcat -d --pid="$SPID" 2>/dev/null | grep -E "scan started|scan callbacks|saw UUID|FloodRouter: OK" | tail -8 || true
     fi
     ;;
 

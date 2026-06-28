@@ -206,3 +206,30 @@ El broadcast receiver **sí arranca el scan** en sweet; el bloqueo anterior era 
 - Realme→sweet con scan confirmado: capturar `saw UUID` / `FloodRouter: OK` en logcat PID
 - Evitar restart scan en ráfaga (5× `scan started` simultáneos)
 - Brújula sweet: calibración física
+
+---
+
+## Iteración 9 — 2026-06-28 (loop 10m, tick 10)
+
+### Cambios
+- **`BleMeshRuntime`**: no `restart()` si ya escanea — elimina ráfaga 5× `scan started`
+- **`Observer`**: Xiaomi API ≤31 → `LEGACY_STACK` por defecto; PHY 1M en LEGACY; probe cada 100 callbacks
+- **`BleConfig`**: LEGACY_STACK fuerza `PHY_LE_1M` (match Realme 1M/1M ADV)
+- **`ble-reverse-test`**: sweet OBSERVE 8 s antes de Realme START; sin force-stop sweet en fase 2
+- **`FunctionalProbe`**: `nodes=N frames=M` en logcat (fallback cuando logd pierde FloodRouter)
+- **`demo.sh received`**: muestra probe_nodes/probe_frames
+
+### Prueba adb (`ble-reverse-test`)
+| Test | Resultado |
+|------|-----------|
+| sweet→Realme | **93 OK** |
+| Realme→sweet | **0 OK** (logcat FloodRouter) — probe en sweet mostró `target=752de3df` (nodo Realme) |
+| Scan thrashing | **corregido** — una sola sesión scan vs 5× antes |
+
+### Diagnóstico
+logd en sweet pierde logs `FloodRouter`/`Observer`; usar `guacamaya.probe` con `nodes`/`frames` o `--pid=`. Realme→sweet puede estar recibiendo mesh pero sin OK en logcat.
+
+### Pendiente tick 11
+- Validar Realme→sweet vía `probe nodes≥1 frames>0` como criterio de éxito
+- Capturar `saw UUID` en sweet si frames=0
+- Brújula sweet: calibración física

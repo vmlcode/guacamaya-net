@@ -48,8 +48,12 @@ class Observer private constructor(
     private fun newCallback(): ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             lastCallbackAt = SystemClock.elapsedRealtime()
-            if (++scanCallbackCount % 2000 == 0) {
-                Log.i(tag, "scan callbacks=$scanCallbackCount profile=$scanProfile")
+            val n = ++scanCallbackCount
+            if (n % 100 == 0) {
+                Log.i("guacamaya.probe", "scan callbacks=$n profile=$scanProfile")
+            }
+            if (n % 2000 == 0) {
+                Log.i(tag, "scan callbacks=$n profile=$scanProfile")
             }
             handle(result)
         }
@@ -117,8 +121,10 @@ class Observer private constructor(
         startInternal()
     }
 
-    /** Prefer AGGRESSIVE; Xiaomi falls back to LEGACY via watchdog if no frames arrive. */
-    private fun defaultScanProfile(): BleConfig.ScanProfile = BleConfig.ScanProfile.AGGRESSIVE
+    /** Xiaomi/MTK API ≤31: start LEGACY_STACK — AGGRESSIVE often misses extended ADV. */
+    private fun defaultScanProfile(): BleConfig.ScanProfile =
+        if (isXiaomiLegacyStack()) BleConfig.ScanProfile.LEGACY_STACK
+        else BleConfig.ScanProfile.AGGRESSIVE
 
     private fun isXiaomiLegacyStack(): Boolean {
         val mfr = Build.MANUFACTURER.lowercase()

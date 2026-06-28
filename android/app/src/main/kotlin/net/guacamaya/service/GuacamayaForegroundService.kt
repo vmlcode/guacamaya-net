@@ -300,13 +300,13 @@ class GuacamayaForegroundService : Service() {
                 .edit()
                 .putBoolean(KEY_WANT_OBSERVE, true)
                 .apply()
-            BleMeshRuntime.ensureObserving(context)
             val svc = instance
             if (svc != null) {
                 svc.setWantObserving(true)
                 svc.startObserving()
             } else {
                 Log.i("guacamaya.probe", "kickObserve no instance — start FGS")
+                BleMeshRuntime.ensureObserving(context)
                 ContextCompat.startForegroundService(
                     context,
                     Intent(context, GuacamayaForegroundService::class.java).apply {

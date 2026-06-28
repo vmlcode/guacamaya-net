@@ -165,7 +165,6 @@ class MainActivity : ComponentActivity() {
         if (action == GuacamayaForegroundService.ACTION_OBSERVE_ON ||
             action == GuacamayaForegroundService.ACTION_START
         ) {
-            BleMeshRuntime.ensureObserving(this)
             GuacamayaForegroundService.kickObserve(this)
         }
     }
@@ -230,7 +229,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     var showMap by remember { mutableStateOf(false) }
     var showRadar by remember { mutableStateOf(false) }
     val running = broadcasting || observing
-    FunctionalProbe(compass = probeCompass, location = probeLocation, nodes = latestNodes)
+    FunctionalProbe(compass = probeCompass, location = probeLocation, nodes = latestNodes, totalFrames = totalFrames)
 
     fun send(action: String) {
         val intent = Intent(ctx, GuacamayaForegroundService::class.java).apply { this.action = action }

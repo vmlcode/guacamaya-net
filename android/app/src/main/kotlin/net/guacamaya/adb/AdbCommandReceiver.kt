@@ -23,10 +23,7 @@ class AdbCommandReceiver : BroadcastReceiver() {
         when (action) {
             GuacamayaForegroundService.ACTION_OBSERVE_ON,
             GuacamayaForegroundService.ACTION_START,
-            -> {
-                BleMeshRuntime.ensureObserving(context)
-                GuacamayaForegroundService.kickObserve(context)
-            }
+            -> GuacamayaForegroundService.kickObserve(context)
             GuacamayaForegroundService.ACTION_OBSERVE_OFF -> {
                 BleMeshRuntime.stopObserving()
             }
