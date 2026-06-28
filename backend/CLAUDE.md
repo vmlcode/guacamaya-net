@@ -39,7 +39,12 @@ store.ts   (append-only Map, dedup by `id`)
 ```
 
 **`channels/`** — emergency broadcast channels (alertas, refugios, etc.)  
-**`locations/`** — GPS trajectory history for the moving-map dashboard
+**`locations/`** — GPS trajectory history for the moving-map dashboard. **Read-only at the HTTP edge**
+(`GET /locations`): points are *ingested* from zero-trust-verified mesh frames in `POST /ingest`, not
+from a trusted JSON endpoint. `mesh/frame.ts` decodes the lat/lon out of each signed payload and
+`decodeAndVerifyFrame` returns a `LocationPoint` (deviceId = origin pubkey) that `channels/routes.ts`
+persists via `locationsRepo` and broadcasts via `broadcastLocation`. The `store.ts`/`*Repo.ts` layers
+still follow the three-layer pattern below.
 
 ### Dedup invariant
 

@@ -1,5 +1,17 @@
 # 🦜 Guacamaya Red — Plan: Ingesta de Ubicaciones (historial / moving map)
 
+> ⚠️ **SUPERSEDED (parcialmente) tras el merge de `develop`.** El modelo de
+> ingesta cambió a **zero-trust data-mule de tramas firmadas**: las ubicaciones
+> ya **no** entran por un endpoint de JSON confiable. El `POST /ingest/locations`
+> fue **eliminado**; ahora cada `LocationPoint` se **deriva de una trama mesh
+> verificada por Ed25519** (`mesh/frame.ts` → `decodeAndVerifyFrame`) dentro de
+> `POST /ingest`, con `deviceId` = pubkey de origen (no la mula). Lo que sigue
+> vigente de este plan: el **modelo append-only**, el **dedupe por `id`**
+> (`getLocationId`), la capa `store.ts`/`locationsRepo.ts`, la tabla
+> `location_points`, `GET /locations` (solo lectura) y las notas de privacidad/
+> retención (§6). Ignora las secciones que describen validar/confiar JSON del
+> cliente (§4 `POST /ingest/locations`).
+>
 > Branch: `BR-01-Add-location-on-backend`
 > Objetivo: nuevo endpoint para **guardar TODAS las ubicaciones** que reportan
 > los devices (historial / serie temporal), subidas en lote ("data mule") por

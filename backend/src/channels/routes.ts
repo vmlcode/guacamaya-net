@@ -1,8 +1,9 @@
 import { FastifyInstance } from "fastify";
-import { ChannelId } from "@guacamaya/shared";
+import { ChannelId, LocationPoint } from "@guacamaya/shared";
 import { channelsRepo } from "../db/channelsRepo.js";
+import { locationsRepo } from "../db/locationsRepo.js";
 import { signRecord } from "../crypto/signer.js";
-import { broadcastRecord } from "../ws/server.js";
+import { broadcastRecord, broadcastLocation } from "../ws/server.js";
 import { publicKeyHex } from "../crypto/keys.js";
 import { decodeAndVerifyFrame } from "../mesh/frame.js";
 
@@ -64,12 +65,16 @@ export async function channelRoutes(fastify: FastifyInstance) {
     }
   );
 
-  // POST /ingest -> data-mule uploads from the SOSNet Android mesh.
+  // POST /ingest -> data-mule uploads from the Guacamaya Android mesh.
   //
-  // The phone sends an array of Base64-encoded BLE frames (the 118 B SOSNet frame:
+  // The phone sends an array of Base64-encoded BLE frames (the 118 B Guacamaya frame:
   // 22 B payload + 32 B pubkey + 64 B signature). ZERO TRUST: every frame is
   // decoded and its Ed25519 signature is RE-VERIFIED here before anything is
   // persisted — the backend never takes the client's word for authenticity.
+  //
+  // Every verified frame also carries a geolocated point (lat/lon live inside the
+  // signed 22 B payload), so the moving-map history is populated from the SAME
+  // zero-trust path — there is no separate trusted location ingest endpoint.
   //
   // Body: { frames: string[] }  (legacy { records: [...] } JSON ingestion removed)
   fastify.post<{ Body: { frames?: unknown } }>(
@@ -85,6 +90,7 @@ export async function channelRoutes(fastify: FastifyInstance) {
       let duplicate = 0;
       let rejected = 0;
       const reasons: Record<string, number> = {};
+      const verifiedLocations: LocationPoint[] = [];
 
       for (const frame of frames) {
         if (typeof frame !== "string") {
@@ -107,13 +113,29 @@ export async function channelRoutes(fastify: FastifyInstance) {
         } else {
           duplicate++;
         }
+
+        // Only frames that passed Ed25519 verification reach here — the location
+        // is authenticated to its origin device, not trusted from the client.
+        if (result.location) {
+          verifiedLocations.push(result.location);
+        }
+      }
+
+      // Persist the geolocated points in one batch. Dedup is by `id` (content
+      // hash) just like records, so overlapping mule uploads collapse cleanly.
+      let locationsIngested = 0;
+      if (verifiedLocations.length > 0) {
+        locationsIngested = await locationsRepo.addPoints(verifiedLocations);
+        for (const point of verifiedLocations) {
+          broadcastLocation(point); // push to live "locations" subscribers
+        }
       }
 
       if (rejected > 0) {
         request.log.warn({ rejected, reasons }, "rejected unverifiable mesh frames");
       }
 
-      return { success: true, ingested, duplicate, rejected, reasons };
+      return { success: true, ingested, duplicate, rejected, locationsIngested, reasons };
     }
   );
 }
