@@ -13,6 +13,7 @@ import android.os.Looper
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
@@ -20,6 +21,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,21 +32,33 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -62,6 +76,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -72,7 +87,6 @@ import com.google.android.gms.location.LocationServices
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.mesh.NodeCatalog
 import net.guacamaya.backend.OfficialAlert
-import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.service.GuacamayaForegroundService
 import org.json.JSONObject
 import android.util.Log
@@ -81,8 +95,13 @@ import kotlin.math.roundToInt
 
 /**
  * VPN-style single screen. One big power button toggles mesh participation
- * (observe + relay). A secondary red button broadcasts the local SOS. The map of
- * received SOS opens as a full-screen overlay so the home stays uncluttered.
+ * (observe + relay). The map of received SOS opens as a full-screen overlay so the
+ * home stays uncluttered.
+ *
+ * Styled to the Guacamalla design system (docs/design/DESIGN.md): yellow + black
+ * brand voltage, dark-only, emergency-semantic content colors. Active/broadcasting
+ * chrome is brand yellow; the red/blue/green semantics carry content meaning
+ * (received SOS, presence, verified-official alerts), not the mode chrome.
  */
 class MainActivity : ComponentActivity() {
 
@@ -98,10 +117,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
         ensurePermissions()
         routeAdbIntent(intent)
-        setContent { GuacamayaTheme { Surface(Modifier.fillMaxSize()) { Screen() } } }
+        setContent {
+            GuacamayaTheme {
+                Surface(Modifier.fillMaxSize(), color = GuacamayaPalette.Canvas) { Screen() }
+            }
+        }
     }
 
     override fun onResume() {
@@ -198,18 +222,19 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ── Palette ────────────────────────────────────────────────────────────────
-private val BgTop = Color(0xFF0B1020)
-private val BgBottom = Color(0xFF11182B)
-private val Card = Color(0xFF161C2C)
-private val CardLine = Color(0xFF263150)
-private val TextHi = Color(0xFFE6E8F0)
-private val TextLo = Color(0xFF8B93AD)
-private val Accent = Color(0xFF7C5CFF)
-private val Online = Color(0xFF2ED573)
-private val Find = Color(0xFF35A0FF)
-private val Sos = Color(0xFFFF3B5C)
-private val OffRing = Color(0xFF2A3350)
+// ── Design tokens (aliases over GuacamayaPalette — see ui/Theme.kt & docs/design/DESIGN.md) ──
+private val Canvas0 = GuacamayaPalette.Canvas
+private val CardBg = GuacamayaPalette.SurfaceCard
+private val CardElevated = GuacamayaPalette.SurfaceElevated
+private val CardLine = GuacamayaPalette.Hairline
+private val TextHi = GuacamayaPalette.Ink
+private val TextLo = GuacamayaPalette.Muted
+private val Brand = GuacamayaPalette.Primary       // brand voltage = active/broadcasting + chrome
+private val OnBrand = GuacamayaPalette.OnPrimary
+private val SuccessC = GuacamayaPalette.Success
+private val InfoC = GuacamayaPalette.Info           // presence / official-verified
+private val DangerC = GuacamayaPalette.Danger       // critical SOS content
+private val OffRing = GuacamayaPalette.HairlineStrong
 
 private const val MAP_RENDER_LIMIT = 300
 private const val LIST_RENDER_LIMIT = 500
@@ -279,7 +304,12 @@ private fun Screen(vm: MapViewModel = viewModel()) {
         if (running) applyMode(m) // re-apply live
     }
 
-    Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(BgTop, BgBottom)))) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Canvas0)
+            .windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
         if (showMap) {
             MapScreen(latestNodes, totalFrames = totalFrames, onBack = { showMap = false })
         } else if (showRadar) {
@@ -299,12 +329,6 @@ private fun Screen(vm: MapViewModel = viewModel()) {
             )
         }
     }
-}
-
-private fun MeshMode.color(): Color = when (this) {
-    MeshMode.SOS -> Sos
-    MeshMode.FIND -> Find
-    MeshMode.BOTH -> Online
 }
 
 private fun MeshMode.label(): String = when (this) {
@@ -347,18 +371,18 @@ private fun HomeScreen(
     var showBatteryHint by remember { mutableStateOf(BatteryHelper.shouldShowHint(ctx)) }
 
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
+        Modifier.fillMaxSize().padding(horizontal = Space.md, vertical = Space.md),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Header(nodeIdHex)
 
         if (alerts.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Space.sm))
             AlertsBanner(alerts = alerts)
         }
 
         if (showBatteryHint) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Space.sm))
             BatteryHintBanner(
                 isXiaomi = BatteryHelper.isXiaomi(),
                 onConfigure = { BatteryHelper.openSettings(ctx) },
@@ -369,27 +393,26 @@ private fun HomeScreen(
             )
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(Space.lg))
 
         ModeSelector(selected = mode, onSelect = onSelectMode)
 
         Spacer(Modifier.weight(1f))
 
-        PowerButton(active = running, accent = mode.color(), onClick = onPower)
+        PowerButton(active = running, onClick = onPower)
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(Space.xl))
 
         Text(
             statusTitle(running, mode),
-            color = if (running) mode.color() else TextHi,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
+            color = if (running) Brand else TextHi,
+            style = MaterialTheme.typography.headlineSmall,
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(Space.xxs))
         Text(
             statusSubtitle(running, mode),
             color = TextLo,
-            fontSize = 14.sp,
+            style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
         )
 
@@ -397,11 +420,11 @@ private fun HomeScreen(
 
         StatsRow(devices = devicesReceived, lastSeen = lastSeen, lastRssi = lastRssi)
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Space.sm))
 
         RadarEntry(latestNodes = latestNodes, onClick = onOpenRadar)
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Space.sm))
 
         MapEntryButton(devices = devicesReceived, onClick = onOpenMap)
     }
@@ -412,42 +435,37 @@ private fun BatteryHintBanner(isXiaomi: Boolean, onConfigure: () -> Unit, onDism
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Card)
-            .border(1.dp, Accent.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
-            .padding(12.dp),
+            .clip(MaterialTheme.shapes.medium)
+            .background(CardBg)
+            .border(1.dp, CardLine, MaterialTheme.shapes.medium)
+            .padding(Space.sm),
     ) {
         Text(
             if (isXiaomi) "MIUI: activa Autostart y sin restricción" else "Sin restricción de batería",
             color = TextHi,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmall,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(Space.xxs))
         Text(
             if (isXiaomi) {
                 "Para BLE en segundo plano: Autostart ON y batería «Sin restricciones»."
             } else {
-                "Permite que Guacamaya siga escuchando SOS con la pantalla apagada."
+                "Permite que Guacamalla siga escuchando SOS con la pantalla apagada."
             },
             color = TextLo,
-            fontSize = 12.sp,
+            style = MaterialTheme.typography.bodySmall,
         )
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Accent.copy(alpha = 0.25f))
-                    .clickable(onClick = onConfigure)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            ) { Text("Configurar", color = TextHi, fontSize = 12.sp) }
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onDismiss)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            ) { Text("Ahora no", color = TextLo, fontSize = 12.sp) }
+        Spacer(Modifier.height(Space.xs))
+        Row(horizontalArrangement = Arrangement.spacedBy(Space.xs)) {
+            Button(
+                onClick = onConfigure,
+                colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = OnBrand),
+                shape = MaterialTheme.shapes.small,
+            ) { Text("Configurar", style = MaterialTheme.typography.labelLarge) }
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextLo),
+            ) { Text("Ahora no", style = MaterialTheme.typography.labelLarge) }
         }
     }
 }
@@ -474,81 +492,64 @@ private fun alertDisplay(payloadRaw: String): Pair<String, String?> = try {
 
 /**
  * Read-only banner of backend-verified official alerts (downlink). Only records whose
- * Ed25519 signature checked out reach here (see AlertsRepository) — the green accent and
- * ✓ marker signal that authenticity, distinct from community mesh SOS.
+ * Ed25519 signature checked out reach here (see AlertsRepository). Per DESIGN.md, verified
+ * official content reads in `info` blue with a ✓ marker — distinct from community mesh SOS.
  */
 @Composable
 private fun AlertsBanner(alerts: List<OfficialAlert>) {
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Card)
-            .border(1.dp, Online.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
-            .padding(12.dp),
+            .clip(MaterialTheme.shapes.medium)
+            .background(CardBg)
+            .border(1.dp, InfoC.copy(alpha = 0.55f), MaterialTheme.shapes.medium)
+            .padding(Space.sm),
     ) {
         Text(
             "✓ ${alerts.size} ${if (alerts.size == 1) "alerta oficial verificada" else "alertas oficiales verificadas"}",
-            color = Online,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
+            color = InfoC,
+            style = MaterialTheme.typography.titleSmall,
         )
         alerts.take(3).forEach { alert ->
             val (title, body) = alertDisplay(alert.payloadRaw)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(Space.xs))
             Text(
                 "${officialChannelLabel(alert.channel)} · $title",
                 color = TextHi,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleSmall,
             )
             if (body != null) {
                 Spacer(Modifier.height(2.dp))
-                Text(body, color = TextLo, fontSize = 12.sp)
+                Text(body, color = TextLo, style = MaterialTheme.typography.bodySmall)
             }
         }
         if (alerts.size > 3) {
-            Spacer(Modifier.height(6.dp))
-            Text("+${alerts.size - 3} más", color = TextLo, fontSize = 12.sp)
+            Spacer(Modifier.height(Space.xxs))
+            Text("+${alerts.size - 3} más", color = TextLo, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModeSelector(selected: MeshMode, onSelect: (MeshMode) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Card)
-            .border(1.dp, CardLine, RoundedCornerShape(14.dp))
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        MeshMode.entries.forEach { m ->
-            val active = m == selected
-            val accent = m.color()
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (active) accent.copy(alpha = 0.18f) else Color.Transparent)
-                    .border(
-                        1.dp,
-                        if (active) accent.copy(alpha = 0.6f) else Color.Transparent,
-                        RoundedCornerShape(10.dp),
-                    )
-                    .clickable { onSelect(m) }
-                    .padding(vertical = 10.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    m.label(),
-                    color = if (active) accent else TextLo,
-                    fontSize = 14.sp,
-                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                )
-            }
+    val modes = MeshMode.entries
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().height(48.dp)) {
+        modes.forEachIndexed { index, m ->
+            SegmentedButton(
+                selected = m == selected,
+                onClick = { onSelect(m) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = Brand,
+                    activeContentColor = OnBrand,
+                    activeBorderColor = Brand,
+                    inactiveContainerColor = CardBg,
+                    inactiveContentColor = TextLo,
+                    inactiveBorderColor = CardLine,
+                ),
+                label = { Text(m.label(), style = MaterialTheme.typography.labelLarge) },
+            )
         }
     }
 }
@@ -561,28 +562,29 @@ private fun Header(nodeIdHex: String?) {
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column {
-            Text("Guacamaya", color = TextHi, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text("Red SOS sin internet", color = TextLo, fontSize = 12.sp)
+            Text("Guacamalla", color = TextHi, style = MaterialTheme.typography.titleLarge)
+            Text("Red SOS sin internet", color = TextLo, style = MaterialTheme.typography.labelMedium)
         }
         Box(
             Modifier
                 .clip(RoundedCornerShape(50))
-                .background(Card)
+                .background(CardBg)
                 .border(1.dp, CardLine, RoundedCornerShape(50))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = Space.sm, vertical = 6.dp),
         ) {
             Text(
                 "ID ${nodeIdHex?.take(8) ?: "…"}",
-                color = Accent,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
+                color = Brand,
+                style = MaterialTheme.typography.labelMedium,
+                fontFamily = FontFamily.Monospace,
             )
         }
     }
 }
 
 @Composable
-private fun PowerButton(active: Boolean, accent: Color, onClick: () -> Unit) {
+private fun PowerButton(active: Boolean, onClick: () -> Unit) {
+    val accent = Brand
     val transition = rememberInfiniteTransition(label = "glow")
     val glow by transition.animateFloat(
         initialValue = 0.25f,
@@ -607,12 +609,15 @@ private fun PowerButton(active: Boolean, accent: Color, onClick: () -> Unit) {
                 .clip(CircleShape)
                 .background(
                     Brush.verticalGradient(
-                        if (active) listOf(accent.copy(alpha = 0.22f), Color(0xFF0E1320))
-                        else listOf(Color(0xFF1A2236), Color(0xFF11182B)),
+                        if (active) listOf(accent.copy(alpha = 0.16f), Canvas0)
+                        else listOf(CardElevated, CardBg),
                     )
                 )
                 .border(3.dp, ring, CircleShape)
-                .clickable(onClick = onClick),
+                .clickable(
+                    onClick = onClick,
+                    onClickLabel = if (active) "Apagar la malla" else "Encender la malla",
+                ),
             contentAlignment = Alignment.Center,
         ) {
             PowerGlyph(color = if (active) accent else TextLo)
@@ -650,7 +655,7 @@ private fun PowerGlyph(color: Color) {
 private fun StatsRow(devices: Int, lastSeen: String?, lastRssi: Int?) {
     Row(
         Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(Space.xs),
     ) {
         StatCell("Dispositivos", devices.toString(), Modifier.weight(1f))
         StatCell("Último", lastSeen ?: "—", Modifier.weight(1f))
@@ -660,18 +665,22 @@ private fun StatsRow(devices: Int, lastSeen: String?, lastRssi: Int?) {
 
 @Composable
 private fun StatCell(label: String, value: String, modifier: Modifier = Modifier, suffix: String? = null) {
-    Column(
-        modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Card)
-            .border(1.dp, CardLine, RoundedCornerShape(16.dp))
-            .padding(vertical = 14.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Card(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, CardLine),
     ) {
-        Text(value, color = TextHi, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        if (suffix != null) Text(suffix, color = TextLo, fontSize = 10.sp)
-        Spacer(Modifier.height(2.dp))
-        Text(label, color = TextLo, fontSize = 12.sp)
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = Space.sm),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(value, color = TextHi, style = MaterialTheme.typography.titleLarge)
+            if (suffix != null) Text(suffix, color = TextLo, style = MaterialTheme.typography.labelSmall)
+            Spacer(Modifier.height(2.dp))
+            Text(label, color = TextLo, style = MaterialTheme.typography.labelMedium)
+        }
     }
 }
 
@@ -689,28 +698,28 @@ private fun RadarEntry(latestNodes: List<MessageEntity>, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Card)
-            .border(1.dp, CardLine, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .padding(14.dp),
+            .clip(MaterialTheme.shapes.large)
+            .background(CardBg)
+            .border(1.dp, CardLine, MaterialTheme.shapes.large)
+            .clickable(onClick = onClick, onClickLabel = "Abrir radar completo")
+            .padding(Space.sm),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(Space.sm),
     ) {
         RadarCompass(sizeDp = 96, heading = heading, relative = relative, target = target)
 
         Column(Modifier.weight(1f)) {
-            Text("Radar", color = TextHi, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
+            Text("Radar", color = TextHi, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(Space.xxs))
             if (target == null) {
-                Text("Sin objetivo con GPS aún", color = TextLo, fontSize = 13.sp)
-                Text("Tocar para abrir radar completo", color = TextLo, fontSize = 11.sp)
+                Text("Sin objetivo con GPS aún", color = TextLo, style = MaterialTheme.typography.bodySmall)
+                Text("Tocar para abrir radar completo", color = TextLo, style = MaterialTheme.typography.labelSmall)
             } else {
-                Text("Nodo ${target.nodeId.take(8)}", color = TextHi, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("Nodo ${target.nodeId.take(8)}", color = TextHi, style = MaterialTheme.typography.titleSmall)
                 Text(
                     "${GeoProximity.formatDistance(target)} · ${targetNode?.let { NodeCatalog.formatLastHeartbeat(it.receivedAt) } ?: "—"}",
                     color = TextLo,
-                    fontSize = 12.sp,
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
         }
@@ -730,7 +739,7 @@ private fun RadarScreen(latestNodes: List<MessageEntity>, onBack: () -> Unit) {
     } ?: 0f
 
     Column(
-        Modifier.fillMaxSize().padding(16.dp),
+        Modifier.fillMaxSize().padding(Space.md),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(
@@ -738,88 +747,77 @@ private fun RadarScreen(latestNodes: List<MessageEntity>, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Card)
-                    .border(1.dp, CardLine, RoundedCornerShape(12.dp))
-                    .clickable(onClick = onBack)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            ) { Text("‹ Volver", color = TextHi, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
-            Text("Radar", color = TextHi, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            BackButton(onBack)
+            Text("Radar", color = TextHi, style = MaterialTheme.typography.titleLarge)
         }
 
         Spacer(Modifier.weight(0.7f))
 
         RadarCompass(sizeDp = 280, heading = heading, relative = relative, target = target)
 
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(Space.xl))
 
         if (target == null) {
-            Text("Sin objetivo con GPS", color = TextHi, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(6.dp))
+            Text("Sin objetivo con GPS", color = TextHi, style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(Space.xxs))
             Text(
                 "Enciende Ambos en el otro teléfono y espera el heartbeat.",
                 color = TextLo,
-                fontSize = 14.sp,
+                style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
         } else {
             Text(
                 GeoProximity.formatDistance(target),
-                color = if (target.critical) Sos else Find,
-                fontSize = 44.sp,
-                fontWeight = FontWeight.Bold,
+                color = if (target.critical) DangerC else InfoC,
+                style = MaterialTheme.typography.displaySmall,
             )
-            Text("hacia nodo ${target.nodeId.take(8)}", color = TextHi, fontSize = 16.sp)
+            Text("hacia nodo ${target.nodeId.take(8)}", color = TextHi, style = MaterialTheme.typography.titleMedium)
             targetNode?.let { node ->
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Space.xxs))
                 Text(
                     "Último ${NodeCatalog.signalKind(node)}: ${NodeCatalog.formatLastHeartbeat(node.receivedAt)}",
-                    color = Find,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
+                    color = InfoC,
+                    style = MaterialTheme.typography.titleSmall,
                 )
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Space.xs))
             if (target.coLocated) {
-                Text("Dispositivos juntos — GPS no distingue cm", color = TextLo, fontSize = 13.sp, textAlign = TextAlign.Center)
-                Text("Usa la brújula; calibra apuntando al norte", color = TextLo, fontSize = 12.sp, textAlign = TextAlign.Center)
+                Text("Dispositivos juntos — GPS no distingue cm", color = TextLo, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                Text("Usa la brújula; calibra apuntando al norte", color = TextLo, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
             } else {
-                Text("${relative.roundToInt()}° relativo · bearing ${target.bearing.roundToInt()}° · brújula ${heading.roundToInt()}°", color = TextLo, fontSize = 12.sp)
+                Text("${relative.roundToInt()}° relativo · bearing ${target.bearing.roundToInt()}° · brújula ${heading.roundToInt()}°", color = TextLo, style = MaterialTheme.typography.labelMedium)
             }
-            Text("rssi ${target.rssi} dBm · ±${target.uncertaintyMeters.roundToInt()} m GPS · ${if (target.critical) "SOS" else "presencia"}", color = TextLo, fontSize = 12.sp)
+            Text("rssi ${target.rssi} dBm · ±${target.uncertaintyMeters.roundToInt()} m GPS · ${if (target.critical) "SOS" else "presencia"}", color = TextLo, style = MaterialTheme.typography.labelMedium)
         }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(Space.md))
 
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Card)
-                .border(1.dp, CardLine, RoundedCornerShape(16.dp))
-                .padding(14.dp),
+                .clip(MaterialTheme.shapes.large)
+                .background(CardBg)
+                .border(1.dp, CardLine, MaterialTheme.shapes.large)
+                .padding(Space.sm),
         ) {
-            Text("Precisión", color = TextHi, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(4.dp))
-            Text("GPS local: ${location?.accuracy?.roundToInt()?.let { "±$it m" } ?: "sin fix"}", color = TextLo, fontSize = 13.sp)
-            Text("Objetivos con GPS: ${latestNodes.count { it.latE7 != 0 || it.lonE7 != 0 }}", color = TextLo, fontSize = 13.sp)
-            Text("Nota: a <15 m la distancia GPS se muestra como «junto».", color = TextLo, fontSize = 12.sp)
-            Spacer(Modifier.height(8.dp))
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Accent.copy(alpha = 0.25f))
-                    .border(1.dp, Accent.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                    .clickable {
-                        CompassMath.calibrateAsNorth(ctx, heading)
-                        compassKey++
-                    }
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                Text("Calibrar norte (top del teléfono → N)", color = TextHi, fontSize = 13.sp)
-            }
+            Text("Precisión", color = TextHi, style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(Space.xxs))
+            Text("GPS local: ${location?.accuracy?.roundToInt()?.let { "±$it m" } ?: "sin fix"}", color = TextLo, style = MaterialTheme.typography.bodySmall)
+            Text("Objetivos con GPS: ${latestNodes.count { it.latE7 != 0 || it.lonE7 != 0 }}", color = TextLo, style = MaterialTheme.typography.bodySmall)
+            Text("Nota: a <15 m la distancia GPS se muestra como «junto».", color = TextLo, style = MaterialTheme.typography.labelMedium)
+            Spacer(Modifier.height(Space.xs))
+            FilledTonalButton(
+                onClick = {
+                    CompassMath.calibrateAsNorth(ctx, heading)
+                    compassKey++
+                },
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = CardElevated,
+                    contentColor = TextHi,
+                ),
+                shape = MaterialTheme.shapes.medium,
+            ) { Text("Calibrar norte (top del teléfono → N)", style = MaterialTheme.typography.labelLarge) }
         }
 
         Spacer(Modifier.weight(1f))
@@ -849,7 +847,7 @@ private fun RadarCompass(sizeDp: Int, heading: Float, relative: Float, target: G
         }
         Text(
             "▲",
-            color = target?.let { if (it.critical) Sos else Find }?.copy(alpha = arrowAlpha) ?: TextLo.copy(alpha = arrowAlpha),
+            color = target?.let { if (it.critical) DangerC else InfoC }?.copy(alpha = arrowAlpha) ?: TextLo.copy(alpha = arrowAlpha),
             fontSize = (sizeDp / 3).sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.rotate(relative),
@@ -892,22 +890,25 @@ private fun rememberLiveLocation(ctx: Context, highAccuracy: Boolean): Location?
 }
 
 @Composable
+private fun BackButton(onBack: () -> Unit) {
+    FilledTonalButton(
+        onClick = onBack,
+        colors = ButtonDefaults.filledTonalButtonColors(containerColor = CardBg, contentColor = TextHi),
+        shape = MaterialTheme.shapes.medium,
+    ) { Text("‹ Volver", style = MaterialTheme.typography.labelLarge) }
+}
+
+@Composable
 private fun MapEntryButton(devices: Int, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(50.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Card)
-            .border(1.dp, CardLine, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+    FilledTonalButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().height(50.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(containerColor = CardBg, contentColor = TextHi),
+        shape = MaterialTheme.shapes.large,
     ) {
         Text(
             if (devices > 0) "Ver mapa ($devices dispositivo${if (devices == 1) "" else "s"})" else "Ver mapa",
-            color = TextHi,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.labelLarge,
         )
     }
 }
@@ -943,28 +944,21 @@ private fun MapScreen(latestNodes: List<MessageEntity>, totalFrames: Int, onBack
 
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().padding(16.dp),
+            Modifier.fillMaxWidth().padding(Space.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Card)
-                    .border(1.dp, CardLine, RoundedCornerShape(12.dp))
-                    .clickable(onClick = onBack)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            ) { Text("‹ Volver", color = TextHi, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
+            BackButton(onBack)
             Column(horizontalAlignment = Alignment.End) {
-                Text("Dispositivos: ${latestNodes.size}", color = TextHi, fontSize = 14.sp)
-                Text("Cuadrícula · $nodesOnGrid GPS · $totalFrames frames", color = TextLo, fontSize = 11.sp)
+                Text("Dispositivos: ${latestNodes.size}", color = TextHi, style = MaterialTheme.typography.titleSmall)
+                Text("Cuadrícula · $nodesOnGrid GPS · $totalFrames frames", color = TextLo, style = MaterialTheme.typography.labelSmall)
             }
         }
 
-        Box(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF0E1320))) {
+        Box(Modifier.fillMaxWidth().weight(1f).background(Canvas0)) {
             if (nodesOnGrid == 0 && userLocation == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Sin nodos con GPS aún.", color = TextLo)
+                    Text("Sin nodos con GPS aún.", color = TextLo, style = MaterialTheme.typography.bodyMedium)
                 }
             } else {
                 GridMap(userLocation = userLocation, messages = mapNodes, heading = heading)
@@ -973,7 +967,7 @@ private fun MapScreen(latestNodes: List<MessageEntity>, totalFrames: Int, onBack
 
         LazyColumn(
             Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = Space.md, vertical = Space.xs),
         ) {
             items(listItems, key = { it.nodeIdHex }, contentType = { "node" }) { item ->
                 NodeRow(item)
@@ -987,19 +981,25 @@ private fun NodeRow(item: NodeListItem) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Card)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(vertical = Space.xxs)
+            .clip(MaterialTheme.shapes.medium)
+            .background(CardBg)
+            .padding(horizontal = Space.sm, vertical = Space.xs),
+        horizontalArrangement = Arrangement.spacedBy(Space.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(item.nodeIdHex, color = TextHi, fontWeight = FontWeight.Medium, modifier = Modifier.weight(0.45f))
+        Text(
+            item.nodeIdHex,
+            color = TextHi,
+            style = MaterialTheme.typography.titleSmall,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.weight(0.45f),
+        )
         Column(Modifier.weight(1f)) {
-            Text("${item.kind} · ${item.lastHeartbeat}", color = Find, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            Text("(${item.lat}, ${item.lon})", color = TextLo, fontSize = 11.sp)
+            Text("${item.kind} · ${item.lastHeartbeat}", color = InfoC, style = MaterialTheme.typography.labelMedium)
+            Text("(${item.lat}, ${item.lon})", color = TextLo, style = MaterialTheme.typography.labelSmall, fontFamily = FontFamily.Monospace)
         }
-        Text("${item.rssi}", color = TextLo, fontSize = 12.sp, modifier = Modifier.weight(0.25f))
+        Text("${item.rssi}", color = TextLo, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(0.25f))
     }
 }
 

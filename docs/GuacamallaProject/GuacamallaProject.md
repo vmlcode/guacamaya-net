@@ -1,4 +1,4 @@
-# GuacamayaProject
+# GuacamallaProject
 
 Red de comunicación de emergencia para desastres (terremotos) donde la infraestructura de
 telecomunicaciones cae por capas. La idea: que la información crítica siga fluyendo aunque no haya
@@ -16,20 +16,20 @@ torres celulares — los teléfonos cercanos se retransmiten datos entre sí.
 
 | Mitad | Ruta | Stack | Rol |
 |---|---|---|---|
-| [[Guacamaya (Android)]] | `android/` | Android nativo, Kotlin + Compose | App principal: malla L2 sin conexión por BLE (+ Wi-Fi Aware pendiente). Proyecto Gradle autocontenido. |
+| [[Guacamalla (Android)]] | `android/` | Android nativo, Kotlin + Compose | App principal: malla L2 sin conexión por BLE (+ Wi-Fi Aware pendiente). Proyecto Gradle autocontenido. |
 | [[Backend Data-Mule]] | `backend/` + `packages/` | Bun + TypeScript (Fastify, Supabase) | Punto **opcional** de ingesta "data-mule", canales oficiales, histórico de ubicación y flujo de [[Resolve y Confirmacion de Rescate\|resolución de rescate]]. |
 
 El puente entre ambos es el endpoint `POST /ingest` — ver [[Backend Data-Mule]] y [[Protocolo y Frame]].
 
-## Rebrand: SOSNet → Guacamaya Net
+## Rebrand: SOSNet → Guacamalla Net
 
-El producto es **Guacamaya Net**. El nombre **SOSNet está retirado** y el paquete Android pasó de
-`org.sosnet.*` a **`net.guacamaya.*`**. Usar *Guacamaya* en prosa, docs, identificadores y UI. Única
+El producto es **Guacamalla Net**. El nombre **SOSNet está retirado** y el paquete Android pasó de
+`org.sosnet.*` a **`net.guacamaya.*`**. Usar *Guacamalla* en prosa, docs, identificadores y UI. Única
 excepción: el nombre de rama remota `init-sosnet` es literal hasta que se renombre.
 
 ## Índice de notas
 
-- [[Guacamaya (Android)]] — la app de malla (arquitectura, módulos, radar/brújula, UI).
+- [[Guacamalla (Android)]] — la app de malla (arquitectura, módulos, radar/brújula, UI).
 - [[Protocolo y Frame]] — frame de 119 B, payload de 22 B, firma Ed25519, cascada de rechazo, **riesgo de sync de 3 vías**.
 - [[Backend Data-Mule]] — backend TS, API HTTP/WS, ingesta zero-trust, histórico de ubicación.
 - [[Seguridad Backend]] — endurecimiento: API keys, CORS, rate limits, auth de WebSocket.

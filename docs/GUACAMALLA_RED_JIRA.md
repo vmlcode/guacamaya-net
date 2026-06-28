@@ -1,8 +1,8 @@
-# 🦜 Guacamaya Red — Backlog para Jira
+# 🦜 Guacamalla Red — Backlog para Jira
 
 > Listo para copiar y pegar en Jira. Estructura: **Épicas → Historias → Sub-tareas**.
 > Cada historia trae: Resumen, Descripción, Criterios de aceptación, Prioridad y Estimación (puntos).
-> Etiquetas sugeridas: `guacamaya-red`, `hackathon`, + el área (`backend`, `app`, `mesh`, `sms`, `infra`).
+> Etiquetas sugeridas: `guacamalla-red`, `hackathon`, + el área (`backend`, `app`, `mesh`, `sms`, `infra`).
 
 ---
 
@@ -23,7 +23,7 @@
 # 🟥 EPIC-0 — Spike de Mesh (viabilidad)
 
 > **Objetivo:** Validar técnicamente que dos dispositivos Android pueden descubrirse e intercambiar un registro **sin internet**. Bloquea el resto del proyecto.
-> **Etiquetas:** `guacamaya-red`, `mesh`, `spike`
+> **Etiquetas:** `guacamalla-red`, `mesh`, `spike`
 
 ---
 
@@ -83,7 +83,7 @@ Como equipo, queremos decidir entre BLE y Nearby Connections con base en los spi
 # 🟥 EPIC-1 — Backend + Modelo de datos
 
 > **Objetivo:** Backend en Node+TS con canales, registros firmados (Ed25519), HTTP/WebSocket e ingesta de comunidad.
-> **Etiquetas:** `guacamaya-red`, `backend`
+> **Etiquetas:** `guacamalla-red`, `backend`
 
 ---
 
@@ -200,7 +200,7 @@ Como operador, quiero revisar/agregar reportes de comunidad, para evitar que la 
 # 🟥 EPIC-2 — App: online + render
 
 > **Objetivo:** App Expo dev-client (Android) que baja canales por WS/HTTP, los guarda localmente y los muestra con estado de verificación.
-> **Etiquetas:** `guacamaya-red`, `app`
+> **Etiquetas:** `guacamalla-red`, `app`
 
 ---
 
@@ -312,7 +312,7 @@ Como sobreviviente, quiero publicar mi estado o pedir ayuda, para que la informa
 # 🟨 EPIC-3 — Sincronización por SMS
 
 > **Objetivo:** Sincronizar titulares críticos vía SMS cuando hay celular pero no datos.
-> **Etiquetas:** `guacamaya-red`, `sms`
+> **Etiquetas:** `guacamalla-red`, `sms`
 
 ---
 
@@ -372,7 +372,7 @@ Como usuario sin datos, quiero pedir actualización por SMS desde la app, para n
 # 🟥 EPIC-4 — Mesh + Data-mule
 
 > **Objetivo:** Implementar el sync de gossip sobre el transporte elegido (Fase 0), con TTL, multi-salto y subida al backend.
-> **Etiquetas:** `guacamaya-red`, `mesh`
+> **Etiquetas:** `guacamalla-red`, `mesh`
 
 ---
 
@@ -449,7 +449,7 @@ Como app que corre en gama baja, quiero descubrir vecinos sin agotar la batería
 # 🟨 EPIC-5 — Demo de desastre
 
 > **Objetivo:** Demostrar el sistema end-to-end en escenarios de red degradada.
-> **Etiquetas:** `guacamaya-red`, `demo`
+> **Etiquetas:** `guacamalla-red`, `demo`
 
 ---
 
@@ -492,7 +492,7 @@ Como presentador, quiero mostrar cómo la información sigue fluyendo a medida q
 # 🟩 EPIC-6 — Infra & soporte
 
 > **Objetivo:** Monorepo, paquete compartido y tooling base.
-> **Etiquetas:** `guacamaya-red`, `infra`
+> **Etiquetas:** `guacamalla-red`, `infra`
 
 ---
 

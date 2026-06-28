@@ -1,4 +1,4 @@
-# 🦜 Guacamaya Red — Planning
+# 🦜 Guacamalla Red — Planning
 
 > Red de comunicación de emergencia para desastres (terremotos), con backend central,
 > sincronización por internet, SMS y **mesh device-to-device**.
@@ -8,9 +8,9 @@
 
 ## 0. Decisión clave: por qué NO construimos sobre Briar
 
-Briar fue el punto de partida que evaluamos (mensajería P2P por mesh, sin servidores, usada por activistas). Es excelente en lo suyo, pero **su modelo es opuesto al de Guacamaya Red**. Construir encima de Briar sería pelear contra el framework en cada pieza.
+Briar fue el punto de partida que evaluamos (mensajería P2P por mesh, sin servidores, usada por activistas). Es excelente en lo suyo, pero **su modelo es opuesto al de Guacamalla Red**. Construir encima de Briar sería pelear contra el framework en cada pieza.
 
-| Pieza de Guacamaya Red | Briar | Veredicto |
+| Pieza de Guacamalla Red | Briar | Veredicto |
 |---|---|---|
 | **Backend central con canales** | No existe. Briar es P2P puro, sin servidor por diseño/filosofía | ❌ choque de fondo |
 | **Fetch por internet (HTTP/WS)** | Usa solo Tor para sincronizar entre contactos, no fetch a un servidor | ❌ no aplica |
@@ -24,11 +24,11 @@ Briar fue el punto de partida que evaluamos (mensajería P2P por mesh, sin servi
 Razones adicionales que lo descartan para este proyecto:
 - **Lenguaje/plataforma:** Briar es Java/Android con un codebase grande. Nuestro equipo es **JS/TS** → curva de aprendizaje alta y lenta para un hackathon.
 - **Modelo de contactos:** Briar exige conocerse y agregarse antes de comunicar. En un terremoto eres *un sobreviviente rodeado de desconocidos*; ese modelo no aplica.
-- **Sin concepto de servidor, canales públicos, SMS ni ingesta:** todo lo central de Guacamaya habría que construirlo desde cero *encima* de una arquitectura que empuja en dirección contraria.
+- **Sin concepto de servidor, canales públicos, SMS ni ingesta:** todo lo central de Guacamalla habría que construirlo desde cero *encima* de una arquitectura que empuja en dirección contraria.
 
 **Qué SÍ tomamos de Briar:** su idea de sincronización **store-and-forward (protocolo Bramble)** — guardar todo lo que se ve y reenviarlo cuando hay un encuentro. Eso lo replicamos como **concepto** en nuestro log de gossip (ver §4), no como código.
 
-> **Conclusión:** Guacamaya Red se construye desde cero en JS/TS (Node + React Native/Expo), Android-first, inspirado en el modelo store-and-forward de Briar pero sin depender de su código ni de su arquitectura P2P-sin-servidor.
+> **Conclusión:** Guacamalla Red se construye desde cero en JS/TS (Node + React Native/Expo), Android-first, inspirado en el modelo store-and-forward de Briar pero sin depender de su código ni de su arquitectura P2P-sin-servidor.
 
 ---
 
@@ -42,7 +42,7 @@ En un desastre (ej. terremoto en Venezuela) la infraestructura de comunicaciones
 | Internet + celular caídos, hay otros teléfonos cerca | Mesh BT/WiFi |
 | Todo caído, dispositivo aislado | Datos en caché local |
 
-La gente necesita información crítica y confiable: **dónde hay refugio, agua, ayuda médica; quién está bien; dónde hay personas atrapadas.** Las apps de mensajería normales asumen internet y contactos previos. Guacamaya Red no.
+La gente necesita información crítica y confiable: **dónde hay refugio, agua, ayuda médica; quién está bien; dónde hay personas atrapadas.** Las apps de mensajería normales asumen internet y contactos previos. Guacamalla Red no.
 
 ---
 
@@ -98,7 +98,7 @@ Es **el mismo protocolo de sync**, solo cambia la dirección. El backend hace el
 | Plataforma | **Android-first** | Venezuela = parque mayoritariamente Android gama baja |
 
 ### ¿Por qué NO Briar como base?
-Ver **§0** al inicio del documento para el análisis completo. En resumen: el diseño de Guacamaya es **cliente-servidor + relay mesh**; Briar es **P2P puro sin servidor** → modelos opuestos. Solo reutilizamos su **concepto** store-and-forward, no su código.
+Ver **§0** al inicio del documento para el análisis completo. En resumen: el diseño de Guacamalla es **cliente-servidor + relay mesh**; Briar es **P2P puro sin servidor** → modelos opuestos. Solo reutilizamos su **concepto** store-and-forward, no su código.
 
 ---
 
@@ -203,7 +203,7 @@ interface ChannelRecord {
 ## 7. Estructura del monorepo (propuesta)
 
 ```
-guacamaya-red/
+guacamalla-red/
 ├── backend/                # Node + TS + Fastify + WS + gateway SMS
 │   ├── src/
 │   │   ├── channels/       # lógica de canales
@@ -257,4 +257,4 @@ guacamaya-red/
 
 ---
 
-*Documento de planning — Guacamaya Red. Iterar según resultados del spike de Fase 0.*
+*Documento de planning — Guacamalla Red. Iterar según resultados del spike de Fase 0.*

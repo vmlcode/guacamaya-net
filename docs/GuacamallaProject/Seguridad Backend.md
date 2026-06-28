@@ -2,7 +2,7 @@
 
 Endurecimiento del [[Backend Data-Mule]] añadido en el sprint de junio 2026. Toda la configuración
 vive en `backend/src/security/config.ts`; los helpers en `auth.ts`, `rateLimit.ts`, `validation.ts`,
-`keygen.ts`. Parte de [[GuacamayaProject]].
+`keygen.ts`. Parte de [[GuacamallaProject]].
 
 ## Modelo de claves (API keys)
 
@@ -45,7 +45,7 @@ todo (solo aceptable en dev).
 - **Registros oficiales** (`POST /channels/:id/records`): requieren `X-Api-Key` o
   `Authorization: Bearer <admin key>`; solo canales oficiales (`alertas`, `refugios`, `ayuda-medica`).
 - **Ubicación** (`GET /locations`): requiere read key (o admin).
-- **WebSocket** (`/ws`): `?token=<key>` o header `Sec-WebSocket-Protocol: guacamaya.<key>`; usa WS key
+- **WebSocket** (`/ws`): `?token=<key>` o header `Sec-WebSocket-Protocol: guacamalla.<key>`; usa WS key
   o read key.
 - **`/ingest`**: sin API key a propósito — es **zero-trust por firma** (cualquier mule puede subir; el
   backend re-verifica cada frame). Ver [[Backend Data-Mule]].

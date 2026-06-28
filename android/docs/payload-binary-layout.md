@@ -1,4 +1,4 @@
-# Guacamaya Net — Payload Binary Layout
+# Guacamalla Net — Payload Binary Layout
 
 Over-the-air frame for the BLE Extended Advertising (ADV_EXT_IND) control plane. Four blocks travel together as BLE service data: a 1 B unsigned hop TTL, a 22 B application payload, the 32 B Ed25519 public key of the origin (so any receiver can verify without a registry), and the 64 B Ed25519 signature over the payload.
 
@@ -99,7 +99,7 @@ SOSNET_SERVICE_UUID = "8d3d0001-2a1b-4c8e-9c0f-1234567890ab"
 When `flags.has_heavy = 1`, the NAN service name on the data plane is derived from the BLE frame:
 
 ```
-nan_service_name = "guacamaya::" + hex(node_id[0..4]) + "::" + hex(msg_id)
+nan_service_name = "guacamalla::" + hex(node_id[0..4]) + "::" + hex(msg_id)
 ```
 
 A subscriber that sees `has_heavy=1` in the BLE frame can immediately subscribe to that NAN service name to pull the heavy bytes — no extra discovery round-trip.

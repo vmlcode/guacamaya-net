@@ -1,9 +1,9 @@
 # IngestClient (Data-Mule Uploader)
 
-El **data-mule de subida** de [[Guacamaya (Android)]]: junta los frames de malla
+El **data-mule de subida** de [[Guacamalla (Android)]]: junta los frames de malla
 verificados que el teléfono recogió y los sube al `POST /ingest` del
 [[Backend Data-Mule]] cuando recupera Wi-Fi/LTE. Cierra el pendiente histórico "no
-existe uploader Kotlin". Parte de [[GuacamayaProject]].
+existe uploader Kotlin". Parte de [[GuacamallaProject]].
 
 > **Estado:** implementado en `develop` (commit `eee3508`), build + tests JVM en
 > verde. **Pata de aceptación del backend verificada** contra un server real (2026-06-28,
@@ -24,7 +24,7 @@ Solución: migración Room **no destructiva** `Migration(2,3)` que añade:
 DB version 2→3. Se conservó `fallbackToDestructiveMigration()` solo como red de
 seguridad para saltos no contemplados. Las filas pre-v3 quedan con `sig` vacía y
 se **excluyen** de la subida (filtro `length(sig) = 64`). Detalle del schema en
-[[Guacamaya (Android)]]; el frame de 118 B en [[Protocolo y Frame]].
+[[Guacamalla (Android)]]; el frame de 118 B en [[Protocolo y Frame]].
 
 ## Componentes
 

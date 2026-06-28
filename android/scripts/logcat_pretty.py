@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Colorize Guacamaya logcat lines for the jury demo.
+Colorize Guacamalla logcat lines for the jury demo.
 
     adb logcat -v time | python3 scripts/logcat_pretty.py
 

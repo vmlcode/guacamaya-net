@@ -4,12 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this branch is
 
-The **`develop` branch is the consolidated Guacamaya monorepo** holding both halves of the product:
+The **`develop` branch is the consolidated Guacamalla monorepo** holding both halves of the product:
 
-- **`backend/` + `packages/`** — the Guacamaya Red backend (Bun + TypeScript). It is the **data-mule
+- **`backend/` + `packages/`** — the Guacamalla Red backend (Bun + TypeScript). It is the **data-mule
   ingestion point** for the mesh (`POST /ingest`), serves official signed channels, and feeds the
   moving-map location history. The mesh works without it; the backend is never a hard dependency.
-- **`android/`** — the native Kotlin + Compose **Guacamaya mesh app**, the connectionless
+- **`android/`** — the native Kotlin + Compose **Guacamalla mesh app**, the connectionless
   BLE/Wi-Fi-Aware mesh. A **self-contained Gradle project** (its own `gradlew`, `build.gradle.kts`,
   `docs/`, `CLAUDE.md`); open `android/` directly in Android Studio. See **`android/CLAUDE.md`** for
   the mesh side.
@@ -21,8 +21,15 @@ Working language of comments/docs is Spanish in places; code identifiers are Eng
 
 ## Brand rules
 
-- The product is **Guacamaya Net** (mesh app + optional backend). Use *Guacamaya* in prose, docs,
-  comments, identifiers, and UI. **SOSNet** is a retired name — do not use it.
+- The product is **Guacamalla Net** (mesh app + optional backend). Use *Guacamalla* in prose, docs,
+  comments, and UI. **SOSNet** is a retired name — do not use it.
+- **Code identifiers intentionally stay `guacamaya`** — the brand fix (Guacamaya→Guacamalla) was
+  *visible + docs only*. Do **not** "fix" these to `guacamalla`; doing so changes the app identity,
+  breaks deployments, regenerates device keys, or desyncs the wire/protocol:
+  - Android package + `namespace`/`applicationId` (`net.guacamaya`) and action strings (`net.guacamaya.action.*`).
+  - npm/workspace packages (`@guacamaya/*`, `guacamaya-net`) and env vars (`GUACAMAYA_ADMIN_KEY`, `GUACAMAYA_*_KEY`).
+  - Runtime keys: Keystore alias `guacamaya_master`, Room DB `guacamaya.db`, WorkManager `guacamaya-ingest-upload`,
+    notification channel/log tags (`guacamaya.*`), and the WS subprotocol prefix `guacamaya.` (matched on both sides).
 - Wire-format constants live in `packages/shared/src/mesh/` and must stay byte-identical with
   `net.guacamaya.proto.*` on Android.
 - Exception: the git branch name **`init-sosnet`** is a literal remote branch name until renamed.
@@ -75,7 +82,7 @@ trajectory for the moving-map dashboard. Like records, `id` = SHA-256 of canonic
 - `backend/src/channels/routes.ts` — channel HTTP API + `/ingest` (see below). `store.ts` — in-memory fallback.
 - `backend/src/locations/routes.ts` — location HTTP API (see below). `store.ts` — in-memory fallback.
 - `backend/src/crypto/` — `keys.ts` (server identity), `signer.ts` (signs official records).
-- `backend/src/mesh/frame.ts` — **decodes + zero-trust-verifies Guacamaya binary mesh frames** for `/ingest`.
+- `backend/src/mesh/frame.ts` — **decodes + zero-trust-verifies Guacamalla binary mesh frames** for `/ingest`.
 - `backend/src/db/` — `channelsRepo.ts`, `locationsRepo.ts` (Supabase with in-memory fallback), `supabase.ts`. Schema: `backend/supabase/schema.sql`.
 - `backend/src/ws/server.ts` — WebSocket `/ws`, subscribe/unsubscribe per channel, `broadcastRecord`, `broadcastLocation`.
 
@@ -91,7 +98,7 @@ trajectory for the moving-map dashboard. Like records, `id` = SHA-256 of canonic
 
 ### `POST /ingest` — the data-mule bridge (most important flow)
 
-Body: `{ "frames": ["<base64>", ...] }`. Each frame is the Guacamaya BLE service-data **with the leading
+Body: `{ "frames": ["<base64>", ...] }`. Each frame is the Guacamalla BLE service-data **with the leading
 hop-TTL byte stripped** → 118 bytes = `22 B payload + 32 B pubkey + 64 B signature` (a full 119-byte
 frame is tolerated by dropping the first byte).
 

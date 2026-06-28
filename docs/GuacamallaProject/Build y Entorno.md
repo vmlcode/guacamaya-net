@@ -1,6 +1,6 @@
 # Build y Entorno
 
-Cómo compilar y correr las dos mitades del monorepo [[GuacamayaProject]] (rama `develop`).
+Cómo compilar y correr las dos mitades del monorepo [[GuacamallaProject]] (rama `develop`).
 
 ## Ubicaciones locales
 
@@ -14,7 +14,7 @@ Cómo compilar y correr las dos mitades del monorepo [[GuacamayaProject]] (rama 
 > El worktree comparte el mismo `.git`. La rama `init-sosnet` quedó con el layout viejo (la app en la
 > raíz, sin backend) — atrasada. Ver [[Arquitectura y Decisiones]] §2.
 
-## [[Guacamaya (Android)]] — compilar
+## [[Guacamalla (Android)]] — compilar
 
 Proyecto Gradle autocontenido en `android/`. **Abrir `android/` en Android Studio, no la raíz.**
 Requiere Android SDK con `platform-android-34` + `build-tools;34.0.0`. Apuntar Gradle al SDK con

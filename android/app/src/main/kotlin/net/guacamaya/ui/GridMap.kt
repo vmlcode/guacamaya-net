@@ -14,13 +14,15 @@ import androidx.compose.ui.unit.dp
 import net.guacamaya.mesh.MessageEntity
 import kotlin.math.min
 
-private val GridBg = Color(0xFF0E1320)
-private val GridLine = Color(0xFF263150)
-private val GridLineMajor = Color(0xFF3A4A70)
-private val YouDot = Color(0xFF2ED573)
-private val NodeSos = Color(0xFFFF3B5C)
-private val NodeFind = Color(0xFF35A0FF)
-private val NorthNeedle = Color(0xFFE6E8F0)
+// Design tokens from docs/design/DESIGN.md (see GuacamayaPalette / GridMap.kt is Canvas-drawn,
+// so it reads raw palette values rather than MaterialTheme roles).
+private val GridBg = GuacamayaPalette.Canvas              // near-black canvas
+private val GridLine = GuacamayaPalette.Hairline          // minor grid
+private val GridLineMajor = GuacamayaPalette.HairlineStrong // major grid
+private val YouDot = GuacamayaPalette.Primary             // self = brand yellow
+private val NodeSos = GuacamayaPalette.Danger             // critical SOS = danger red
+private val NodeFind = GuacamayaPalette.Info              // presence = info blue
+private val NorthNeedle = GuacamayaPalette.BodyStrong     // north tick
 
 /**
  * Offline grid map: user at center, nodes in meter offsets. No tile download — low RAM.

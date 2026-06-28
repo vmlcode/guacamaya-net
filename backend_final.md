@@ -1,4 +1,4 @@
-# Guacamaya Net — Backend API (integración móvil)
+# Guacamalla Net — Backend API (integración móvil)
 
 Documento de referencia de **cada endpoint del backend** orientado a la integración con el
 **app Android** (`android/`). El backend es un **sink opcional de "data-mule"**: el mesh funciona

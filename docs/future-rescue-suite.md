@@ -36,7 +36,7 @@ conjunto de clientes y herramientas operativas que lo hacen utilizable en campo:
                                                    │ POST /ingest
                                                    ▼
                                          ┌─────────────────────┐
-                                         │ Backend Guacamaya   │
+                                         │ Backend Guacamalla   │
                                          │  - verify frames    │
                                          │  - resolve flow     │◄──── POST /resolve/evidence
                                          │  - WS /resuelto     │     POST /resolve  (co-firmado)

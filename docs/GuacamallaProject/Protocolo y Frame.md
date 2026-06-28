@@ -1,6 +1,6 @@
 # Protocolo y Frame
 
-El contrato binario entre todas las capas (y entre [[Guacamaya (Android)]] y el [[Backend Data-Mule]]).
+El contrato binario entre todas las capas (y entre [[Guacamalla (Android)]] y el [[Backend Data-Mule]]).
 Todo dato es un **payload firmado de 22 bytes** que viaja dentro de un único frame de broadcast.
 
 ## ⚠️ Riesgo crítico: el layout binario se mantiene en sync a mano en TRES lugares
@@ -72,7 +72,7 @@ primero**, antes de almacenarse o retransmitirse:
 4. Verificación Ed25519 (`Signer.verify`, el paso caro, al final)
 
 Si pasa → `DedupeCache.admit` → persistir en Room (pruning batcheado, conserva 25 000 filas; ver
-[[Guacamaya (Android)]]) → si es fresco, **retransmitir los bytes payload/pubkey/sig sin cambios** con
+[[Guacamalla (Android)]]) → si es fresco, **retransmitir los bytes payload/pubkey/sig sin cambios** con
 el TTL de salto decrementado; deja de retransmitir cuando llegaría a 0 (el frame igual se guarda para
 que el usuario local lo vea). El loop-back dentro de la ventana lo suprime el dedupe, indexado por
 `(nodeId, msgId)`, LRU + TTL 5 min.

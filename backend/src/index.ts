@@ -34,7 +34,7 @@ await app.register(resolveRoutes);
 await app.register(dashboardRoutes);
 
 app.get("/health", async () => ({ ok: true }));
-app.get("/", async () => ({ message: "Welcome to Guacamaya Net!" }));
+app.get("/", async () => ({ message: "Welcome to Guacamalla Net!" }));
 
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 

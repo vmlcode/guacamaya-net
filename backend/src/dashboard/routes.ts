@@ -18,7 +18,7 @@ const PAGE = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Guacamaya Net — Mapa de Alertas</title>
+<title>Guacamalla Net — Mapa de Alertas</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   :root { color-scheme: light dark; }
