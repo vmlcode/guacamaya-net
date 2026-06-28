@@ -92,7 +92,7 @@ am_start_action() {
 # Fetch recent guacamaya.probe lines — PID filter first (MIUI drops tagged logcat).
 probe_snapshot() {
   local serial="$1"
-  local pid probe
+  local pid probe=""
   pid="$(adb -s "$serial" shell pidof "$PKG" 2>/dev/null | awk '{print $1}' | tr -d '\r\n' || true)"
   if [ -n "$pid" ]; then
     probe="$(adb -s "$serial" logcat -d --pid="$pid" 2>/dev/null | grep 'guacamaya.probe' | tail -15 || true)"
