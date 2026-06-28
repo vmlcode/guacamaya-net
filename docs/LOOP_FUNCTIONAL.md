@@ -614,3 +614,24 @@ Loop continúa en modo vigilancia; sin avance posible sin intervención manual (
 
 ### Recomendación
 Detener loop hasta reconectar Realme y calibrar brújula sweet; ticks 38–80 no aportan avance funcional.
+
+---
+
+## Iteración 27 — 2026-06-28 (loop 10m, tick 90)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| Dispositivos | Solo **sweet**; Realme ausente (ticks 38–90) |
+| `device-test` | **PASS** parcial @5 s — sweet `nodes=2 frames=69` |
+| `functional-compass` | sweet **0° magnet=bad**; Realme N/A |
+
+### Resumen ticks 81–90
+| Área | Estado |
+|------|--------|
+| Validación | ⚠️ Degradada — 53 ticks consecutivos solo sweet |
+| Cambios | Ninguno desde tick 80 |
+| Brújula sweet | ❌ `magnet=bad` — sin calibración manual |
+
+### Estado final loop (90 ticks, ~15 h)
+BLE bidireccional validado en ticks 1–37. Ticks 38–90 en vigilancia sin avance — **detener loop** hasta intervención manual.
