@@ -92,6 +92,26 @@ interface MessageDao {
     fun observeLatestPerNode(limit: Int = 500): Flow<List<MessageEntity>>
 
     /**
+     * Latest help-request frame per node (newest first), for store-and-forward
+     * re-advertising. Excludes presence/heartbeat (sos_type OTHER = 7 and not critical):
+     * only aid requests are worth holding and re-broadcasting. See AgePolicy /
+     * Payload.isHelpRequest for the matching receive-side predicate.
+     */
+    @Query(
+        """
+        SELECT m.* FROM messages m
+        INNER JOIN (
+            SELECT node_id, MAX(received_at) AS max_received
+            FROM messages GROUP BY node_id
+        ) g ON m.node_id = g.node_id AND m.received_at = g.max_received
+        WHERE m.critical = 1 OR m.sos_type != 7
+        ORDER BY m.received_at DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun latestHelpFramesPerNode(limit: Int): List<MessageEntity>
+
+    /**
      * Keep only the [keep] most-recently-received rows; delete the rest. Called
      * after each insert so the table stays bounded on 1–2 GB devices.
      */

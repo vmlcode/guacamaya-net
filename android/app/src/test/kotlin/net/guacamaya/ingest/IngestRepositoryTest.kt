@@ -40,6 +40,7 @@ class IngestRepositoryTest {
         override fun observeCount(): Flow<Int> = throw NotImplementedError()
         override fun observeNodeCount(): Flow<Int> = throw NotImplementedError()
         override fun observeLatestPerNode(limit: Int): Flow<List<MessageEntity>> = throw NotImplementedError()
+        override suspend fun latestHelpFramesPerNode(limit: Int): List<MessageEntity> = throw NotImplementedError()
         override suspend fun pruneOldKeeping(keep: Int) = throw NotImplementedError()
         override suspend fun clear() = throw NotImplementedError()
     }

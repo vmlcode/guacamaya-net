@@ -78,11 +78,11 @@ class FloodRouter(
             return
         }
 
-        // 3. Replay window.
+        // 3. Age window — help requests get a long store-and-forward window so a
+        //    victim's last-known SOS keeps propagating; presence stays fresh-only.
         val nowSec = now() / 1000
-        val skew = Math.abs(payload.tsUnix - nowSec)
-        if (skew > MAX_TS_SKEW_SECONDS) {
-            Log.w(tag, "DROP: ts skew=${skew}s > $MAX_TS_SKEW_SECONDS")
+        if (!AgePolicy.accept(payload.tsUnix, nowSec, payload.isHelpRequest)) {
+            Log.w(tag, "DROP: age out of window (ts=${payload.tsUnix} now=$nowSec help=${payload.isHelpRequest})")
             return
         }
 

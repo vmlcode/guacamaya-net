@@ -10,6 +10,7 @@ Foto del estado de [[GuacaMallaProject]] al **2026-06-28** (rama `develop`, mono
 - ✅ Identidad Ed25519 real sellada en Keystore.
 - ✅ Ubicación GPS real en el payload + sonda ENU (lat/lon/acc/bearing/`rel=`/`co_loc`).
 - ✅ TTL de salto que decrementa por relay y para en 0 (byte sin firmar al frente). Ver [[Protocolo y Frame]].
+- ✅ **Store-and-forward**: rotación de re-emisión en el servicio (frame propio ↔ últimos help-requests por nodo) + ventana de edad selectiva (`AgePolicy`: 24 h para help-requests, fresh-only para presence). Un SOS sobrevive al apagado de su origen y llega a equipos que entran después. Tests JVM de `AgePolicy`/`isHelpRequest` verdes; **⚠️ cambia la cadencia de broadcast — requiere validación de campo en 2-3 teléfonos (MIUI)**. Ver [[Protocolo y Frame]].
 - ✅ **Radar + brújula + mapa de cuadrícula offline** nuevos (`CompassHeading`, `GeoProximity`, `GridMap`); **osmdroid eliminado** y quitada la dependencia de GMS para el render. Ver [[GuacaMalla (Android)]].
 - ✅ Pruning de la DB Room (conserva 25 000 filas, batcheado cada 128 inserts).
 - ✅ **`IngestClient` (data-mule uploader)** implementado: persiste la firma (migración Room v3), arma el frame de 118 B y hace `POST /ingest` vía WorkManager al recuperar red. Build + tests JVM verdes. **Pata de aceptación del backend verificada** contra server real (ingesta/dedup/rechazo/locations); falta el smoke en dispositivo. Ver [[IngestClient (Data-Mule Uploader)]].

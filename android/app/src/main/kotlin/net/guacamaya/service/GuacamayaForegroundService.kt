@@ -31,6 +31,7 @@ import net.guacamaya.crypto.Identity
 import net.guacamaya.ingest.IngestUploadWorker
 import kotlinx.coroutines.flow.first
 import net.guacamaya.mesh.GuacamayaDatabase
+import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.proto.Flags
 import net.guacamaya.proto.Payload
 import net.guacamaya.proto.SosType
@@ -64,7 +65,7 @@ class GuacamayaForegroundService : Service() {
 
     private var broadcaster: Broadcaster? = null
     private var identity: Identity? = null
-    private var heartbeatJob: Job? = null
+    private var broadcastJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -171,18 +172,39 @@ class GuacamayaForegroundService : Service() {
         }
     }
 
-    private fun startDistressBroadcast() {
-        stopPresenceHeartbeat()
-        scope.launch {
+    /** SOS mode: this device's own frame is a critical distress request. */
+    private fun startDistressBroadcast() =
+        startBroadcast(SosType.DISTRESS, ownCritical = true, ownTtl = 15)
+
+    /**
+     * "Ambos" mode: own frame is a low-priority presence beacon — but the rotation still
+     * runs so this device forwards the SOS frames it is holding. Idempotent.
+     */
+    private fun startPresenceHeartbeat() {
+        if (broadcastJob?.isActive == true) return
+        startBroadcast(SosType.OTHER, ownCritical = false, ownTtl = PRESENCE_HOP_TTL)
+    }
+
+    /**
+     * Store-and-forward broadcast rotation. While active, the single advertising slot
+     * alternates between:
+     *  - this device's **own** frame (rebuilt each turn for a fresh timestamp/location), and
+     *  - the most recent **help-request** frame held for each *other* node (round-robin).
+     *
+     * This is what lets phone C, arriving after origin A has gone offline, still receive
+     * A's signed SOS from a relay B that heard it earlier — A's frame is re-radiated from
+     * B's store, not merely echoed once on receipt. Help frames are re-advertised with a
+     * small [REBROADCAST_TTL] so each holder spreads them a hop or two; chained holders
+     * carry them across the mesh. Receivers accept the aged frames via [net.guacamaya.mesh.AgePolicy].
+     */
+    private fun startBroadcast(ownType: SosType, ownCritical: Boolean, ownTtl: Int) {
+        broadcastJob?.cancel()
+        broadcastJob = scope.launch {
             val id = identity ?: Identity.loadOrCreate(this@GuacamayaForegroundService).also { identity = it }
-            val payload = signedPayload(id, SosType.DISTRESS, critical = true, hopTtl = 15)
-            val sig = id.sign(payload)
             val bcast = broadcaster ?: Broadcaster.create(this@GuacamayaForegroundService)?.also { broadcaster = it }
             if (bcast == null) {
                 Log.e(tag, "Broadcaster.create failed — extended BLE ADV not supported")
-                // Toast must be created on a thread with a Looper; this coroutine runs on
-                // Dispatchers.Default. Marshal to the main thread or it crashes (the UI also
-                // warns proactively via MapViewModel.broadcastSupported).
+                // Toast needs a Looper thread; this coroutine runs on Dispatchers.Default.
                 withContext(Dispatchers.Main) {
                     android.widget.Toast.makeText(
                         this@GuacamayaForegroundService,
@@ -190,42 +212,46 @@ class GuacamayaForegroundService : Service() {
                         android.widget.Toast.LENGTH_LONG,
                     ).show()
                 }
-            } else {
-                bcast.start(payload, id.publicKey, sig)
+                return@launch
+            }
+            val dao = GuacamayaDatabase.get(this@GuacamayaForegroundService).messageDao()
+
+            // Bootstrap own ADV via start() so the compat→coded PHY negotiation runs once.
+            signedPayload(id, ownType, ownCritical, ownTtl).let { p ->
+                bcast.start(p, id.publicKey, id.sign(p))
+            }
+
+            var held: List<MessageEntity> = emptyList()
+            var idx = 0
+            var ownTurn = false // own frame just went out above
+            while (isActive) {
+                delay(FORWARD_DWELL_MS)
+                if (ownTurn) {
+                    val p = signedPayload(id, ownType, ownCritical, ownTtl)
+                    bcast.swap(p, id.publicKey, id.sign(p), ownTtl)
+                    // Refresh the held set each time we return to our own frame.
+                    held = dao.latestHelpFramesPerNode(REBROADCAST_NODES)
+                        .filterNot { it.nodeId.contentEquals(id.nodeId) }
+                    idx = 0
+                } else if (held.isNotEmpty()) {
+                    val e = held[idx % held.size]
+                    idx++
+                    bcast.swap(e.payloadRaw, e.pubkey, e.sig, REBROADCAST_TTL)
+                }
+                ownTurn = !ownTurn
             }
         }
     }
 
     private fun stopBroadcasting() {
-        stopPresenceHeartbeat()
+        broadcastJob?.cancel()
+        broadcastJob = null
         broadcaster?.stop()
     }
 
-    /**
-     * Low-rate signed presence beacon for "Ambos" mode. It lets nearby phones
-     * appear on the radar without flooding the mesh as if every node were in SOS.
-     */
-    private fun startPresenceHeartbeat() {
-        if (heartbeatJob?.isActive == true) return
-        heartbeatJob = scope.launch {
-            val id = identity ?: Identity.loadOrCreate(this@GuacamayaForegroundService).also { identity = it }
-            val bcast = broadcaster ?: Broadcaster.create(this@GuacamayaForegroundService)?.also { broadcaster = it }
-            if (bcast == null) {
-                Log.e(tag, "Presence heartbeat unavailable — extended BLE ADV not supported")
-                return@launch
-            }
-            while (isActive) {
-                val payload = signedPayload(id, SosType.OTHER, critical = false, hopTtl = PRESENCE_HOP_TTL)
-                val sig = id.sign(payload)
-                bcast.swap(payload, id.publicKey, sig, PRESENCE_HOP_TTL)
-                delay(PRESENCE_INTERVAL_MS + (System.currentTimeMillis() % PRESENCE_JITTER_MS))
-            }
-        }
-    }
-
     private fun stopPresenceHeartbeat() {
-        heartbeatJob?.cancel()
-        heartbeatJob = null
+        broadcastJob?.cancel()
+        broadcastJob = null
     }
 
     private suspend fun signedPayload(
@@ -341,9 +367,16 @@ class GuacamayaForegroundService : Service() {
 
         private const val NOTIF_ID = 0x5050
         private const val CHANNEL_ID = "guacamaya.service"
-        private const val PRESENCE_INTERVAL_MS = 60_000L
-        private const val PRESENCE_JITTER_MS = 15_000L
         private const val PRESENCE_HOP_TTL = 2
+
+        /** Store-and-forward rotation: how many held help-nodes to cycle, and the dwell
+         *  per advertised frame. Own frame takes every other slot, so own re-airs every
+         *  2×dwell and each held frame every ~2×N×dwell. Hop budget for re-aired frames
+         *  is small — chained holders carry SOS across the mesh. Tune for reach vs battery. */
+        private const val REBROADCAST_NODES = 20
+        private const val FORWARD_DWELL_MS = 2_000L
+        private const val REBROADCAST_TTL = 2
+
         private const val PREFS = "guacamaya_service"
         private const val KEY_WANT_OBSERVE = "want_observe"
         private const val OBSERVE_HEALTH_MS = 8_000L
