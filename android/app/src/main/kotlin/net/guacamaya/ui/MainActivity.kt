@@ -5,7 +5,6 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.hardware.SensorManager
 import android.location.Location
 import android.net.Uri
 import android.os.Build
@@ -634,32 +633,6 @@ private fun RadarCompass(sizeDp: Int, heading: Float, relative: Float, target: R
     }
 }
 
-@Composable
-private fun rememberCompassHeading(ctx: Context): Float {
-    var heading by remember { mutableStateOf(0f) }
-    DisposableEffect(ctx) {
-        val sm = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val rotation = sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-        val listener = object : SensorEventListener {
-            private val rot = FloatArray(9)
-            private val orientation = FloatArray(3)
-
-            override fun onSensorChanged(event: SensorEvent) {
-                SensorManager.getRotationMatrixFromVector(rot, event.values)
-                SensorManager.getOrientation(rot, orientation)
-                heading = ((Math.toDegrees(orientation[0].toDouble()).toFloat() + 360f) % 360f)
-            }
-
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
-        }
-        if (rotation != null) {
-            sm.registerListener(listener, rotation, SensorManager.SENSOR_DELAY_UI)
-        }
-        onDispose { sm.unregisterListener(listener) }
-    }
-    return heading
-}
-
 @SuppressLint("MissingPermission")
 @Composable
 private fun rememberLiveLocation(ctx: Context, highAccuracy: Boolean): Location? {
@@ -704,7 +677,7 @@ private fun nearestTarget(location: Location?, messages: List<MessageEntity>): R
             RadarTarget(
                 nodeId = msg.nodeId.toHex(),
                 distanceMeters = out[0],
-                bearing = (out[1] + 360f) % 360f,
+                bearing = CompassMath.normalizeDegrees(out[1]),
                 rssi = msg.rssi,
                 critical = msg.critical,
             )
@@ -719,8 +692,6 @@ private data class RadarTarget(
     val rssi: Int,
     val critical: Boolean,
 )
-
-private fun normalizeDegrees(v: Float): Float = ((v + 540f) % 360f) - 180f
 
 private fun formatDistance(meters: Float): String =
     if (meters < 1_000f) "${meters.roundToInt()} m" else "%.1f km".format(meters / 1_000f)
@@ -748,8 +719,13 @@ private fun MapEntryButton(received: Int, onClick: () -> Unit) {
 
 @Composable
 private fun MapScreen(messages: List<MessageEntity>, totalReceived: Int, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val userLocation = rememberLiveLocation(ctx, highAccuracy = false)
+    val heading = rememberCompassHeading()
     val mapMessages = messages.take(MAP_RENDER_LIMIT)
     val listMessages = messages.take(LIST_RENDER_LIMIT)
+    val nodesOnGrid = mapMessages.count { it.latE7 != 0 || it.lonE7 != 0 }
+
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(16.dp),
@@ -765,18 +741,18 @@ private fun MapScreen(messages: List<MessageEntity>, totalReceived: Int, onBack:
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) { Text("‹ Volver", color = TextHi, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
             Column(horizontalAlignment = Alignment.End) {
-                Text("SOS recibidos: $totalReceived", color = TextHi, fontSize = 14.sp)
-                Text("Mostrando últimos ${listMessages.size}", color = TextLo, fontSize = 11.sp)
+                Text("Recibidos: $totalReceived", color = TextHi, fontSize = 14.sp)
+                Text("Cuadrícula · $nodesOnGrid con GPS", color = TextLo, fontSize = 11.sp)
             }
         }
 
         Box(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF0E1320))) {
-            if (mapMessages.isEmpty()) {
+            if (nodesOnGrid == 0 && userLocation == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Aún no hay SOS recibidos.", color = TextLo)
+                    Text("Sin nodos con GPS aún.", color = TextLo)
                 }
             } else {
-                OsmMap(mapMessages)
+                GridMap(userLocation = userLocation, messages = mapMessages, heading = heading)
             }
         }
 
@@ -788,46 +764,6 @@ private fun MapScreen(messages: List<MessageEntity>, totalReceived: Int, onBack:
         }
     }
 }
-
-@Composable
-private fun OsmMap(messages: List<MessageEntity>) {
-    AndroidView(
-        modifier = Modifier.fillMaxSize(),
-        factory = { ctx ->
-            MapView(ctx).apply {
-                setTileSource(TileSourceFactory.MAPNIK)
-                setMultiTouchControls(true)
-                controller.setZoom(3.0)
-                controller.setCenter(GeoPoint(0.0, 0.0))
-                overlaysCache = this
-            }
-        },
-        update = { mv ->
-            mv.overlays.clear()
-            messages.forEach { msg ->
-                val lat = msg.latE7 / 1e7
-                val lon = msg.lonE7 / 1e7
-                Marker(mv).apply {
-                    position = GeoPoint(lat, lon)
-                    title = "${msg.sosType} • ${msg.nodeId.toHex().take(8)} • rssi=${msg.rssi}"
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                    mv.overlays.add(this)
-                }
-            }
-            if (messages.isNotEmpty()) {
-                val last = messages.first()
-                mv.controller.setCenter(GeoPoint(last.latE7 / 1e7, last.lonE7 / 1e7))
-                mv.controller.setZoom(11.0)
-            }
-            mv.invalidate()
-        },
-    )
-}
-
-// Hold the last MapView so we can clear overlays across recompositions without
-// re-inflating. AndroidView's factory caches the view itself; we only need this
-// for the overlay swap inside update.
-private var overlaysCache: MapView? = null
 
 @Composable
 private fun MessageRow(msg: MessageEntity) {

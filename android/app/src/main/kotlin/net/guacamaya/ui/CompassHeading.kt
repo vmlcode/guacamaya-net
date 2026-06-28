@@ -14,7 +14,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import kotlin.math.abs
 
 /**
  * True-north heading in degrees [0, 360), remapped for current display rotation.
