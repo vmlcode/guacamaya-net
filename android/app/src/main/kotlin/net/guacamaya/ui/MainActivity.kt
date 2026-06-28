@@ -156,13 +156,13 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     val devicesReceived by vm.devicesReceived.collectAsState()
     val totalFrames by vm.totalFrames.collectAsState()
     val ctx = LocalContext.current
-    val probeHeading = rememberCompassHeading()
+    val probeCompass = rememberCompassState()
     val probeLocation = rememberLiveLocation(ctx, highAccuracy = false)
 
     var showMap by remember { mutableStateOf(false) }
     var showRadar by remember { mutableStateOf(false) }
     val running = broadcasting || observing
-    FunctionalProbe(headingDeg = probeHeading, location = probeLocation, nodes = latestNodes)
+    FunctionalProbe(compass = probeCompass, location = probeLocation, nodes = latestNodes)
 
     fun send(action: String) {
         val intent = Intent(ctx, GuacamayaForegroundService::class.java).apply { this.action = action }

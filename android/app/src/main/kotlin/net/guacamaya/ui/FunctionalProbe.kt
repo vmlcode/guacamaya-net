@@ -1,6 +1,7 @@
 package net.guacamaya.ui
 
 import android.location.Location
+import android.hardware.SensorManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -11,31 +12,37 @@ import kotlin.math.roundToInt
 /** Logcat probe for adb functional tests — no UI. Tag: guacamaya.probe */
 @Composable
 fun FunctionalProbe(
-    headingDeg: Float,
+    compass: CompassState,
     location: Location?,
     nodes: List<net.guacamaya.mesh.MessageEntity> = emptyList(),
 ) {
-    DisposableEffect(headingDeg, location, nodes) {
+    DisposableEffect(compass, location, nodes) {
         val handler = Handler(Looper.getMainLooper())
         val tick = object : Runnable {
             override fun run() {
                 val loc = location
                 val nearest = loc?.let { GeoProximity.nearest(it, nodes) }
+                val orient =
+                    "pitch=${compass.pitchDeg.roundToInt()} roll=${compass.rollDeg.roundToInt()} " +
+                        "usable=${compass.usable} magnet=${magnetLabel(compass.magnetAccuracy)}"
                 if (loc != null) {
                     val acc = if (loc.hasAccuracy()) loc.accuracy else -1f
                     val extra = nearest?.let { t ->
                         " target=${t.nodeId.take(8)} dist_m=${t.distanceMeters.roundToInt()} " +
                             "bearing=${t.bearing.roundToInt()} rel=${
-                                if (t.coLocated) 0 else CompassMath.relativeBearing(t.bearing, headingDeg).roundToInt()
+                                if (t.coLocated) 0 else CompassMath.relativeBearing(t.bearing, compass.headingDeg).roundToInt()
                             } co_loc=${t.coLocated}"
                     } ?: ""
                     Log.i(
                         TAG,
-                        "heading=${headingDeg.roundToInt()} lat=${loc.latitude} lon=${loc.longitude} " +
+                        "heading=${compass.headingDeg.roundToInt()} $orient lat=${loc.latitude} lon=${loc.longitude} " +
                             "acc_m=${acc.roundToInt()} speed=${loc.speed}$extra",
                     )
                 } else {
-                    Log.i(TAG, "heading=${headingDeg.roundToInt()} lat=null lon=null")
+                    Log.i(
+                        TAG,
+                        "heading=${compass.headingDeg.roundToInt()} $orient lat=null lon=null",
+                    )
                 }
                 handler.postDelayed(this, INTERVAL_MS)
             }
@@ -43,6 +50,14 @@ fun FunctionalProbe(
         handler.post(tick)
         onDispose { handler.removeCallbacks(tick) }
     }
+}
+
+private fun magnetLabel(accuracy: Int): String = when (accuracy) {
+    SensorManager.SENSOR_STATUS_UNRELIABLE -> "bad"
+    SensorManager.SENSOR_STATUS_ACCURACY_LOW -> "low"
+    SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> "med"
+    SensorManager.SENSOR_STATUS_ACCURACY_HIGH -> "high"
+    else -> "?"
 }
 
 private const val TAG = "guacamaya.probe"

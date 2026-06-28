@@ -31,3 +31,25 @@ guacamaya.probe: heading=0 lat=16.74… lon=-92.62… acc_m=26 speed=0.17 target
 - Validar brújula entre sweet y Realme tras calibración.
 - BLE asimétrico Realme→sweet (0 OK).
 - Probe: log bearing relativo al nodo más cercano (sin UI).
+
+---
+
+## Iteración 2 — 2026-06-28 (loop 10m, tick 1)
+
+### Cambios
+- **`CompassState`** + `rememberCompassState()`: expone pitch, roll, `usable`, accuracy magnética sin UI.
+- **Probe ampliado**: `pitch`, `roll`, `usable`, `magnet=high|med|low|bad` en `guacamaya.probe`.
+- **demo.sh**: `functional-compass` (ambos teléfonos), `ble-reverse-test` (TX/RX en ambas direcciones).
+
+### Prueba adb
+| Test | Resultado |
+|------|-----------|
+| Realme probe | `heading=61 pitch=-11 roll=5 usable=true magnet=high` |
+| sweet probe | Sin fix GPS al arrancar en background; en foreground `usable=false magnet=bad` (calibrar / permisos) |
+| sweet TX → Realme RX | **26 OK** |
+| Realme TX → sweet RX | **0 OK** (asimetría persiste) |
+
+### Pendiente tick 2
+- BLE: diagnosticar por qué sweet no recibe frames Realme (Observer LEGACY_STACK vs ADV Realme).
+- sweet: calibración magnética + probe con app en foreground ≥10 s.
+- Brújula cruzada: comparar `heading` de ambos con teléfonos paralelos.

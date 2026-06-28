@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -78,11 +79,20 @@ object CompassMath {
     }
 }
 
+data class CompassState(
+    val headingDeg: Float = 0f,
+    val pitchDeg: Float = 0f,
+    val rollDeg: Float = 0f,
+    val usable: Boolean = false,
+    val magnetAccuracy: Int = SensorManager.SENSOR_STATUS_UNRELIABLE,
+)
+
 @Composable
-fun rememberCompassHeading(reloadKey: Int = 0): Float {
+fun rememberCompassState(reloadKey: Int = 0): CompassState {
     val ctx = LocalContext.current
     val displayRotation = LocalView.current.display.rotation
     var heading by remember { mutableFloatStateOf(0f) }
+    var state by remember { mutableStateOf(CompassState()) }
     var offset by remember(reloadKey) { mutableFloatStateOf(CompassMath.loadOffset(ctx)) }
 
     DisposableEffect(ctx, displayRotation, offset) {
@@ -103,15 +113,24 @@ fun rememberCompassHeading(reloadKey: Int = 0): Float {
 
         fun publishFromMatrix() {
             val o = CompassMath.remappedOrientation(rotMatrix, displayRotation)
-            if (!CompassMath.isOrientationUsable(o[1], o[2])) return
-            val alpha = when (magnetAccuracy) {
-                SensorManager.SENSOR_STATUS_UNRELIABLE -> 0.06f
-                SensorManager.SENSOR_STATUS_ACCURACY_LOW -> 0.10f
-                SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> 0.14f
-                else -> 0.20f
+            val usable = CompassMath.isOrientationUsable(o[1], o[2])
+            if (usable) {
+                val alpha = when (magnetAccuracy) {
+                    SensorManager.SENSOR_STATUS_UNRELIABLE -> 0.06f
+                    SensorManager.SENSOR_STATUS_ACCURACY_LOW -> 0.10f
+                    SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> 0.14f
+                    else -> 0.20f
+                }
+                val corrected = CompassMath.normalizeDegrees(o[0] + offset)
+                heading = CompassMath.smooth(heading, corrected, alpha)
             }
-            val corrected = CompassMath.normalizeDegrees(o[0] + offset)
-            heading = CompassMath.smooth(heading, corrected, alpha)
+            state = CompassState(
+                headingDeg = heading,
+                pitchDeg = o[1],
+                rollDeg = o[2],
+                usable = usable,
+                magnetAccuracy = magnetAccuracy,
+            )
         }
 
         val listener = object : SensorEventListener {
@@ -159,5 +178,8 @@ fun rememberCompassHeading(reloadKey: Int = 0): Float {
         onDispose { sm.unregisterListener(listener) }
     }
 
-    return heading
+    return state
 }
+
+@Composable
+fun rememberCompassHeading(reloadKey: Int = 0): Float = rememberCompassState(reloadKey).headingDeg

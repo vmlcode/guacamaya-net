@@ -308,6 +308,43 @@ case "${1:-help}" in
     echo "[functional-test] done"
     ;;
 
+  functional-compass)
+    REALME="${DEVICE_TEST_TX:-6LRGONDE6LRG9XCY}"
+    SWEET="${DEVICE_TEST_RX:-sweet}"
+    echo "[functional-compass] brújula en ambos dispositivos"
+    JAVA_HOME="$JAVA_HOME" ./gradlew :app:installDebug -q
+    for pair in "$SWEET:sweet" "$REALME:realme"; do
+      hint="${pair%%:*}"
+      label="${pair##*:}"
+      serial="$(adb_serial "$hint")"
+      dev="$(adb -s "$serial" shell getprop ro.product.device | tr -d '\r\n')"
+      adb -s "$serial" logcat -c 2>/dev/null || true
+      adb -s "$serial" shell am start -n "$ACTIVITY" >/dev/null || true
+      adb -s "$serial" shell am start -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
+      sleep 6
+      echo "=== $label ($dev $serial) ==="
+      adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -4 || true
+    done
+    ;;
+
+  ble-reverse-test)
+    REALME="${DEVICE_TEST_TX:-6LRGONDE6LRG9XCY}"
+    SWEET="${DEVICE_TEST_RX:-sweet}"
+    echo "[ble-reverse] sweet TX → Realme RX"
+    JAVA_HOME="$JAVA_HOME" ./gradlew :app:installDebug -q
+    adb -s "$(adb_serial "$REALME")" logcat -c 2>/dev/null || true
+    adb -s "$(adb_serial "$SWEET")" shell am start -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
+    adb -s "$(adb_serial "$REALME")" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
+    sleep 25
+    ./scripts/demo.sh received "$REALME"
+    echo "[ble-reverse] Realme TX → sweet RX"
+    adb -s "$(adb_serial "$SWEET")" logcat -c 2>/dev/null || true
+    adb -s "$(adb_serial "$REALME")" shell am start -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
+    adb -s "$(adb_serial "$SWEET")" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
+    sleep 25
+    ./scripts/demo.sh received "$SWEET"
+    ;;
+
   *)
     cat <<USAGE
 Guacamaya demo runner.
