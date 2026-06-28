@@ -70,6 +70,20 @@ interface MessageDao {
     @Query("SELECT COUNT(DISTINCT node_id) FROM messages")
     fun observeNodeCount(): Flow<Int>
 
+    /** Latest row per node_id (for map/radar — one device = one entry). */
+    @Query(
+        """
+        SELECT m.* FROM messages m
+        INNER JOIN (
+            SELECT node_id, MAX(received_at) AS max_received
+            FROM messages GROUP BY node_id
+        ) g ON m.node_id = g.node_id AND m.received_at = g.max_received
+        ORDER BY m.received_at DESC
+        LIMIT :limit
+        """
+    )
+    fun observeLatestPerNode(limit: Int = 500): Flow<List<MessageEntity>>
+
     /**
      * Keep only the [keep] most-recently-received rows; delete the rest. Called
      * after each insert so the table stays bounded on 1–2 GB devices.

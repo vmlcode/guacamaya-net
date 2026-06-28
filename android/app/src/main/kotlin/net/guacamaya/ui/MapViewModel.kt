@@ -28,11 +28,20 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     val messages: StateFlow<List<MessageEntity>> = dao.observeRecent()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val totalReceived: StateFlow<Int> = dao.observeCount()
+    /** One entry per node_id — latest heartbeat/SOS. */
+    val latestNodes: StateFlow<List<MessageEntity>> = dao.observeLatestPerNode()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Total verified frames (all heartbeats). */
+    val totalFrames: StateFlow<Int> = dao.observeCount()
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
+    /** Unique devices heard — same as latestNodes.size, from DB. */
     val knownNodes: StateFlow<Int> = dao.observeNodeCount()
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    /** Alias for UI «recibidos» = unique node count. */
+    val devicesReceived: StateFlow<Int> = knownNodes
 
     private val _identity = MutableStateFlow<Identity?>(null)
     val identity: StateFlow<Identity?> = _identity.asStateFlow()

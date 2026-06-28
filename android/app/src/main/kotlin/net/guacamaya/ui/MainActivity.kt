@@ -71,6 +71,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
 import net.guacamaya.mesh.MessageEntity
+import net.guacamaya.mesh.NodeCatalog
 import net.guacamaya.service.GuacamayaForegroundService
 import net.guacamaya.util.BatteryHelper
 import kotlin.math.roundToInt
@@ -155,8 +156,9 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     val observing by vm.observing.collectAsState()
     val mode by vm.mode.collectAsState()
     val messages by vm.messages.collectAsState()
-    val totalReceived by vm.totalReceived.collectAsState()
-    val knownNodes by vm.knownNodes.collectAsState()
+    val latestNodes by vm.latestNodes.collectAsState()
+    val devicesReceived by vm.devicesReceived.collectAsState()
+    val totalFrames by vm.totalFrames.collectAsState()
     val ctx = LocalContext.current
 
     var showMap by remember { mutableStateOf(false) }
@@ -210,17 +212,16 @@ private fun Screen(vm: MapViewModel = viewModel()) {
 
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(BgTop, BgBottom)))) {
         if (showMap) {
-            MapScreen(messages, totalReceived = totalReceived, onBack = { showMap = false })
+            MapScreen(latestNodes, totalFrames = totalFrames, onBack = { showMap = false })
         } else if (showRadar) {
-            RadarScreen(messages = messages, onBack = { showRadar = false })
+            RadarScreen(latestNodes = latestNodes, onBack = { showRadar = false })
         } else {
             HomeScreen(
                 nodeIdHex = identity?.nodeId?.toHex(),
                 running = running,
                 mode = mode,
-                messages = messages,
-                totalReceived = totalReceived,
-                knownNodes = knownNodes,
+                latestNodes = latestNodes,
+                devicesReceived = devicesReceived,
                 onPower = { onPower() },
                 onSelectMode = { onSelectMode(it) },
                 onOpenMap = { showMap = true },
@@ -261,15 +262,16 @@ private fun HomeScreen(
     nodeIdHex: String?,
     running: Boolean,
     mode: MeshMode,
-    messages: List<MessageEntity>,
-    totalReceived: Int,
-    knownNodes: Int,
+    latestNodes: List<MessageEntity>,
+    devicesReceived: Int,
     onPower: () -> Unit,
     onSelectMode: (MeshMode) -> Unit,
     onOpenMap: () -> Unit,
     onOpenRadar: () -> Unit,
 ) {
-    val lastRssi = messages.firstOrNull()?.rssi
+    val lastNode = latestNodes.firstOrNull()
+    val lastRssi = lastNode?.rssi
+    val lastSeen = lastNode?.receivedAt?.let { NodeCatalog.formatLastHeartbeat(it) }
     val ctx = LocalContext.current
     var showBatteryHint by remember { mutableStateOf(BatteryHelper.shouldShowHint(ctx)) }
 
@@ -317,15 +319,15 @@ private fun HomeScreen(
 
         Spacer(Modifier.weight(1f))
 
-        StatsRow(received = totalReceived, nodes = knownNodes, lastRssi = lastRssi)
+        StatsRow(devices = devicesReceived, lastSeen = lastSeen, lastRssi = lastRssi)
 
         Spacer(Modifier.height(12.dp))
 
-        RadarEntry(messages = messages, onClick = onOpenRadar)
+        RadarEntry(latestNodes = latestNodes, onClick = onOpenRadar)
 
         Spacer(Modifier.height(12.dp))
 
-        MapEntryButton(received = totalReceived, onClick = onOpenMap)
+        MapEntryButton(devices = devicesReceived, onClick = onOpenMap)
     }
 }
 
@@ -507,13 +509,13 @@ private fun PowerGlyph(color: Color) {
 }
 
 @Composable
-private fun StatsRow(received: Int, nodes: Int, lastRssi: Int?) {
+private fun StatsRow(devices: Int, lastSeen: String?, lastRssi: Int?) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        StatCell("Recibidos", received.toString(), Modifier.weight(1f))
-        StatCell("Nodos", nodes.toString(), Modifier.weight(1f))
+        StatCell("Dispositivos", devices.toString(), Modifier.weight(1f))
+        StatCell("Último", lastSeen ?: "—", Modifier.weight(1f))
         StatCell("Señal", lastRssi?.let { "$it" } ?: "—", Modifier.weight(1f), suffix = if (lastRssi != null) "dBm" else null)
     }
 }
@@ -536,11 +538,12 @@ private fun StatCell(label: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun RadarEntry(messages: List<MessageEntity>, onClick: () -> Unit) {
+private fun RadarEntry(latestNodes: List<MessageEntity>, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val heading = rememberCompassHeading()
     val location = rememberLiveLocation(ctx, highAccuracy = false)
-    val target = location?.let { GeoProximity.nearest(it, messages) }
+    val target = location?.let { GeoProximity.nearest(it, latestNodes) }
+    val targetNode = target?.let { t -> latestNodes.firstOrNull { it.nodeId.toHex() == t.nodeId } }
     val relative = target?.let {
         if (it.coLocated) 0f else CompassMath.relativeBearing(it.bearing, heading)
     } ?: 0f
@@ -566,19 +569,24 @@ private fun RadarEntry(messages: List<MessageEntity>, onClick: () -> Unit) {
                 Text("Tocar para abrir radar completo", color = TextLo, fontSize = 11.sp)
             } else {
                 Text("Nodo ${target.nodeId.take(8)}", color = TextHi, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                Text("${GeoProximity.formatDistance(target)} · abrir radar", color = TextLo, fontSize = 12.sp)
+                Text(
+                    "${GeoProximity.formatDistance(target)} · ${targetNode?.let { NodeCatalog.formatLastHeartbeat(it.receivedAt) } ?: "—"}",
+                    color = TextLo,
+                    fontSize = 12.sp,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun RadarScreen(messages: List<MessageEntity>, onBack: () -> Unit) {
+private fun RadarScreen(latestNodes: List<MessageEntity>, onBack: () -> Unit) {
     val ctx = LocalContext.current
     var compassKey by remember { mutableIntStateOf(0) }
     val heading = rememberCompassHeading(reloadKey = compassKey)
     val location = rememberLiveLocation(ctx, highAccuracy = true)
-    val target = location?.let { GeoProximity.nearest(it, messages) }
+    val target = location?.let { GeoProximity.nearest(it, latestNodes) }
+    val targetNode = target?.let { t -> latestNodes.firstOrNull { it.nodeId.toHex() == t.nodeId } }
     val relative = target?.let {
         if (it.coLocated) 0f else CompassMath.relativeBearing(it.bearing, heading)
     } ?: 0f
@@ -626,6 +634,15 @@ private fun RadarScreen(messages: List<MessageEntity>, onBack: () -> Unit) {
                 fontWeight = FontWeight.Bold,
             )
             Text("hacia nodo ${target.nodeId.take(8)}", color = TextHi, fontSize = 16.sp)
+            targetNode?.let { node ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Último ${NodeCatalog.signalKind(node)}: ${NodeCatalog.formatLastHeartbeat(node.receivedAt)}",
+                    color = Find,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
             Spacer(Modifier.height(10.dp))
             if (target.coLocated) {
                 Text("Dispositivos juntos — GPS no distingue cm", color = TextLo, fontSize = 13.sp, textAlign = TextAlign.Center)
@@ -649,7 +666,7 @@ private fun RadarScreen(messages: List<MessageEntity>, onBack: () -> Unit) {
             Text("Precisión", color = TextHi, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(4.dp))
             Text("GPS local: ${location?.accuracy?.roundToInt()?.let { "±$it m" } ?: "sin fix"}", color = TextLo, fontSize = 13.sp)
-            Text("Objetivos con GPS: ${messages.count { it.latE7 != 0 || it.lonE7 != 0 }}", color = TextLo, fontSize = 13.sp)
+            Text("Objetivos con GPS: ${latestNodes.count { it.latE7 != 0 || it.lonE7 != 0 }}", color = TextLo, fontSize = 13.sp)
             Text("Nota: a <15 m la distancia GPS se muestra como «junto».", color = TextLo, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             Box(
@@ -734,7 +751,7 @@ private fun rememberLiveLocation(ctx: Context, highAccuracy: Boolean): Location?
 }
 
 @Composable
-private fun MapEntryButton(received: Int, onClick: () -> Unit) {
+private fun MapEntryButton(devices: Int, onClick: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -746,7 +763,7 @@ private fun MapEntryButton(received: Int, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            if (received > 0) "Ver mapa de SOS ($received)" else "Ver mapa de SOS",
+            if (devices > 0) "Ver mapa ($devices dispositivo${if (devices == 1) "" else "s"})" else "Ver mapa",
             color = TextHi,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
@@ -754,32 +771,34 @@ private fun MapEntryButton(received: Int, onClick: () -> Unit) {
     }
 }
 
-private data class MessageListItem(
-    val key: String,
-    val sosType: Int,
+private data class NodeListItem(
+    val nodeIdHex: String,
+    val kind: String,
     val lat: Double,
     val lon: Double,
     val rssi: Int,
+    val lastHeartbeat: String,
 )
 
 @Composable
-private fun MapScreen(messages: List<MessageEntity>, totalReceived: Int, onBack: () -> Unit) {
+private fun MapScreen(latestNodes: List<MessageEntity>, totalFrames: Int, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val userLocation = rememberLiveLocation(ctx, highAccuracy = false)
     val heading = rememberCompassHeading()
-    val mapMessages = messages.take(MAP_RENDER_LIMIT)
-    val listItems = remember(messages) {
-        messages.take(LIST_RENDER_LIMIT).map { msg ->
-            MessageListItem(
-                key = "${msg.nodeId.toHex()}-${msg.msgId}",
-                sosType = msg.sosType,
+    val mapNodes = latestNodes.take(MAP_RENDER_LIMIT)
+    val listItems = remember(latestNodes) {
+        latestNodes.take(LIST_RENDER_LIMIT).map { msg ->
+            NodeListItem(
+                nodeIdHex = msg.nodeId.toHex().take(8),
+                kind = NodeCatalog.signalKind(msg),
                 lat = msg.latE7 / 1e7,
                 lon = msg.lonE7 / 1e7,
                 rssi = msg.rssi,
+                lastHeartbeat = NodeCatalog.formatLastHeartbeat(msg.receivedAt),
             )
         }
     }
-    val nodesOnGrid = mapMessages.count { it.latE7 != 0 || it.lonE7 != 0 }
+    val nodesOnGrid = mapNodes.count { it.latE7 != 0 || it.lonE7 != 0 }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -796,8 +815,8 @@ private fun MapScreen(messages: List<MessageEntity>, totalReceived: Int, onBack:
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) { Text("‹ Volver", color = TextHi, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
             Column(horizontalAlignment = Alignment.End) {
-                Text("Recibidos: $totalReceived", color = TextHi, fontSize = 14.sp)
-                Text("Cuadrícula · $nodesOnGrid con GPS", color = TextLo, fontSize = 11.sp)
+                Text("Dispositivos: ${latestNodes.size}", color = TextHi, fontSize = 14.sp)
+                Text("Cuadrícula · $nodesOnGrid GPS · $totalFrames frames", color = TextLo, fontSize = 11.sp)
             }
         }
 
@@ -807,7 +826,7 @@ private fun MapScreen(messages: List<MessageEntity>, totalReceived: Int, onBack:
                     Text("Sin nodos con GPS aún.", color = TextLo)
                 }
             } else {
-                GridMap(userLocation = userLocation, messages = mapMessages, heading = heading)
+                GridMap(userLocation = userLocation, messages = mapNodes, heading = heading)
             }
         }
 
@@ -815,15 +834,15 @@ private fun MapScreen(messages: List<MessageEntity>, totalReceived: Int, onBack:
             Modifier.fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            items(listItems, key = { it.key }, contentType = { "msg" }) { item ->
-                MessageRow(item)
+            items(listItems, key = { it.nodeIdHex }, contentType = { "node" }) { item ->
+                NodeRow(item)
             }
         }
     }
 }
 
 @Composable
-private fun MessageRow(item: MessageListItem) {
+private fun NodeRow(item: NodeListItem) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -834,9 +853,12 @@ private fun MessageRow(item: MessageListItem) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("${item.sosType}", color = TextHi, fontWeight = FontWeight.Medium, modifier = Modifier.weight(0.5f))
-        Text("(${item.lat}, ${item.lon})", color = TextLo, fontSize = 12.sp, modifier = Modifier.weight(1f))
-        Text("rssi ${item.rssi}", color = TextLo, fontSize = 12.sp, modifier = Modifier.weight(0.4f))
+        Text(item.nodeIdHex, color = TextHi, fontWeight = FontWeight.Medium, modifier = Modifier.weight(0.45f))
+        Column(Modifier.weight(1f)) {
+            Text("${item.kind} · ${item.lastHeartbeat}", color = Find, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Text("(${item.lat}, ${item.lon})", color = TextLo, fontSize = 11.sp)
+        }
+        Text("${item.rssi}", color = TextLo, fontSize = 12.sp, modifier = Modifier.weight(0.25f))
     }
 }
 
