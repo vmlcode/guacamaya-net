@@ -1,6 +1,12 @@
 package net.guacamaya.ui
 
 import android.app.Application
+import android.bluetooth.BluetoothAdapter
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -65,10 +71,19 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     val mode: StateFlow<MeshMode> = _mode.asStateFlow()
 
     /**
-     * Whether this device can transmit SOS over BLE (extended advertising). False on
-     * emulators / chips without BLE 5 — the UI warns before a broadcasting mode is used.
+     * Whether this device can transmit SOS over BLE (extended advertising). False only
+     * on chips without BLE 5 once Bluetooth is ON — NOT while BT is off (that produced a
+     * false "no puede transmitir" warning at launch). Reactive: re-checked whenever the
+     * Bluetooth adapter changes state, so enabling BT clears the warning automatically.
      */
-    val broadcastSupported: Boolean = Broadcaster.isSupported(app)
+    private val _broadcastSupported = MutableStateFlow(Broadcaster.isSupported(app))
+    val broadcastSupported: StateFlow<Boolean> = _broadcastSupported.asStateFlow()
+
+    private val btStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == BluetoothAdapter.ACTION_STATE_CHANGED) refreshBroadcastSupport()
+        }
+    }
 
     /**
      * Verified official alerts pulled from the optional backend (downlink). Empty
@@ -92,6 +107,12 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _identity.value = Identity.loadOrCreate(app)
         }
+        ContextCompat.registerReceiver(
+            app,
+            btStateReceiver,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         refreshAlerts()
         // Single WS reader thread invokes this callback; the read-modify-write is safe.
         liveSosClient.start(viewModelScope) { sos ->
@@ -109,8 +130,14 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Re-evaluate BLE broadcast capability (e.g. after the user turns Bluetooth on). */
+    fun refreshBroadcastSupport() {
+        _broadcastSupported.value = Broadcaster.isSupported(getApplication())
+    }
+
     override fun onCleared() {
         liveSosClient.stop()
+        try { getApplication<Application>().unregisterReceiver(btStateReceiver) } catch (_: Exception) {}
         super.onCleared()
     }
 

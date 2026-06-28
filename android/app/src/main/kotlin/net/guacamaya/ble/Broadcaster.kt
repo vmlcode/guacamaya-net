@@ -159,6 +159,13 @@ class Broadcaster private constructor(
         fun isSupported(context: Context): Boolean {
             val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
             val adapter = bm?.adapter ?: return false
+            // Capability cannot be determined while Bluetooth is OFF: getBluetoothLeAdvertiser()
+            // returns null and the support flags are unreliable. Do NOT report "unsupported"
+            // in that case (it produced a false "este equipo no puede transmitir" warning on
+            // capable devices launched with BT off) — assume capable until BT is on and proves
+            // otherwise. Callers should re-check on ACTION_STATE_CHANGED. Genuine BT-5-less
+            // chips are still rejected once BT is enabled, and create() is the final gate.
+            if (!adapter.isEnabled) return true
             if (!adapter.isMultipleAdvertisementSupported) return false
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                 !adapter.isLeExtendedAdvertisingSupported

@@ -248,6 +248,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     val totalFrames by vm.totalFrames.collectAsState()
     val alerts by vm.alerts.collectAsState()
     val liveSos by vm.liveSos.collectAsState()
+    val broadcastSupported by vm.broadcastSupported.collectAsState()
     val ctx = LocalContext.current
     val probeCompass = rememberCompassState()
     val probeLocation = rememberLiveLocation(ctx, highAccuracy = false)
@@ -255,6 +256,17 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     var showRadar by remember { mutableStateOf(false) }
     val running = broadcasting || observing
     FunctionalProbe(compass = probeCompass, location = probeLocation, nodes = latestNodes, totalFrames = totalFrames)
+
+    // Re-check BLE broadcast capability on resume (e.g. returning from BT/quick settings),
+    // a safety net beyond the ACTION_STATE_CHANGED receiver in the ViewModel.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) vm.refreshBroadcastSupport()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     fun send(action: String) {
         val intent = Intent(ctx, GuacamayaForegroundService::class.java).apply { this.action = action }
@@ -320,7 +332,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
                 liveSosCount = liveSos.size,
                 onPower = { onPower() },
                 onSelectMode = { onSelectMode(it) },
-                broadcastSupported = vm.broadcastSupported,
+                broadcastSupported = broadcastSupported,
                 onOpenRadar = { showRadar = true },
             )
         }
