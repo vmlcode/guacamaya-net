@@ -1,4 +1,4 @@
-# Guacamalla Net — Crypto
+# GuacaMalla Net — Crypto
 
 The link layer is intentionally open (public SOS, anyone in range may receive and relay). Authenticity is relocated to the application layer via Ed25519 signatures.
 
@@ -14,7 +14,7 @@ The link layer is intentionally open (public SOS, anyone in range may receive an
 
 ### Library
 
-Android `java.security.KeyPairGenerator("Ed25519")` is only available from API 33+. Guacamalla Net's `minSdk = 26` (Wi-Fi Aware requirement), so the platform implementation cannot be used.
+Android `java.security.KeyPairGenerator("Ed25519")` is only available from API 33+. GuacaMalla Net's `minSdk = 26` (Wi-Fi Aware requirement), so the platform implementation cannot be used.
 
 **Dependency**: BouncyCastle `org.bouncycastle:bcprov-jdk18on:1.78.1`.
 

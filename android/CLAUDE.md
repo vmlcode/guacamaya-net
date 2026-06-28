@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Guacamalla Net** — a connectionless L2 mesh for broadcasting SOS distress signals when cell
+**GuacaMalla Net** — a connectionless L2 mesh for broadcasting SOS distress signals when cell
 infrastructure is down. Pure native Android, Kotlin + Jetpack Compose. Phones act as **radio beacons,
 not peers**: no pairing, no handshake, no credential exchange. Authenticity lives on the application
 layer via Ed25519 signatures.

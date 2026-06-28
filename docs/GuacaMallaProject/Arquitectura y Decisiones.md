@@ -1,6 +1,6 @@
 # Arquitectura y Decisiones
 
-Registro de las decisiones de diseño no obvias de [[GuacamallaProject]]. Estilo ADR ligero.
+Registro de las decisiones de diseño no obvias de [[GuacaMallaProject]]. Estilo ADR ligero.
 
 ## 1. Malla pura sin conexión, no cliente-servidor
 
@@ -18,15 +18,15 @@ código y "no se fusionaban". Eso cambió: la app Android se **fusionó dentro d
 bajo `android/` (commit `3441089`). Hoy `develop` es el monorepo con ambas mitades:
 
 - `backend/` + `packages/` — backend Bun/TS ([[Backend Data-Mule]]).
-- `android/` — app Kotlin/Compose ([[Guacamalla (Android)]]), **proyecto Gradle autocontenido** (su
+- `android/` — app Kotlin/Compose ([[GuacaMalla (Android)]]), **proyecto Gradle autocontenido** (su
   propio `gradlew`, `build.gradle.kts`, `docs/`, `CLAUDE.md`). Se abre `android/` directo en Android
   Studio, no la raíz del repo. `android/` **no** es un workspace de Bun.
 
 La rama `init-sosnet` quedó con el layout viejo standalone (atrasado respecto a `develop`).
 
-## 3. Rebrand SOSNet → Guacamalla Net
+## 3. Rebrand SOSNet → GuacaMalla Net
 
-El producto se llama **Guacamalla Net**; **SOSNet está retirado**. El paquete Android pasó de
+El producto se llama **GuacaMalla Net**; **SOSNet está retirado**. El paquete Android pasó de
 `org.sosnet.*` a `net.guacamaya.*` (se renombró todo el árbol de paquetes). Las constantes de
 wire-format viven en `packages/shared/src/mesh/` y deben quedar byte-idénticas con
 `net.guacamaya.proto.*`. Excepción: la rama remota `init-sosnet` es un nombre literal hasta renombrar.
@@ -40,7 +40,7 @@ desconocidos. Solo se tomó el **concepto** store-and-forward, no el código.
 ## 5. La app Expo de `develop` se abandonó
 
 `develop` traía una app Expo/React Native que vivía en `app/`. Se **eliminó**: la app nativa Kotlin
-([[Guacamalla (Android)]]) hace mejor el trabajo (acceso real a BLE 5 Extended Advertising y Wi-Fi
+([[GuacaMalla (Android)]]) hace mejor el trabajo (acceso real a BLE 5 Extended Advertising y Wi-Fi
 Aware, que RN no expone bien). El backend de `develop` se reutiliza como [[Backend Data-Mule]].
 
 ## 6. TTL de salto FUERA del payload firmado (el byte líder)
@@ -56,7 +56,7 @@ El mapa antes usaba **osmdroid** (tile cache + overhead de WebView, pesado para 
 ubicación dependía de `FusedLocationProviderClient` (GMS), que muchos teléfonos del mercado objetivo
 no traen. Se reemplazó por una **cuadrícula offline propia en metros** (`GridMap` / `GeoGrid`, plano
 ENU este/norte) y un radar con brújula. Esto recorta RAM y quita una dependencia de GMS para el
-render. Ver el nuevo stack en [[Guacamalla (Android)]].
+render. Ver el nuevo stack en [[GuacaMalla (Android)]].
 
 > Nota: `play-services-location` todavía figura como dependencia de Gradle para el *fix* de GPS; el
 > fallback robusto sin GMS (`LocationManager` de plataforma) sigue como pendiente — ver [[Estado y Pendientes]].
@@ -78,7 +78,7 @@ de ubicaciones: la misma compuerta Ed25519 que protege los registros protege las
 ## 10. Dos esquemas de cripto, un solo puente
 
 No son intercambiables — son **cuatro caminos de cripto distintos**:
-- **Guacamalla mesh** firma el payload binario crudo de 22 B (Ed25519 sobre los bytes).
+- **GuacaMalla mesh** firma el payload binario crudo de 22 B (Ed25519 sobre los bytes).
 - **Backend** (registros oficiales) firma `SHA-256(content canónico)` del `ChannelRecord` (mensaje = el hash de 32 B, no el content). La app lo verifica en el downlink — ver [[Downlink Alertas Oficiales]].
 - **Resolve** introduce un tercer formato canónico (`guacamaya.resolve.v1`) co-firmado por testigos.
 - En Android, `Signer.verify` (22 B) y `Signer.verifyMessage` (longitud arbitraria) cubren los dos primeros; mantenerlos separados.

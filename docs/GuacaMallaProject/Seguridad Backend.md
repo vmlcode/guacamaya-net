@@ -2,7 +2,7 @@
 
 Endurecimiento del [[Backend Data-Mule]] añadido en el sprint de junio 2026. Toda la configuración
 vive en `backend/src/security/config.ts`; los helpers en `auth.ts`, `rateLimit.ts`, `validation.ts`,
-`keygen.ts`. Parte de [[GuacamallaProject]].
+`keygen.ts`. Parte de [[GuacaMallaProject]].
 
 ## Modelo de claves (API keys)
 

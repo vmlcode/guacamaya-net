@@ -17,7 +17,7 @@ import {
 } from "@guacamaya/shared";
 
 /**
- * Server-side decoder + verifier for Guacamalla BLE mesh frames uploaded by the
+ * Server-side decoder + verifier for GuacaMalla BLE mesh frames uploaded by the
  * Android app acting as a data mule.
  *
  * Verification mirrors the Kotlin FloodRouter reject cascade, cheapest first:

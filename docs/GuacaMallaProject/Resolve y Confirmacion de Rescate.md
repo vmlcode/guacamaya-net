@@ -5,7 +5,7 @@ dispositivo de la víctima esté vivo**. Un **buscador** (rescatista, voluntario
 sitio co-firma, junto con otros testigos, un sobre que desarma el SOS. El **quórum M-de-N reemplaza la
 confirmación de la víctima** — cubre escenarios de demolición / aplastamiento / batería agotada.
 
-Parte de [[GuacamallaProject]]. Decisión de diseño en [[Arquitectura y Decisiones]] §8. Seguridad/rate
+Parte de [[GuacaMallaProject]]. Decisión de diseño en [[Arquitectura y Decisiones]] §8. Seguridad/rate
 limits en [[Seguridad Backend]].
 
 > **Estado: backend implementado y testeado; clientes pendientes.** Los endpoints `POST /resolve` y
@@ -17,7 +17,7 @@ limits en [[Seguridad Backend]].
 
 | Rol | Dispositivo | Responsabilidad |
 |---|---|---|
-| **Víctima / originador** | App mesh [[Guacamalla (Android)]] | Emite el SOS firmado por BLE. **No requiere estar vivo** para que se resuelva. |
+| **Víctima / originador** | App mesh [[GuacaMalla (Android)]] | Emite el SOS firmado por BLE. **No requiere estar vivo** para que se resuelva. |
 | **Buscador / testigo** | App móvil del buscador (futuro) | Llega al sitio, captura evidencia, co-firma. Mínimo `RESOLVE_QUORUM_REQUIRED` (default 2) testigos distintos. |
 | **Coordinador** | Consola web (futuro) | Visualiza SOS pendientes, disputas, reputación. Promueve/reabre manual. |
 | **Backend** | `backend/src/resolve/` | Verifica firmas, aplica anti-troll, persiste recibos, emite `ChannelRecord` al canal `resuelto`. **Implementado.** |

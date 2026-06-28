@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guacamalla — demo runner.
+# GuacaMalla — demo runner.
 #
 # Usage:
 #   ./scripts/demo.sh build     # assemble debug APK
@@ -208,7 +208,7 @@ case "${1:-help}" in
     dev="$(adb -s "$serial" shell getprop ro.product.device | tr -d '\r\n')"
     echo "[2/2] Install on serial=$serial device=$dev"
     adb -s "$serial" install -r "$APK"
-    echo "Done. Open Guacamalla on the phone."
+    echo "Done. Open GuacaMalla on the phone."
     ;;
 
   observe-on)
@@ -558,7 +558,7 @@ case "${1:-help}" in
 
   *)
     cat <<USAGE
-Guacamalla demo runner.
+GuacaMalla demo runner.
 
 Commands:
   build         assembleDebug

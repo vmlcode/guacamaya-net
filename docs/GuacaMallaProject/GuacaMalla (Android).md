@@ -1,10 +1,10 @@
-# Guacamalla (Android)
+# GuacaMalla (Android)
 
 App nativa Android (Kotlin + Jetpack Compose) que implementa la malla. Los teléfonos actúan como
 **balizas de radio, no como pares**: emiten ráfagas estructuradas al aire y escuchan lo que flota.
 No hay conexión que caer, ni credencial que filtrar, ni infraestructura que falle.
 
-Parte de [[GuacamallaProject]]. Paquete **`net.guacamaya`** (antes `org.sosnet` — ver rebrand en
+Parte de [[GuacaMallaProject]]. Paquete **`net.guacamaya`** (antes `org.sosnet` — ver rebrand en
 [[Arquitectura y Decisiones]]). Vive en `android/` dentro del monorepo y es un **proyecto Gradle
 autocontenido**: se abre `android/` directo en Android Studio, no la raíz del repo. El detalle del
 formato binario está en [[Protocolo y Frame]].
@@ -83,7 +83,7 @@ primeros 4 B de `SHA-256(pubkey)` — esto **ata el payload a la llave que lo fi
 `GuacamayaForegroundService` es un foreground service tipo `connectedDevice` (necesario en Android
 14+ para mantener BLE vivo con pantalla apagada). Es dueño del Broadcaster/Observer/FloodRouter y
 responde a intents `ACTION_START / STOP / OBSERVE_ON / OBSERVE_OFF`. Watchdog legacy en BLE: revisa
-cada 30 s y reinicia scan si pasan 60 s sin frame Guacamalla.
+cada 30 s y reinicia scan si pasan 60 s sin frame GuacaMalla.
 
 ## Restricciones de plataforma
 

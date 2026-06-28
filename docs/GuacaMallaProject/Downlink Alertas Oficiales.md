@@ -1,6 +1,6 @@
 # Downlink — Alertas Oficiales
 
-La otra mitad del cableado **backend ↔ app** de [[GuacamallaProject]]. Mientras el
+La otra mitad del cableado **backend ↔ app** de [[GuacaMallaProject]]. Mientras el
 [[IngestClient (Data-Mule Uploader)]] es el **uplink** (app → `POST /ingest`), esto es
 el **downlink**: la app **descarga alertas oficiales** del [[Backend Data-Mule]]
 (`GET /channels/:id/records`) y **solo muestra las que verifica criptográficamente**.

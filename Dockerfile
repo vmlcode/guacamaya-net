@@ -1,4 +1,4 @@
-# Guacamalla Net — backend image (Railway / Docker).
+# GuacaMalla Net — backend image (Railway / Docker).
 #
 # IMPORTANT: build context is the REPO ROOT, not backend/. The backend imports
 # @guacamaya/shared (a Bun `workspace:*` package) and backend/tsconfig.json

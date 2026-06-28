@@ -1,16 +1,16 @@
 # Estado y Pendientes
 
-Foto del estado de [[GuacamallaProject]] al **2026-06-28** (rama `develop`, monorepo consolidado).
+Foto del estado de [[GuacaMallaProject]] al **2026-06-28** (rama `develop`, monorepo consolidado).
 
 ## Qué funciona
 
-### [[Guacamalla (Android)]]
+### [[GuacaMalla (Android)]]
 - ✅ Plano BLE end-to-end: firmar → emitir frame de 119 B → observar → cascada de rechazo → persistir → retransmitir multi-salto.
 - ✅ **BLE mesh bidireccional verificado en dos teléfonos físicos** (`device-test` PASS, `nodes=2 frames=47`). Ya no es solo "build + smoke".
 - ✅ Identidad Ed25519 real sellada en Keystore.
 - ✅ Ubicación GPS real en el payload + sonda ENU (lat/lon/acc/bearing/`rel=`/`co_loc`).
 - ✅ TTL de salto que decrementa por relay y para en 0 (byte sin firmar al frente). Ver [[Protocolo y Frame]].
-- ✅ **Radar + brújula + mapa de cuadrícula offline** nuevos (`CompassHeading`, `GeoProximity`, `GridMap`); **osmdroid eliminado** y quitada la dependencia de GMS para el render. Ver [[Guacamalla (Android)]].
+- ✅ **Radar + brújula + mapa de cuadrícula offline** nuevos (`CompassHeading`, `GeoProximity`, `GridMap`); **osmdroid eliminado** y quitada la dependencia de GMS para el render. Ver [[GuacaMalla (Android)]].
 - ✅ Pruning de la DB Room (conserva 25 000 filas, batcheado cada 128 inserts).
 - ✅ **`IngestClient` (data-mule uploader)** implementado: persiste la firma (migración Room v3), arma el frame de 118 B y hace `POST /ingest` vía WorkManager al recuperar red. Build + tests JVM verdes. **Pata de aceptación del backend verificada** contra server real (ingesta/dedup/rechazo/locations); falta el smoke en dispositivo. Ver [[IngestClient (Data-Mule Uploader)]].
 - ✅ **Downlink de alertas oficiales** + alcanzabilidad: `BackendClient` descarga `/channels/:id/records` y **verifica la firma** (esquema oficial, `OfficialRecordVerifier`); banner en la UI; `BACKEND_BASE_URL` configurable (debug LAN override + cleartext de debug). Tests JVM verdes; falta smoke en dispositivo. Ver [[Downlink Alertas Oficiales]].

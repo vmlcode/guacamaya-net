@@ -98,7 +98,7 @@ import kotlin.math.sin
  * (observe + relay). The map of received SOS opens as a full-screen overlay so the
  * home stays uncluttered.
  *
- * Styled to the Guacamalla design system (docs/design/DESIGN.md): yellow + black
+ * Styled to the GuacaMalla design system (docs/design/DESIGN.md): yellow + black
  * brand voltage, dark-only, emergency-semantic content colors. Active/broadcasting
  * chrome is brand yellow; the red/blue/green semantics carry content meaning
  * (received SOS, presence, verified-official alerts), not the mode chrome.

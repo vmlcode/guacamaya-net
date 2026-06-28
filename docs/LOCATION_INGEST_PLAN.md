@@ -1,4 +1,4 @@
-# 🦜 Guacamalla Red — Plan: Ingesta de Ubicaciones (historial / moving map)
+# 🦜 GuacaMalla Red — Plan: Ingesta de Ubicaciones (historial / moving map)
 
 > ⚠️ **SUPERSEDED (parcialmente) tras el merge de `develop`.** El modelo de
 > ingesta cambió a **zero-trust data-mule de tramas firmadas**: las ubicaciones
@@ -280,5 +280,5 @@ Mapa en vivo: añadir `broadcastLocation(p)` en `ws/server.ts` que emite
 
 ---
 
-*Plan de ingesta de ubicaciones (historial / moving map) — Guacamalla Red.
+*Plan de ingesta de ubicaciones (historial / moving map) — GuacaMalla Red.
 Alineado con el patrón append-only `channelsStore`/`channelsRepo` existente.*

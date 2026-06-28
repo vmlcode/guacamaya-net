@@ -3,7 +3,7 @@ description: Siempre probar cambios Android en dispositivos adb conectados antes
 alwaysApply: true
 ---
 
-# Device-test primero (Guacamalla Android)
+# Device-test primero (GuacaMalla Android)
 
 Antes de afirmar que una mejora BLE/UI/radar funciona:
 

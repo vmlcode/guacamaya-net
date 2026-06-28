@@ -1,4 +1,4 @@
--- Guacamalla Net — esquema de persistencia del backend.
+-- GuacaMalla Net — esquema de persistencia del backend.
 --
 -- Aplicar en el proyecto Supabase (SQL Editor o `supabase db push`).
 -- Tabla espejo de `ChannelRecord` (packages/shared/src/types.ts).

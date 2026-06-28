@@ -1,12 +1,12 @@
 # Backend Data-Mule
 
 Monorepo Bun + TypeScript, mitad `backend/` + `packages/` de la rama `develop`. Su rol original es el
-**punto de ingesta "data-mule"** de la malla [[Guacamalla (Android)]]: un teléfono que recupera
+**punto de ingesta "data-mule"** de la malla [[GuacaMalla (Android)]]: un teléfono que recupera
 conectividad sube los frames firmados que recogió; el backend los **re-verifica** y persiste. Hoy hace
 además: canales oficiales, histórico de ubicación para el mapa móvil, y el flujo de
 [[Resolve y Confirmacion de Rescate]].
 
-Parte de [[GuacamallaProject]]. El formato de los frames está en [[Protocolo y Frame]]. El
+Parte de [[GuacaMallaProject]]. El formato de los frames está en [[Protocolo y Frame]]. El
 endurecimiento (API keys, CORS, rate limits) está en [[Seguridad Backend]].
 
 > La app Expo que vivía en `app/` está **descartada** — la app Kotlin la reemplaza. Ver el porqué en

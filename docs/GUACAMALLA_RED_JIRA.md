@@ -1,4 +1,4 @@
-# 🦜 Guacamalla Red — Backlog para Jira
+# 🦜 GuacaMalla Red — Backlog para Jira
 
 > Listo para copiar y pegar en Jira. Estructura: **Épicas → Historias → Sub-tareas**.
 > Cada historia trae: Resumen, Descripción, Criterios de aceptación, Prioridad y Estimación (puntos).

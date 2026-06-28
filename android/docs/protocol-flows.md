@@ -1,4 +1,4 @@
-# Guacamalla Net — Protocol Flows
+# GuacaMalla Net — Protocol Flows
 
 > Connectionless L2 messaging mesh for SOS dissemination. No pairing, no handshake, no credentials exchange. Phones behave as radio beacons: they emit structured bursts and listen to what floats in the air.
 
