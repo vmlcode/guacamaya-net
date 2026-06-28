@@ -32,6 +32,7 @@ class Observer private constructor(
     @Volatile private var scanning = false
     @Volatile private var scanProfile = BleConfig.ScanProfile.AGGRESSIVE
     private var lastCallbackAt = 0L
+    @Volatile private var lastGuacamayaFrameAt = 0L
     private val activeCallback = AtomicReference<ScanCallback?>(null)
 
     /** Called on every Guacamaya-shaped frame. Implementations must be thread-safe. */
@@ -81,6 +82,7 @@ class Observer private constructor(
         val pub32 = blob.copyOfRange(BleConfig.PUBKEY_OFFSET, BleConfig.SIG_OFFSET)
         val sig64 = blob.copyOfRange(BleConfig.SIG_OFFSET, BleConfig.SERVICE_DATA_SIZE)
         Log.d(tag, "frame ttl=$ttl rssi=${result.rssi} src=${result.device.address}")
+        lastGuacamayaFrameAt = SystemClock.elapsedRealtime()
         listener?.onFrame(payload22, pub32, sig64, ttl, result.rssi)
     }
 
@@ -146,8 +148,14 @@ class Observer private constructor(
         }
         scanning = true
         lastCallbackAt = SystemClock.elapsedRealtime()
+        lastGuacamayaFrameAt = lastCallbackAt
         mainHandler.removeCallbacks(watchdogRunnable)
-        mainHandler.postDelayed(watchdogRunnable, WATCHDOG_INTERVAL_MS)
+        val interval = if (scanProfile == BleConfig.ScanProfile.LEGACY_STACK) {
+            LEGACY_WATCHDOG_INTERVAL_MS
+        } else {
+            WATCHDOG_INTERVAL_MS
+        }
+        mainHandler.postDelayed(watchdogRunnable, interval)
         Log.i(tag, "scan started profile=$scanProfile service=${BleConfig.SERVICE_UUID}")
     }
 
@@ -176,25 +184,35 @@ class Observer private constructor(
         startInternal()
     }
 
-    /** If no callbacks for [STALL_THRESHOLD_MS], refresh the scan session. */
+    /** If no Guacamaya frames (legacy) or no callbacks (aggressive) for threshold → restart. */
     private val watchdogRunnable = object : Runnable {
         override fun run() {
             if (!scanning) return
-            val idle = SystemClock.elapsedRealtime() - lastCallbackAt
-            if (idle >= STALL_THRESHOLD_MS) {
-                Log.w(tag, "scan stalled ${idle}ms — restarting (profile=$scanProfile)")
+            val now = SystemClock.elapsedRealtime()
+            val legacy = scanProfile == BleConfig.ScanProfile.LEGACY_STACK
+            val idle = now - if (legacy) lastGuacamayaFrameAt else lastCallbackAt
+            val threshold = if (legacy) LEGACY_FRAME_STALL_MS else STALL_THRESHOLD_MS
+            val interval = if (legacy) LEGACY_WATCHDOG_INTERVAL_MS else WATCHDOG_INTERVAL_MS
+            if (idle >= threshold) {
+                Log.w(
+                    tag,
+                    "scan stalled ${idle}ms (legacy=$legacy guacamaya=${now - lastGuacamayaFrameAt}ms) — restarting",
+                )
                 if (scanProfile == BleConfig.ScanProfile.AGGRESSIVE) {
                     scanProfile = BleConfig.ScanProfile.LEGACY_STACK
                 }
                 restart()
             }
-            mainHandler.postDelayed(this, WATCHDOG_INTERVAL_MS)
+            mainHandler.postDelayed(this, interval)
         }
     }
 
     companion object {
         private const val RESTART_DELAY_MS = 1_500L
         private const val WATCHDOG_INTERVAL_MS = 60_000L
+        /** Legacy Xiaomi/sweet: check every 30 s, restart if no Guacamaya frame in 60 s. */
+        private const val LEGACY_WATCHDOG_INTERVAL_MS = 30_000L
+        private const val LEGACY_FRAME_STALL_MS = 60_000L
         /** No BLE callbacks for 3 min while observing → force scan refresh. */
         private const val STALL_THRESHOLD_MS = 180_000L
 

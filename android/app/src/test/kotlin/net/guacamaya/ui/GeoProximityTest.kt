@@ -46,4 +46,19 @@ class GeoProximityTest {
         assertTrue(result.coLocated)
         assertEquals(0f, result.distanceMeters, 0.01f)
     }
+
+    @Test
+    fun formatDistance_coLocated_includesRssiHint() {
+        val r = GeoProximity.Result(
+            nodeId = "aabb",
+            distanceMeters = 0f,
+            bearing = 0f,
+            rssi = -50,
+            critical = false,
+            coLocated = true,
+            uncertaintyMeters = 16f,
+            rssiHint = GeoProximity.rssiProximityHint(-50),
+        )
+        assertTrue(GeoProximity.formatDistance(r).contains("BLE tocando"))
+    }
 }

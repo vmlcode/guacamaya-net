@@ -711,13 +711,31 @@ private fun MapEntryButton(received: Int, onClick: () -> Unit) {
     }
 }
 
+private data class MessageListItem(
+    val key: String,
+    val sosType: Int,
+    val lat: Double,
+    val lon: Double,
+    val rssi: Int,
+)
+
 @Composable
 private fun MapScreen(messages: List<MessageEntity>, totalReceived: Int, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val userLocation = rememberLiveLocation(ctx, highAccuracy = false)
     val heading = rememberCompassHeading()
     val mapMessages = messages.take(MAP_RENDER_LIMIT)
-    val listMessages = messages.take(LIST_RENDER_LIMIT)
+    val listItems = remember(messages) {
+        messages.take(LIST_RENDER_LIMIT).map { msg ->
+            MessageListItem(
+                key = "${msg.nodeId.toHex()}-${msg.msgId}",
+                sosType = msg.sosType,
+                lat = msg.latE7 / 1e7,
+                lon = msg.lonE7 / 1e7,
+                rssi = msg.rssi,
+            )
+        }
+    }
     val nodesOnGrid = mapMessages.count { it.latE7 != 0 || it.lonE7 != 0 }
 
     Column(Modifier.fillMaxSize()) {
@@ -754,13 +772,15 @@ private fun MapScreen(messages: List<MessageEntity>, totalReceived: Int, onBack:
             Modifier.fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            items(listMessages, key = { "${it.nodeId.toHex()}-${it.msgId}" }) { msg -> MessageRow(msg) }
+            items(listItems, key = { it.key }, contentType = { "msg" }) { item ->
+                MessageRow(item)
+            }
         }
     }
 }
 
 @Composable
-private fun MessageRow(msg: MessageEntity) {
+private fun MessageRow(item: MessageListItem) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -771,9 +791,9 @@ private fun MessageRow(msg: MessageEntity) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("${msg.sosType}", color = TextHi, fontWeight = FontWeight.Medium, modifier = Modifier.weight(0.5f))
-        Text("(${msg.latE7 / 1e7}, ${msg.lonE7 / 1e7})", color = TextLo, fontSize = 12.sp, modifier = Modifier.weight(1f))
-        Text("rssi ${msg.rssi}", color = TextLo, fontSize = 12.sp, modifier = Modifier.weight(0.4f))
+        Text("${item.sosType}", color = TextHi, fontWeight = FontWeight.Medium, modifier = Modifier.weight(0.5f))
+        Text("(${item.lat}, ${item.lon})", color = TextLo, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Text("rssi ${item.rssi}", color = TextLo, fontSize = 12.sp, modifier = Modifier.weight(0.4f))
     }
 }
 

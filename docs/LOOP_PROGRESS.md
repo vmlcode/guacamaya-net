@@ -64,3 +64,21 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew :app:assembleDebug
 ### Verificación
 1. Teléfonos juntos → radar **junto** (no 1–4 m).
 2. Radar → apuntar top al norte → **Calibrar norte** en ambos → brújula ≈ 0°.
+
+---
+
+## Iteración 3 — 2026-06-28 (loop 10 m)
+
+### Cambios
+
+| Área | Cambio |
+|------|--------|
+| **RSSI** | Suavizado EMA por nodo; cuando GPS dice «junto» muestra hint BLE (`tocando`, `~1 m`, …). Elige nodo por RSSI si todos co-located. |
+| **BLE sweet** | Watchdog legacy: revisa cada **30 s**, reinicia scan si **60 s** sin frame Guacamaya (antes 3 min genérico). |
+| **UI** | Lista del mapa usa `MessageListItem` + `contentType` → menos recomposiciones en listas largas. |
+
+### Backlog
+- [x] Suavizado RSSI
+- [x] Watchdog agresivo sweet
+- [x] Recomposiciones lista mensajes
+- [ ] Auto-calibración brújula cruzada entre dos nodos visibles

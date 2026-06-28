@@ -15,6 +15,7 @@ object GeoProximity {
 
     private const val DIST_SMOOTH_ALPHA = 0.18f
     private const val POS_SMOOTH_ALPHA = 0.22f
+    private const val RSSI_SMOOTH_ALPHA = 0.25f
     private const val MIN_LOCAL_ACCURACY_M = 4f
 
     data class Result(
@@ -26,6 +27,8 @@ object GeoProximity {
         /** True when GPS noise dominates — distance/bearing unreliable. */
         val coLocated: Boolean,
         val uncertaintyMeters: Float,
+        /** Smoothed BLE proximity hint when GPS says «junto». */
+        val rssiHint: String? = null,
     )
 
     private data class NodeFix(
@@ -50,7 +53,7 @@ object GeoProximity {
         messages: List<net.guacamaya.mesh.MessageEntity>,
     ): Result? {
         val localAcc = effectiveAccuracy(here)
-        var best: Result? = null
+        val candidates = ArrayList<Result>()
 
         for (msg in messages) {
             if (msg.latE7 == 0 && msg.lonE7 == 0) continue
@@ -79,15 +82,37 @@ object GeoProximity {
                 critical = smooth.critical,
                 coLocated = coLocated,
                 uncertaintyMeters = uncertainty,
+                rssiHint = if (coLocated) rssiProximityHint(smooth.rssi) else null,
             )
-            if (best == null || candidate.distanceMeters < best!!.distanceMeters) {
-                best = candidate
-            }
+            candidates.add(candidate)
         }
-        return best
+
+        if (candidates.isEmpty()) return null
+        val allCoLocated = candidates.all { it.coLocated }
+        return if (allCoLocated) {
+            candidates.maxByOrNull { it.rssi }!!
+        } else {
+            candidates.minByOrNull { it.distanceMeters }!!
+        }
     }
 
-    fun formatDistance(result: Result): String = formatMeters(result.distanceMeters, result.coLocated)
+    fun formatDistance(result: Result): String {
+        val base = formatMeters(result.distanceMeters, result.coLocated)
+        val hint = result.rssiHint ?: return base
+        return if (result.coLocated) "$base · $hint" else base
+    }
+
+    fun rssiProximityHint(smoothedRssi: Int): String = when {
+        smoothedRssi >= -55 -> "BLE tocando"
+        smoothedRssi >= -65 -> "BLE ~1 m"
+        smoothedRssi >= -75 -> "BLE ~3 m"
+        else -> "BLE lejos"
+    }
+
+    private fun smoothRssi(prev: Int, raw: Int): Int {
+        if (prev == 0) return raw
+        return (prev + RSSI_SMOOTH_ALPHA * (raw - prev)).roundToInt()
+    }
 
     fun formatMeters(meters: Float, coLocated: Boolean = false): String = when {
         coLocated || meters < 0.5f -> "junto"
@@ -139,7 +164,7 @@ object GeoProximity {
         }
         prev.lat += POS_SMOOTH_ALPHA * (lat - prev.lat)
         prev.lon += POS_SMOOTH_ALPHA * (lon - prev.lon)
-        prev.rssi = rssi
+        prev.rssi = smoothRssi(prev.rssi, rssi)
         prev.critical = critical
         prev.updatedAt = at
         return prev
