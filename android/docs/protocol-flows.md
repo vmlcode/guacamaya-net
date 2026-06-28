@@ -1,4 +1,4 @@
-# SOSNet — Protocol Flows
+# Guacamaya Net — Protocol Flows
 
 > Connectionless L2 messaging mesh for SOS dissemination. No pairing, no handshake, no credentials exchange. Phones behave as radio beacons: they emit structured bursts and listen to what floats in the air.
 
@@ -135,7 +135,7 @@ sequenceDiagram
   App->>Q: enqueue(bytes, msg_id)
   App->>BLE: set flags.has_heavy=1, broadcast normally
   note over BLE: observers learn "heavy available" via flag
-  App->>NAN: publish(service="sosnet::node_id::msg_id")
+  App->>NAN: publish(service="guacamaya::node_id::msg_id")
 ```
 
 ---
@@ -149,8 +149,8 @@ sequenceDiagram
   participant Pub as Publisher
   participant NAN as Wi-Fi Aware chip
   participant Sub as Subscriber
-  Pub->>NAN: publish(service="sosnet::node_id::msg_id", ssi=≤255 B)
-  Sub->>NAN: subscribe(filter="sosnet::*")
+  Pub->>NAN: publish(service="guacamaya::node_id::msg_id", ssi=≤255 B)
+  Sub->>NAN: subscribe(filter="guacamaya::*")
   NAN->>Sub: onServiceDiscovered(peer, ssi)
   Sub->>Sub: Ed25519 verify (sig piggybacked inside ssi)
   Sub->>Store: persist

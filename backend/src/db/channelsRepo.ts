@@ -70,4 +70,21 @@ export const channelsRepo = {
     if (error) throw error;
     return (data ?? []) as ChannelRecord[];
   },
+
+  /**
+   * Fetch a single record by id. Used by /resolve to look up the original SOS
+   * (geo + author + timestamp gates need it). Returns null when not found.
+   */
+  async getById(id: string): Promise<ChannelRecord | null> {
+    if (!isSupabaseConfigured || !supabase) {
+      return channelsStore.getById(id);
+    }
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select("id, channel, timestamp, ttl, author, verified, payload, sig")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as ChannelRecord | null) ?? null;
+  },
 };

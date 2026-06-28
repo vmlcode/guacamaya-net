@@ -30,6 +30,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"
         tools:targetApi="upsidedown_cake" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- OSMDroid cache -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -39,25 +40,36 @@
     <uses-feature android:name="android.hardware.wifi.aware" android:required="false" />
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SOSNet"
+        android:theme="@style/Theme.Guacamaya"
         android:hardwareAccelerated="true">
 
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.SOSNet">
+            android:theme="@style/Theme.Guacamaya">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- adb demo: am start -a net.guacamaya.action.OBSERVE_ON -n net.guacamaya/.ui.MainActivity -->
+            <intent-filter>
+                <action android:name="net.guacamaya.action.OBSERVE_ON" />
+                <action android:name="net.guacamaya.action.OBSERVE_OFF" />
+                <action android:name="net.guacamaya.action.START" />
+                <action android:name="net.guacamaya.action.STOP" />
+                <action android:name="net.guacamaya.action.HEARTBEAT_ON" />
+                <action android:name="net.guacamaya.action.HEARTBEAT_OFF" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <service
-            android:name=".service.SosForegroundService"
+            android:name=".service.GuacamayaForegroundService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
     </application>

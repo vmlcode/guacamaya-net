@@ -20,7 +20,22 @@ Tests live in `packages/shared/src/` (Bun test runner). There are no backend-spe
 
 ## Environment
 
-Copy `.env.example` → `.env`. Without `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` the data layer falls back to in-memory stores automatically — dev works out of the box. Without `BACKEND_PRIVATE_KEY` a random Ed25519 key is generated at startup (fine for dev, breaks signature verification across restarts).
+Copy `.env.example` → `.env`. Without Supabase vars the data layer falls back to in-memory stores.
+Set `GUACAMAYA_ADMIN_KEY` (and optionally `GUACAMAYA_READ_KEY`, `GUACAMAYA_WS_KEY`) before
+production — `NODE_ENV=production` refuses to start without an admin key. In dev, ephemeral keys
+are generated and logged if unset. Generate keys with `bun run keygen` from the repo root.
+
+## Security
+
+- **CORS** — `CORS_ORIGINS` (comma-separated); never `*` in production.
+- **Official records** — `POST /channels/:id/records` requires `X-Api-Key` / `Authorization: Bearer`
+  matching `GUACAMAYA_ADMIN_KEY`; only official channels (`alertas`, `refugios`, `ayuda-medica`).
+- **Location history** — `GET /locations` requires the read key (`GUACAMAYA_READ_KEY` or admin).
+- **WebSocket** — `/ws?token=<key>` or `Sec-WebSocket-Protocol: guacamaya.<key>`; uses
+  `GUACAMAYA_WS_KEY` or read key.
+- **Ingest** — zero-trust frame verification unchanged; batch capped at `MAX_INGEST_BATCH` (default 200)
+  with per-route rate limit (30/min). `@fastify/helmet` enabled.
+- **Timing-safe** API key comparison via `crypto.timingSafeEqual`.
 
 ## Architecture
 

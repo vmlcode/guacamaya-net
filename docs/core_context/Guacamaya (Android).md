@@ -16,7 +16,7 @@ Parte de [[GuacamayaProject]]. El detalle del formato binario está en [[Protoco
 
 > En runtime hoy solo corre el plano BLE; el `SosForegroundService` aún no arranca Wi-Fi Aware.
 
-## Mapa de módulos (`app/src/main/kotlin/org/sosnet/` — paquete Kotlin pendiente de rebrand a Guacamaya)
+## Mapa de módulos (`app/src/main/kotlin/net/guacamaya/`)
 
 - `proto/` — `Payload` (codec 22 B), `Flags`, `SosType`, `Crc16`. Puro, bien testeado, sin deps Android.
 - `crypto/` — `Identity` (par de llaves sellado en Keystore), `Signer` (Ed25519 vía BouncyCastle).
