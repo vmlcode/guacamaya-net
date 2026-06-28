@@ -4,6 +4,16 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Release /ingest endpoint. No backend is deployed yet, so this defaults to a
+// non-resolvable placeholder (a release build just fails the best-effort upload
+// rather than hitting a wrong host). Override once the HTTPS host exists, via
+// `-PINGEST_RELEASE_URL=https://…` or an INGEST_RELEASE_URL env var. Must be HTTPS:
+// the network-security-config only whitelists cleartext for the dev loopback.
+val ingestReleaseUrl: String =
+    (project.findProperty("INGEST_RELEASE_URL") as String?)
+        ?: System.getenv("INGEST_RELEASE_URL")
+        ?: "https://guacamaya.invalid"
+
 android {
     namespace = "net.guacamaya"
     compileSdk = 34
@@ -17,10 +27,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
-
-        // Backend /ingest base URL. Default targets the emulator's host loopback
-        // (10.0.2.2 → host's localhost:3000). Override per build/device as needed.
-        buildConfigField("String", "INGEST_BASE_URL", "\"http://10.0.2.2:3000\"")
     }
 
     buildTypes {
@@ -30,9 +36,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Deployed HTTPS backend (placeholder until one exists — see ingestReleaseUrl).
+            buildConfigField("String", "INGEST_BASE_URL", "\"$ingestReleaseUrl\"")
         }
         debug {
             isMinifyEnabled = false
+            // Emulator host loopback (10.0.2.2 → host's localhost:3000), cleartext
+            // allowed by network_security_config. Override per device as needed.
+            buildConfigField("String", "INGEST_BASE_URL", "\"http://10.0.2.2:3000\"")
         }
     }
 
