@@ -178,6 +178,22 @@ case "${1:-help}" in
     echo "BLE extended: $(adb -s "$serial" shell dumpsys bluetooth_manager 2>/dev/null | grep -i 'extended' | head -3 || echo 'n/a')"
     ;;
 
+  battery-whitelist)
+    serial="$(adb_serial "$DEVICE_HINT")"
+    dev="$(adb -s "$serial" shell getprop ro.product.device | tr -d '\r\n')"
+    echo "Battery whitelist → serial=$serial device=$dev pkg=$PKG"
+    adb -s "$serial" shell dumpsys deviceidle whitelist +"$PKG" 2>/dev/null || true
+    adb -s "$serial" shell cmd deviceidle whitelist +"$PKG" 2>/dev/null || true
+    echo "isIgnoring: $(adb -s "$serial" shell dumpsys deviceidle whitelist 2>/dev/null | grep -c "$PKG" || echo 0)"
+    ;;
+
+  battery-miui)
+    serial="$(adb_serial "$DEVICE_HINT")"
+    echo "Opening MIUI autostart → serial=$serial"
+    adb -s "$serial" shell am start -n com.miui.securitycenter/com.miui.permcenter.autostart.AutoStartManagementActivity 2>/dev/null || \
+      adb -s "$serial" shell am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d "package:$PKG"
+    ;;
+
   tamper)
     echo "[tamper] generate tampered frame on host"
     python3 scripts/tamper_test.py
@@ -216,6 +232,8 @@ Commands:
   heartbeat-off [dev] stop presence beacon
   device-test        BLE smoke: Realme START → sweet observe (exit 1 if 0 OK)
   sweet         print Redmi Note 10 (sweet) adb info
+  battery-whitelist [dev]  adb whitelist (sin popup MIUI)
+  battery-miui [dev]       abrir Autostart MIUI manualmente
   tamper        run tamper_test.py, push JSON to /sdcard if device attached
   logcat [dev]  stream colorized guacamaya logcat
 

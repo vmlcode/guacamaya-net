@@ -6,11 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -75,6 +72,7 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.service.GuacamayaForegroundService
+import net.guacamaya.util.BatteryHelper
 import kotlin.math.roundToInt
 
 /**
@@ -130,21 +128,7 @@ class MainActivity : ComponentActivity() {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) permsLauncher.launch(missing.toTypedArray())
-        requestBatteryExemptionIfNeeded()
-    }
-
-    private fun requestBatteryExemptionIfNeeded() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        val pm = getSystemService(POWER_SERVICE) as PowerManager
-        if (pm.isIgnoringBatteryOptimizations(packageName)) return
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-            data = Uri.parse("package:$packageName")
-        }
-        try {
-            startActivity(intent)
-        } catch (_: Exception) {
-            // OEM may block; user can allow manually in app settings.
-        }
+        // No auto-popup: MIUI abre PowerDetailActivity y rompe adb/UI. Banner in-app opcional.
     }
 }
 
@@ -286,12 +270,26 @@ private fun HomeScreen(
     onOpenRadar: () -> Unit,
 ) {
     val lastRssi = messages.firstOrNull()?.rssi
+    val ctx = LocalContext.current
+    var showBatteryHint by remember { mutableStateOf(BatteryHelper.shouldShowHint(ctx)) }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Header(nodeIdHex)
+
+        if (showBatteryHint) {
+            Spacer(Modifier.height(10.dp))
+            BatteryHintBanner(
+                isXiaomi = BatteryHelper.isXiaomi(),
+                onConfigure = { BatteryHelper.openSettings(ctx) },
+                onDismiss = {
+                    BatteryHelper.dismissHint(ctx)
+                    showBatteryHint = false
+                },
+            )
+        }
 
         Spacer(Modifier.height(20.dp))
 
@@ -328,6 +326,51 @@ private fun HomeScreen(
         Spacer(Modifier.height(12.dp))
 
         MapEntryButton(received = totalReceived, onClick = onOpenMap)
+    }
+}
+
+@Composable
+private fun BatteryHintBanner(isXiaomi: Boolean, onConfigure: () -> Unit, onDismiss: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Card)
+            .border(1.dp, Accent.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Text(
+            if (isXiaomi) "MIUI: activa Autostart y sin restricción" else "Sin restricción de batería",
+            color = TextHi,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            if (isXiaomi) {
+                "Para BLE en segundo plano: Autostart ON y batería «Sin restricciones»."
+            } else {
+                "Permite que Guacamaya siga escuchando SOS con la pantalla apagada."
+            },
+            color = TextLo,
+            fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Accent.copy(alpha = 0.25f))
+                    .clickable(onClick = onConfigure)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) { Text("Configurar", color = TextHi, fontSize = 12.sp) }
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) { Text("Ahora no", color = TextLo, fontSize = 12.sp) }
+        }
     }
 }
 
