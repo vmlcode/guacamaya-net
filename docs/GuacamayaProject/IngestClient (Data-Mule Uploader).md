@@ -100,9 +100,8 @@ sync de wire-format de 3 vías está **en sync** hoy.
       estado terminal `rejected` para no perder el frame en silencio.
 - [ ] **URL configurable en runtime** (hoy es `BuildConfig`, fijo por build) — setting
       o descubrimiento para apuntar a un backend de LAN distinto del emulador.
-- [ ] **`gradle.properties` fija `org.gradle.java.home=/usr/lib/jvm/java-17-openjdk`**
-      (config del equipo); en máquinas sin ese JDK exacto el build falla — se sorteó con
-      `-Dorg.gradle.java.home=...`. Ver [[Build y Entorno]].
+- [x] ~~`gradle.properties` fijaba un `org.gradle.java.home` absoluto que rompía el build~~ —
+      resuelto (commit `3756af4`): ya no se hardcodea el path; cada dev configura su JDK 17–21. Ver [[Build y Entorno]].
 
 Contrato del endpoint y verificación zero-trust: [[Backend Data-Mule]]. Estado global:
 [[Estado y Pendientes]].

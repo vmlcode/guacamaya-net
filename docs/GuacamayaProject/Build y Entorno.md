@@ -17,9 +17,16 @@ Cómo compilar y correr las dos mitades del monorepo [[GuacamayaProject]] (rama 
 ## [[Guacamaya (Android)]] — compilar
 
 Proyecto Gradle autocontenido en `android/`. **Abrir `android/` en Android Studio, no la raíz.**
-Requiere **JDK 17+** (AGP corre bien en JDK 21) y Android SDK con `platform-android-34` +
-`build-tools;34.0.0`. Apuntar Gradle al SDK con `local.properties` (`sdk.dir=...`, gitignored) o
-`ANDROID_HOME`.
+Requiere Android SDK con `platform-android-34` + `build-tools;34.0.0`. Apuntar Gradle al SDK con
+`local.properties` (`sdk.dir=...`, gitignored) o `ANDROID_HOME`.
+
+> **JDK: usar 17–21.** Gradle 8.7 **no** soporta el JDK 26 que es el default del sistema en Arch.
+> El `gradle.properties` **ya no fija** un `org.gradle.java.home` absoluto (rompía el sync en
+> máquinas sin ese path — fue el error de sync reportado el 2026-06-28; commit `3756af4`). Cada dev
+> configura su JDK:
+> - **Android Studio**: Settings → Build Tools → Gradle → *Gradle JDK* → el JBR incluido o un JDK 17–21.
+> - **CLI**: `JAVA_HOME` a un JDK 17–21, o `org.gradle.java.home=/ruta/jdk` en
+>   `~/.gradle/gradle.properties` (nivel usuario, sobreescribe sin commitear un path específico).
 
 ```bash
 cd android
