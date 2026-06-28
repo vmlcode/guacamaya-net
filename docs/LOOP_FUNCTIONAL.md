@@ -547,3 +547,24 @@ Calibración magnética sweet (`./scripts/demo.sh compass-miui sweet` + figura-8
 1. Reconectar Realme por USB
 2. Figura-8 en sweet (`./scripts/demo.sh compass-miui sweet`)
 3. `ble-reverse-test` + `functional-compass` con ambos dispositivos
+
+---
+
+## Iteración 24 — 2026-06-28 (loop 10m, tick 60)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| Dispositivos | Solo **sweet**; Realme ausente (ticks 38–60) |
+| `device-test` | **PASS** parcial @10 s — sweet `nodes=2 frames=69` |
+| `functional-compass` | sweet **0° magnet=bad**; Realme N/A |
+
+### Resumen ticks 51–60
+| Área | Estado |
+|------|--------|
+| Validación | ⚠️ Degradada — solo sweet, sin cambios |
+| Brújula sweet | ❌ `magnet=bad` — sin calibración manual |
+| BLE bidireccional | ⏸️ Pausado — requiere Realme reconectado |
+
+### Nota
+Loop continúa en modo vigilancia; sin avance posible sin intervención manual (Realme USB + figura-8 sweet).
