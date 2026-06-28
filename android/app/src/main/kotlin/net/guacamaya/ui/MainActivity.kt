@@ -8,6 +8,8 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -69,6 +71,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.mesh.NodeCatalog
+import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.service.GuacamayaForegroundService
 import android.util.Log
 import net.guacamaya.util.BatteryHelper
@@ -81,6 +84,8 @@ import kotlin.math.roundToInt
  */
 class MainActivity : ComponentActivity() {
 
+    private val adbHandler = Handler(Looper.getMainLooper())
+
     private val permsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { /* result handled by recomposing; nothing else to do */ }
@@ -89,20 +94,23 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         ensurePermissions()
-        armAdbSession(intent?.action)
-        dispatchServiceAction(intent?.action)
+        routeAdbIntent(intent)
         setContent { GuacamayaTheme { Surface(Modifier.fillMaxSize()) { Screen() } } }
     }
 
     override fun onResume() {
         super.onResume()
-        val action = intent?.action
+        routeAdbIntent(intent)
+    }
+
+    private fun routeAdbIntent(source: Intent?) {
+        val action = source?.action
+        armAdbSession(action)
         dispatchServiceAction(action)
         if (action == GuacamayaForegroundService.ACTION_OBSERVE_ON ||
             action == GuacamayaForegroundService.ACTION_START
         ) {
-            Log.i("guacamaya.probe", "onResume kickObserve action=$action")
-            GuacamayaForegroundService.kickObserve(this)
+            adbHandler.postDelayed({ dispatchServiceAction(getIntent()?.action) }, 800L)
         }
     }
 
@@ -118,7 +126,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        dispatchServiceAction(intent.action)
+        setIntent(intent)
+        routeAdbIntent(intent)
     }
 
     /** Route adb `am start -a …` into the foreground service (shell cannot start FGS on API 30+). */
@@ -129,8 +138,15 @@ class MainActivity : ComponentActivity() {
         ) {
             return
         }
+        Log.i("guacamaya.probe", "dispatchServiceAction action=$action")
         val intent = Intent(this, GuacamayaForegroundService::class.java).apply { this.action = action }
         ContextCompat.startForegroundService(this, intent)
+        if (action == GuacamayaForegroundService.ACTION_OBSERVE_ON ||
+            action == GuacamayaForegroundService.ACTION_START
+        ) {
+            BleMeshRuntime.ensureObserving(this)
+            GuacamayaForegroundService.kickObserve(this)
+        }
     }
 
     private fun ensurePermissions() {

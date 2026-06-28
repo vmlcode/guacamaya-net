@@ -72,16 +72,18 @@ tap_pct() {
 am_start_action() {
   local serial="$1"
   local action="$2"
+  # MIUI sweet: stale task stacks (PowerDetailActivity) swallow adb intents — clear task.
+  local flags="0x14008000"
   adb -s "$serial" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
   # MIUI sweet: `am start -W` can hang indefinitely — cap wait, then retry without -W.
-  if timeout 12 adb -s "$serial" shell am start -W -a "$action" -n "$ACTIVITY" >/dev/null 2>&1; then
+  if timeout 12 adb -s "$serial" shell am start -W -a "$action" -n "$ACTIVITY" -f "$flags" >/dev/null 2>&1; then
     :
   else
-    adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" >/dev/null 2>&1 || true
+    adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" -f "$flags" >/dev/null 2>&1 || true
   fi
   sleep 1
   # Second dispatch triggers MainActivity.onResume → FGS foreground on MIUI.
-  adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" >/dev/null 2>&1 || true
+  adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" -f "$flags" >/dev/null 2>&1 || true
   sleep 1
 }
 

@@ -148,3 +148,35 @@ MIUI/API 30 inicia FGS desde shell en background → scan BLE no arranca. Mitiga
 - Confirmar `kickObserve`/`scan started` en logcat tras install
 - Calibrar brújula sweet (figura-8 física + `tap-calibrate-north`)
 - Si scan arranca pero 0 OK: PHY Realme 1M/1M vs sweet AGGRESSIVE
+
+---
+
+## Iteración 7 — 2026-06-28 (loop 10m, tick 8)
+
+### Cambios
+- **`BleMeshRuntime.kt`**: singleton Observer + FloodRouter; scan desde activity foreground y FGS
+- **`GuacamayaForegroundService`**: delega observe a BleMeshRuntime; restaurado `scheduleObserveRetry()`
+- **`MainActivity`**: `setIntent()` en `onNewIntent` (fix `singleTop`); BLE en `dispatchServiceAction`; `routeAdbIntent` + retry 800 ms
+- **`demo.sh`**: `am start -f 0x14008000` (CLEAR_TASK) — elimina stack MIUI PowerDetailActivity que tragaba intents adb
+
+### Diagnóstico tick 8
+| Hallazgo | Detalle |
+|----------|---------|
+| Task MIUI | Task #107 acumulaba 5× `PowerDetailActivity` encima de MainActivity → `onNewIntent` no llegaba |
+| `singleTop` | Sin `setIntent()`, `getIntent().action` seguía siendo `MAIN` tras redispatch adb |
+| Realme→sweet | Sigue **0 OK** tras BleMeshRuntime + CLEAR_TASK |
+| sweet→Realme | **1 OK** (test corto; antes ~80–90) |
+| Brújula sweet | `magnet=bad heading=0 usable=false` |
+
+### Prueba adb
+```bash
+cd android
+./scripts/demo.sh ble-reverse-test
+adb -s e06518dd logcat -d -s guacamaya.probe:I guacamaya.ble.Observer:I
+```
+
+### Pendiente tick 9
+- Confirmar `dispatchServiceAction` / `BleMeshRuntime scanning=true` en logcat (MIUI puede filtrar o retrasar FGS)
+- Realme→sweet: mantener sweet en foreground + permisos ubicación/BT concedidos manualmente
+- Brújula sweet: calibración física + `functional-compass-calibrate sweet`
+- Si scan activo pero 0 OK: alinear PHY scan Realme (1M coded) vs sweet AGGRESSIVE

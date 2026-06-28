@@ -25,11 +25,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import net.guacamaya.R
+import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.ble.Broadcaster
-import net.guacamaya.ble.Observer
 import net.guacamaya.crypto.Identity
-import net.guacamaya.mesh.FloodRouter
-import net.guacamaya.mesh.GuacamayaDatabase
 import net.guacamaya.proto.Flags
 import net.guacamaya.proto.Payload
 import net.guacamaya.proto.SosType
@@ -61,8 +59,6 @@ class GuacamayaForegroundService : Service() {
     private var observeHealthJob: Job? = null
 
     private var broadcaster: Broadcaster? = null
-    private var observer: Observer? = null
-    private var router: FloodRouter? = null
     private var identity: Identity? = null
     private var heartbeatJob: Job? = null
 
@@ -129,23 +125,39 @@ class GuacamayaForegroundService : Service() {
     }
 
     private fun ensureObserverAndRouter() {
-        if (observer != null && router != null) return
-        val obs = Observer.create(this) ?: run {
-            Log.e(tag, "Observer.create failed — BT off or unsupported")
-            android.widget.Toast.makeText(
-                this,
-                "BLE scan unavailable — check Bluetooth and permissions",
-                android.widget.Toast.LENGTH_LONG,
-            ).show()
+        // Router lives in BleMeshRuntime; broadcaster may be shared for relay TX.
+        if (broadcaster == null) broadcaster = Broadcaster.create(this)
+    }
+
+    private fun startObserving() {
+        restoreWantObserving()
+        if (!wantObserving) {
+            probeLog("observe skipped want=false")
             return
         }
-        val dao = GuacamayaDatabase.get(this).messageDao()
-        val bcast = broadcaster ?: Broadcaster.create(this)
-        val r = FloodRouter(dao = dao, broadcaster = bcast, scope = scope)
-        obs.setListener { p22, pub32, sig64, ttl, rssi -> r.onFrame(p22, pub32, sig64, ttl, rssi) }
-        observer = obs
-        router = r
-        broadcaster = bcast
+        val adapter = (getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+        if (adapter?.isEnabled != true) {
+            Log.w(tag, "observe deferred — Bluetooth off")
+            scheduleObserveRetry()
+            return
+        }
+        ensureObserverAndRouter()
+        if (!BleMeshRuntime.ensureObserving(this)) scheduleObserveRetry()
+        else ensureObserveHealthLoop()
+    }
+
+    private fun ensureObserveHealthLoop() {
+        if (observeHealthJob?.isActive == true) return
+        observeHealthJob = scope.launch {
+            while (isActive && wantObserving) {
+                delay(OBSERVE_HEALTH_MS)
+                if (!wantObserving) break
+                if (!BleMeshRuntime.isScanning()) {
+                    Log.w(tag, "observe health tick — scan inactive, restarting")
+                    BleMeshRuntime.ensureObserving(this@GuacamayaForegroundService)
+                }
+            }
+        }
     }
 
     private fun startDistressBroadcast() {
@@ -254,45 +266,6 @@ class GuacamayaForegroundService : Service() {
         return latE7 to lonE7
     }
 
-    private fun startObserving() {
-        restoreWantObserving()
-        if (!wantObserving) {
-            probeLog("observe skipped want=false")
-            return
-        }
-        val adapter = (getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
-        if (adapter?.isEnabled != true) {
-            Log.w(tag, "observe deferred — Bluetooth off")
-            scheduleObserveRetry()
-            return
-        }
-        ensureObserverAndRouter()
-        val obs = observer
-        if (obs == null) {
-            scheduleObserveRetry()
-            return
-        }
-        if (obs.isScanning) obs.restart() else obs.start()
-        probeLog("observing scanning=${obs.isScanning}")
-        if (!obs.isScanning) scheduleObserveRetry()
-        ensureObserveHealthLoop()
-    }
-
-    private fun ensureObserveHealthLoop() {
-        if (observeHealthJob?.isActive == true) return
-        observeHealthJob = scope.launch {
-            while (isActive && wantObserving) {
-                delay(OBSERVE_HEALTH_MS)
-                if (!wantObserving) break
-                val obs = observer
-                if (obs == null || !obs.isScanning) {
-                    Log.w(tag, "observe health tick — scan inactive, restarting")
-                    startObserving()
-                }
-            }
-        }
-    }
-
     private fun scheduleObserveRetry() {
         if (observeRetryPosted) return
         observeRetryPosted = true
@@ -306,13 +279,13 @@ class GuacamayaForegroundService : Service() {
     private fun stopObserving() {
         observeHealthJob?.cancel()
         observeHealthJob = null
-        observer?.stop()
+        BleMeshRuntime.stopObserving()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         if (instance === this) instance = null
-        observer?.stop()
+        BleMeshRuntime.stopObserving()
         broadcaster?.stop()
         stopPresenceHeartbeat()
         scope.cancel()
@@ -323,9 +296,13 @@ class GuacamayaForegroundService : Service() {
 
         /** Called from MainActivity.onResume while foreground — MIUI needs this for BLE scan. */
         fun kickObserve(context: Context) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_WANT_OBSERVE, true)
+                .apply()
+            BleMeshRuntime.ensureObserving(context)
             val svc = instance
             if (svc != null) {
-                svc.probeLog("kickObserve instance ok")
                 svc.setWantObserving(true)
                 svc.startObserving()
             } else {
