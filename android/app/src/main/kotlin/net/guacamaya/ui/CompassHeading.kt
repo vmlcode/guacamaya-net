@@ -5,7 +5,6 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.view.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -16,20 +15,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 
 /**
- * True-north heading in degrees [0, 360), remapped for current display rotation.
- * Uses rotation vector with magnetic+accelerometer fallback for older MTK/Xiaomi stacks.
+ * True-north heading in degrees [0, 360) for portrait-upright use.
+ * Prefers geomagnetic rotation vector; optional persisted offset corrects OEM mirroring.
  */
 object CompassMath {
-    private const val SMOOTH_ALPHA = 0.12f
+    private const val SMOOTH_ALPHA = 0.15f
+    private const val PREFS = "guacamaya_compass"
+    private const val KEY_OFFSET = "heading_offset_deg"
 
     fun remappedAzimuth(rotationMatrix: FloatArray, displayRotation: Int): Float {
         val remapped = FloatArray(9)
-        val (axisX, axisY) = when (displayRotation) {
-            Surface.ROTATION_90 -> SensorManager.AXIS_Y to SensorManager.AXIS_MINUS_X
-            Surface.ROTATION_180 -> SensorManager.AXIS_MINUS_X to SensorManager.AXIS_MINUS_Z
-            Surface.ROTATION_270 -> SensorManager.AXIS_MINUS_Y to SensorManager.AXIS_X
-            else -> SensorManager.AXIS_X to SensorManager.AXIS_Z
-        }
+        val (axisX, axisY) = CompassAxes.forDisplayRotation(displayRotation)
         if (!SensorManager.remapCoordinateSystem(rotationMatrix, axisX, axisY, remapped)) {
             System.arraycopy(rotationMatrix, 0, remapped, 0, 9)
         }
@@ -45,7 +41,6 @@ object CompassMath {
 
     fun normalizeDegrees(v: Float): Float = ((v % 360f) + 360f) % 360f
 
-    /** Signed shortest turn from [from] to [to] in degrees. */
     fun shortestDelta(from: Float, to: Float): Float {
         var d = to - from
         if (d > 180f) d -= 360f
@@ -53,19 +48,35 @@ object CompassMath {
         return d
     }
 
-    /** Bearing from here to target minus device heading → arrow rotation on screen. */
     fun relativeBearing(bearing: Float, heading: Float): Float = shortestDelta(heading, bearing)
+
+    fun loadOffset(ctx: Context): Float =
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getFloat(KEY_OFFSET, CompassAxes.manufacturerCorrectionDeg())
+
+    fun saveOffset(ctx: Context, offsetDeg: Float) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat(KEY_OFFSET, normalizeDegrees(offsetDeg))
+            .apply()
+    }
+
+    /** User tapped while phone top points toward magnetic north — zero the display. */
+    fun calibrateAsNorth(ctx: Context, currentDisplayedHeading: Float) {
+        saveOffset(ctx, loadOffset(ctx) - currentDisplayedHeading)
+    }
 }
 
 @Composable
-fun rememberCompassHeading(): Float {
+fun rememberCompassHeading(reloadKey: Int = 0): Float {
     val ctx = LocalContext.current
     val displayRotation = LocalView.current.display.rotation
     var heading by remember { mutableFloatStateOf(0f) }
+    var offset by remember(reloadKey) { mutableFloatStateOf(CompassMath.loadOffset(ctx)) }
 
-    DisposableEffect(ctx, displayRotation) {
+    DisposableEffect(ctx, displayRotation, offset) {
         val sm = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val rotation = sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        val rotation = sm.getDefaultSensor(Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR)
+            ?: sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
             ?: sm.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
 
         val accel = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -77,13 +88,17 @@ fun rememberCompassHeading(): Float {
         var hasMagnet = false
 
         fun publish(raw: Float) {
-            heading = CompassMath.smooth(heading, raw)
+            val corrected = CompassMath.normalizeDegrees(raw + offset)
+            heading = CompassMath.smooth(heading, corrected)
         }
 
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
                 when (event.sensor.type) {
-                    Sensor.TYPE_ROTATION_VECTOR, Sensor.TYPE_GAME_ROTATION_VECTOR -> {
+                    Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR,
+                    Sensor.TYPE_ROTATION_VECTOR,
+                    Sensor.TYPE_GAME_ROTATION_VECTOR,
+                    -> {
                         SensorManager.getRotationMatrixFromVector(rotMatrix, event.values)
                         publish(CompassMath.remappedAzimuth(rotMatrix, displayRotation))
                     }

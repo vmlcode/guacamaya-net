@@ -40,6 +40,7 @@ object GeoGrid {
 
     /** Pick a round grid step (m) that keeps ~8–12 lines visible. */
     fun gridStepM(maxExtentM: Float): Float {
+        if (maxExtentM <= 5f) return 1f
         val raw = max(maxExtentM / 5f, 10f)
         val steps = floatArrayOf(10f, 20f, 50f, 100f, 200f, 500f, 1_000f, 2_000f, 5_000f)
         return steps.firstOrNull { it >= raw } ?: 5_000f

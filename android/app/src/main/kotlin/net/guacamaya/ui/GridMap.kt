@@ -46,7 +46,7 @@ fun GridMap(
         val cy = pad + h / 2f
 
         val (maxE, maxN) = GeoGrid.bounds(scene.points)
-        val maxExtent = maxOf(maxE, maxN, 20f)
+        val maxExtent = maxOf(maxE, maxN, 2f)
         val scale = min(w, h) / (maxExtent * 2.4f)
         val stepM = GeoGrid.gridStepM(maxExtent)
 
@@ -111,27 +111,5 @@ private fun buildGridScene(userLocation: Location?, messages: List<MessageEntity
         originLon = withGps.map { it.lonE7 / 1e7 }.average()
     }
 
-    // Latest position per node (messages sorted recent-first upstream)
-    val latestByNode = linkedMapOf<String, MessageEntity>()
-    for (msg in withGps) {
-        val key = msg.nodeId.joinToString("") { "%02x".format(it) }
-        if (key !in latestByNode) latestByNode[key] = msg
-    }
-
-    val points = latestByNode.values.mapNotNull { msg ->
-        val lat = msg.latE7 / 1e7
-        val lon = msg.lonE7 / 1e7
-        if (lat !in -90.0..90.0 || lon !in -180.0..180.0) return@mapNotNull null
-        val (east, north) = GeoGrid.offsetMeters(originLat, originLon, lat, lon)
-        GridPoint(
-            id = msg.nodeId.joinToString("") { "%02x".format(it) }.take(8),
-            eastM = east,
-            northM = north,
-            label = msg.sosType.toString(),
-            critical = msg.critical,
-            rssi = msg.rssi,
-        )
-    }
-
-    return GridScene(points)
+    return GridScene(GeoProximity.gridPoints(originLat, originLon, messages))
 }

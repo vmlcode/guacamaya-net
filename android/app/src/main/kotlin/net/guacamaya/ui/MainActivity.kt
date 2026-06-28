@@ -47,6 +47,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -496,8 +497,10 @@ private fun RadarEntry(messages: List<MessageEntity>, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val heading = rememberCompassHeading()
     val location = rememberLiveLocation(ctx, highAccuracy = false)
-    val target = nearestTarget(location, messages)
-    val relative = target?.let { CompassMath.relativeBearing(it.bearing, heading) } ?: 0f
+    val target = location?.let { GeoProximity.nearest(it, messages) }
+    val relative = target?.let {
+        if (it.coLocated) 0f else CompassMath.relativeBearing(it.bearing, heading)
+    } ?: 0f
 
     Row(
         Modifier
@@ -520,7 +523,7 @@ private fun RadarEntry(messages: List<MessageEntity>, onClick: () -> Unit) {
                 Text("Tocar para abrir radar completo", color = TextLo, fontSize = 11.sp)
             } else {
                 Text("Nodo ${target.nodeId.take(8)}", color = TextHi, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                Text("${formatDistance(target.distanceMeters)} · abrir radar", color = TextLo, fontSize = 12.sp)
+                Text("${GeoProximity.formatDistance(target)} · abrir radar", color = TextLo, fontSize = 12.sp)
             }
         }
     }
@@ -529,10 +532,13 @@ private fun RadarEntry(messages: List<MessageEntity>, onClick: () -> Unit) {
 @Composable
 private fun RadarScreen(messages: List<MessageEntity>, onBack: () -> Unit) {
     val ctx = LocalContext.current
-    val heading = rememberCompassHeading()
+    var compassKey by remember { mutableIntStateOf(0) }
+    val heading = rememberCompassHeading(reloadKey = compassKey)
     val location = rememberLiveLocation(ctx, highAccuracy = true)
-    val target = nearestTarget(location, messages)
-    val relative = target?.let { CompassMath.relativeBearing(it.bearing, heading) } ?: 0f
+    val target = location?.let { GeoProximity.nearest(it, messages) }
+    val relative = target?.let {
+        if (it.coLocated) 0f else CompassMath.relativeBearing(it.bearing, heading)
+    } ?: 0f
 
     Column(
         Modifier.fillMaxSize().padding(16.dp),
@@ -571,15 +577,20 @@ private fun RadarScreen(messages: List<MessageEntity>, onBack: () -> Unit) {
             )
         } else {
             Text(
-                formatDistance(target.distanceMeters),
+                GeoProximity.formatDistance(target),
                 color = if (target.critical) Sos else Find,
                 fontSize = 44.sp,
                 fontWeight = FontWeight.Bold,
             )
             Text("hacia nodo ${target.nodeId.take(8)}", color = TextHi, fontSize = 16.sp)
             Spacer(Modifier.height(10.dp))
-            Text("${relative.roundToInt()}° relativo · bearing ${target.bearing.roundToInt()}° · brújula ${heading.roundToInt()}°", color = TextLo, fontSize = 12.sp)
-            Text("rssi ${target.rssi} dBm · ${if (target.critical) "SOS" else "presencia"}", color = TextLo, fontSize = 12.sp)
+            if (target.coLocated) {
+                Text("Dispositivos juntos — GPS no distingue cm", color = TextLo, fontSize = 13.sp, textAlign = TextAlign.Center)
+                Text("Usa la brújula; calibra apuntando al norte", color = TextLo, fontSize = 12.sp, textAlign = TextAlign.Center)
+            } else {
+                Text("${relative.roundToInt()}° relativo · bearing ${target.bearing.roundToInt()}° · brújula ${heading.roundToInt()}°", color = TextLo, fontSize = 12.sp)
+            }
+            Text("rssi ${target.rssi} dBm · ±${target.uncertaintyMeters.roundToInt()} m GPS · ${if (target.critical) "SOS" else "presencia"}", color = TextLo, fontSize = 12.sp)
         }
 
         Spacer(Modifier.height(18.dp))
@@ -596,7 +607,21 @@ private fun RadarScreen(messages: List<MessageEntity>, onBack: () -> Unit) {
             Spacer(Modifier.height(4.dp))
             Text("GPS local: ${location?.accuracy?.roundToInt()?.let { "±$it m" } ?: "sin fix"}", color = TextLo, fontSize = 13.sp)
             Text("Objetivos con GPS: ${messages.count { it.latE7 != 0 || it.lonE7 != 0 }}", color = TextLo, fontSize = 13.sp)
-            Text("Nota: BLE RSSI no da dirección; la flecha usa GPS + brújula.", color = TextLo, fontSize = 12.sp)
+            Text("Nota: a <15 m la distancia GPS se muestra como «junto».", color = TextLo, fontSize = 12.sp)
+            Spacer(Modifier.height(8.dp))
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Accent.copy(alpha = 0.25f))
+                    .border(1.dp, Accent.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                    .clickable {
+                        CompassMath.calibrateAsNorth(ctx, heading)
+                        compassKey++
+                    }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                Text("Calibrar norte (top del teléfono → N)", color = TextHi, fontSize = 13.sp)
+            }
         }
 
         Spacer(Modifier.weight(1f))
@@ -604,7 +629,8 @@ private fun RadarScreen(messages: List<MessageEntity>, onBack: () -> Unit) {
 }
 
 @Composable
-private fun RadarCompass(sizeDp: Int, heading: Float, relative: Float, target: RadarTarget?) {
+private fun RadarCompass(sizeDp: Int, heading: Float, relative: Float, target: GeoProximity.Result?) {
+    val arrowAlpha = if (target?.coLocated == true) 0.35f else 1f
     Box(Modifier.size(sizeDp.dp), contentAlignment = Alignment.Center) {
         // Rose rotates so N aligns with true north; arrow shows target relative to phone top.
         Box(Modifier.fillMaxSize().rotate(-heading), contentAlignment = Alignment.Center) {
@@ -625,7 +651,7 @@ private fun RadarCompass(sizeDp: Int, heading: Float, relative: Float, target: R
         }
         Text(
             "▲",
-            color = target?.let { if (it.critical) Sos else Find } ?: TextLo,
+            color = target?.let { if (it.critical) Sos else Find }?.copy(alpha = arrowAlpha) ?: TextLo.copy(alpha = arrowAlpha),
             fontSize = (sizeDp / 3).sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.rotate(relative),
@@ -652,49 +678,17 @@ private fun rememberLiveLocation(ctx: Context, highAccuracy: Boolean): Location?
             ).setMinUpdateIntervalMillis(if (highAccuracy) 500L else 2_000L).build()
             val callback = object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
-                    location = result.lastLocation ?: location
+                    val raw = result.lastLocation ?: return
+                    location = GeoProximity.smoothLocation(location, raw)
                 }
             }
-            client.lastLocation.addOnSuccessListener { if (it != null) location = it }
+            client.lastLocation.addOnSuccessListener { if (it != null) location = GeoProximity.smoothLocation(location, it) }
             client.requestLocationUpdates(request, callback, ctx.mainLooper)
             onDispose { client.removeLocationUpdates(callback) }
         }
     }
     return location
 }
-
-private fun nearestTarget(location: Location?, messages: List<MessageEntity>): RadarTarget? {
-    val here = location ?: return null
-    return messages
-        .asSequence()
-        .filter { it.latE7 != 0 || it.lonE7 != 0 }
-        .mapNotNull { msg ->
-            val lat = msg.latE7 / 1e7
-            val lon = msg.lonE7 / 1e7
-            if (lat !in -90.0..90.0 || lon !in -180.0..180.0) return@mapNotNull null
-            val out = FloatArray(2)
-            Location.distanceBetween(here.latitude, here.longitude, lat, lon, out)
-            RadarTarget(
-                nodeId = msg.nodeId.toHex(),
-                distanceMeters = out[0],
-                bearing = CompassMath.normalizeDegrees(out[1]),
-                rssi = msg.rssi,
-                critical = msg.critical,
-            )
-        }
-        .minByOrNull { it.distanceMeters }
-}
-
-private data class RadarTarget(
-    val nodeId: String,
-    val distanceMeters: Float,
-    val bearing: Float,
-    val rssi: Int,
-    val critical: Boolean,
-)
-
-private fun formatDistance(meters: Float): String =
-    if (meters < 1_000f) "${meters.roundToInt()} m" else "%.1f km".format(meters / 1_000f)
 
 @Composable
 private fun MapEntryButton(received: Int, onClick: () -> Unit) {

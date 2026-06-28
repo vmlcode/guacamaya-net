@@ -39,7 +39,28 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew :app:assembleDebug
 ```
 
 ### Próxima iteración (backlog)
-- [ ] Calibración magnética / aviso si `accuracy` baja.
-- [ ] Suavizado RSSI para distancia aproximada en radar.
-- [ ] Scan watchdog más agresivo en sweet si callbacks < 1/min.
-- [ ] Reducir recomposiciones Compose en lista de mensajes.
+- [x] Calibración magnética / botón «Calibrar norte» en radar
+- [ ] Suavizado RSSI para distancia aproximada en radar
+- [ ] Scan watchdog más agresivo en sweet si callbacks < 1/min
+- [ ] Reducir recomposiciones Compose en lista de mensajes
+
+---
+
+## Iteración 2 — 2026-06-28
+
+### Problema reportado
+- Distancia saltaba 1 m, 3 m, 4 m con teléfonos separados ~4 cm.
+- Brújula: Realme norte / sweet sur (180° invertido).
+
+### Cambios
+
+| Área | Cambio |
+|------|--------|
+| **Brújula** | Ejes para teléfono **vertical** (`AXIS_X` + `AXIS_MINUS_Y`). `GEOMAGNETIC_ROTATION_VECTOR`. Botón **Calibrar norte** con offset persistido por dispositivo. |
+| **Distancia** | `GeoProximity.kt`: suavizado EMA GPS + posición por nodo; dentro de incertidumbre → **«junto»**; sub-10 m en cm. |
+| **Radar** | Flecha atenuada cuando `coLocated`; aviso «GPS no distingue cm». |
+| **Mapa** | Posiciones suavizadas compartidas; cuadrícula mínima 2 m / paso 1 m. |
+
+### Verificación
+1. Teléfonos juntos → radar **junto** (no 1–4 m).
+2. Radar → apuntar top al norte → **Calibrar norte** en ambos → brújula ≈ 0°.
