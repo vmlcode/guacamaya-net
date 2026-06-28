@@ -32,6 +32,12 @@ Working language of comments/docs is Spanish in places; code identifiers are Eng
 > ingestion), read `backend/CLAUDE.md` first — it has the three-layer stack pattern, the dedup
 > invariant, environment setup, and per-domain commands.
 
+> **Mobile integration:** `backend_final.md` (repo root) is the authoritative per-endpoint reference
+> for wiring the Android app to the backend — auth model (which keys the app must/must not hold), the
+> 118-byte upload-frame layout for the `IngestClient`, every endpoint's request/response, the resolve
+> witness-signing format, and the recommended mule-upload flow. Read it before touching the
+> mesh↔backend HTTP/WS contract or building the Android `IngestClient`.
+
 ## Run / test (Bun-first — never npm/node)
 
 ```bash
