@@ -91,6 +91,12 @@ class MainActivity : ComponentActivity() {
         setContent { GuacamayaTheme { Surface(Modifier.fillMaxSize()) { Screen() } } }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // MIUI/API 30: FGS+BLE need a foreground activity; adb cold start often stops before onCreate finishes.
+        dispatchServiceAction(intent?.action)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         dispatchServiceAction(intent.action)

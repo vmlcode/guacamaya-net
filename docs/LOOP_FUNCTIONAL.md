@@ -78,3 +78,28 @@ guacamaya.probe: heading=0 lat=16.74… lon=-92.62… acc_m=26 speed=0.17 target
 - Confirmar Realme→sweet con intent único + retry observe
 - Brújula sweet: `magnet=bad` — calibración en campo
 - Comparar headings paralelos sweet vs Realme
+
+---
+
+## Iteración 4 — 2026-06-28 (loop 10m, ticks 3–5)
+
+### Cambios
+- **FGS observe persistente**: `wantObserving` en prefs + health loop 8 s + retry BT off
+- **MainActivity.onResume**: re-dispatch adb intents (MIUI mata activity antes de FGS foreground)
+- **Brújula**: magnetómetro siempre registrado → accuracy en probe
+- **demo.sh**: `am start -W`, WAKEUP, Realme TX con `START` (SOS continuo)
+
+### Prueba adb
+| Test | Resultado |
+|------|-----------|
+| sweet→Realme | **89 OK** |
+| Realme→sweet | **0 OK** — FGS `createdFromFg=false` en MIUI; observer no arranca desde adb background |
+| Realme brújula | `heading=38 usable=true magnet=high` |
+| sweet brújula | sin probe (activity en background tras HEARTBEAT intent) |
+
+### Causa raíz probable
+MIUI/API 30 inicia FGS desde shell en background → scan BLE no arranca. Mitigación: `onResume` + `-W` + WAKEUP en scripts.
+
+### Pendiente tick 6
+- Realme→sweet: validar tras `onResume` fix con teléfono despierto en foreground
+- sweet brújula: figura-8 / `tap-calibrate-north` vía adb

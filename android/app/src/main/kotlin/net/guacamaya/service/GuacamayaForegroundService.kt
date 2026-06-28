@@ -6,6 +6,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -52,9 +53,12 @@ import kotlinx.coroutines.launch
 class GuacamayaForegroundService : Service() {
 
     private val tag = "guacamaya.service"
+    private val probeTag = "guacamaya.probe"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mainHandler = Handler(Looper.getMainLooper())
     private var observeRetryPosted = false
+    @Volatile private var wantObserving = false
+    private var observeHealthJob: Job? = null
 
     private var broadcaster: Broadcaster? = null
     private var observer: Observer? = null
@@ -65,17 +69,33 @@ class GuacamayaForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        probeLog("onStartCommand action=${intent?.action} startId=$startId")
         ensureForeground()
         Log.i(tag, "onStartCommand action=${intent?.action}")
         when (intent?.action) {
-            ACTION_START -> startDistressBroadcast()
+            ACTION_START -> {
+                setWantObserving(true)
+                startDistressBroadcast()
+            }
             ACTION_STOP -> stopBroadcasting()
-            ACTION_OBSERVE_ON -> startObserving()
-            ACTION_OBSERVE_OFF -> stopObserving()
+            ACTION_OBSERVE_ON -> setWantObserving(true)
+            ACTION_OBSERVE_OFF -> setWantObserving(false)
             ACTION_HEARTBEAT_ON -> startPresenceHeartbeat()
             ACTION_HEARTBEAT_OFF -> stopPresenceHeartbeat()
         }
+        if (wantObserving) startObserving() else stopObserving()
         return START_STICKY
+    }
+
+    private fun setWantObserving(want: Boolean) {
+        wantObserving = want
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_WANT_OBSERVE, want).apply()
+    }
+
+    private fun restoreWantObserving() {
+        if (!wantObserving) {
+            wantObserving = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_WANT_OBSERVE, false)
+        }
     }
 
     private fun ensureForeground() {
@@ -230,6 +250,14 @@ class GuacamayaForegroundService : Service() {
     }
 
     private fun startObserving() {
+        restoreWantObserving()
+        if (!wantObserving) return
+        val adapter = (getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+        if (adapter?.isEnabled != true) {
+            Log.w(tag, "observe deferred — Bluetooth off")
+            scheduleObserveRetry()
+            return
+        }
         ensureObserverAndRouter()
         val obs = observer
         if (obs == null) {
@@ -239,6 +267,22 @@ class GuacamayaForegroundService : Service() {
         if (obs.isScanning) obs.restart() else obs.start()
         Log.i(tag, "observing on (scanning=${obs.isScanning})")
         if (!obs.isScanning) scheduleObserveRetry()
+        ensureObserveHealthLoop()
+    }
+
+    private fun ensureObserveHealthLoop() {
+        if (observeHealthJob?.isActive == true) return
+        observeHealthJob = scope.launch {
+            while (isActive && wantObserving) {
+                delay(OBSERVE_HEALTH_MS)
+                if (!wantObserving) break
+                val obs = observer
+                if (obs == null || !obs.isScanning) {
+                    Log.w(tag, "observe health tick — scan inactive, restarting")
+                    startObserving()
+                }
+            }
+        }
     }
 
     private fun scheduleObserveRetry() {
@@ -247,11 +291,13 @@ class GuacamayaForegroundService : Service() {
         mainHandler.postDelayed({
             observeRetryPosted = false
             Log.i(tag, "observe retry")
-            startObserving()
+            if (wantObserving) startObserving()
         }, 2_500L)
     }
 
     private fun stopObserving() {
+        observeHealthJob?.cancel()
+        observeHealthJob = null
         observer?.stop()
     }
 
@@ -276,5 +322,10 @@ class GuacamayaForegroundService : Service() {
         private const val PRESENCE_INTERVAL_MS = 60_000L
         private const val PRESENCE_JITTER_MS = 15_000L
         private const val PRESENCE_HOP_TTL = 2
+        private const val PREFS = "guacamaya_service"
+        private const val KEY_WANT_OBSERVE = "want_observe"
+        private const val OBSERVE_HEALTH_MS = 8_000L
     }
+
+    private fun probeLog(msg: String) = Log.i(probeTag, msg)
 }

@@ -172,8 +172,9 @@ fun rememberCompassState(reloadKey: Int = 0): CompassState {
             sm.registerListener(listener, rotation, rate)
         } else {
             sm.registerListener(listener, accel, rate)
-            sm.registerListener(listener, magnet, rate)
         }
+        // Always listen for magnetometer accuracy (rotation vector alone may skip it).
+        magnet?.let { sm.registerListener(listener, it, SensorManager.SENSOR_DELAY_NORMAL) }
 
         onDispose { sm.unregisterListener(listener) }
     }

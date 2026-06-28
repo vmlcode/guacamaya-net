@@ -70,8 +70,16 @@ tap_pct() {
 }
 
 launch_app() {
-  adb_cmd shell am start -n "$ACTIVITY" >/dev/null || true
+  adb_cmd shell am start -W -a "${1:-}" -n "$ACTIVITY" 2>/dev/null || \
+    adb_cmd shell am start -W -n "$ACTIVITY" >/dev/null
   sleep 1
+}
+
+launch_action() {
+  local action="$1"
+  adb_cmd shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
+  adb_cmd shell am start -W -a "$action" -n "$ACTIVITY" >/dev/null
+  sleep 2
 }
 
 start_fg_service() {
@@ -321,9 +329,9 @@ case "${1:-help}" in
       adb -s "$serial" logcat -c 2>/dev/null || true
       adb -s "$serial" shell am force-stop "$PKG" 2>/dev/null || true
       sleep 1
-      adb -s "$serial" shell am start -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
       adb -s "$serial" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
-      sleep 10
+      adb -s "$serial" shell am start -W -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
+      sleep 12
       echo "=== $label ($dev $serial) ==="
       adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -4 || true
     done
@@ -339,19 +347,24 @@ case "${1:-help}" in
     sleep 2
     echo "[ble-reverse] sweet TX → Realme RX (heartbeat 70s)"
     adb -s "$(adb_serial "$REALME")" logcat -c 2>/dev/null || true
-    adb -s "$(adb_serial "$SWEET")" shell am start -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
-    adb -s "$(adb_serial "$REALME")" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
+    adb -s "$(adb_serial "$SWEET")" shell am start -W -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
+    adb -s "$(adb_serial "$REALME")" shell am start -W -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
     sleep 70
     ./scripts/demo.sh received "$REALME"
     echo "[ble-reverse] Realme TX → sweet RX (heartbeat 70s)"
     adb -s "$(adb_serial "$SWEET")" shell am force-stop "$PKG" 2>/dev/null || true
     sleep 2
     adb -s "$(adb_serial "$SWEET")" logcat -c 2>/dev/null || true
-    adb -s "$(adb_serial "$REALME")" shell am start -a "${PKG}.action.HEARTBEAT_ON" -n "$ACTIVITY" >/dev/null || true
-    adb -s "$(adb_serial "$SWEET")" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
+    adb -s "$(adb_serial "$REALME")" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
+    adb -s "$(adb_serial "$REALME")" shell am start -W -a "${PKG}.action.START" -n "$ACTIVITY" >/dev/null || true
+    adb -s "$(adb_serial "$SWEET")" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
+    adb -s "$(adb_serial "$SWEET")" shell am start -W -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null || true
     sleep 70
     ./scripts/demo.sh received "$SWEET"
-    adb -s "$(adb_serial "$SWEET")" logcat -d -s guacamaya.ble.Observer:I guacamaya.service:I 2>/dev/null | tail -8 || true
+    SPID="$(adb -s "$(adb_serial "$SWEET")" shell pidof "$PKG" 2>/dev/null | tr -d '\r\n' || true)"
+    if [ -n "$SPID" ]; then
+      adb -s "$(adb_serial "$SWEET")" logcat -d --pid="$SPID" 2>/dev/null | grep -E "scan started|FloodRouter: OK" | tail -5 || true
+    fi
     ;;
 
   *)
