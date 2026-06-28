@@ -478,3 +478,24 @@ Sigue requiriendo **calibración física** (`magnet=bad`). Código ahora permite
 ### Notas
 - Sin cambio en brújula sweet; sigue bloqueada en calibración manual.
 - BLE mesh estable; sin cambios de código en este tick.
+
+---
+
+## Iteración 21 — 2026-06-28 (loop 10m, tick 30)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| `device-test` | **PASS** @0 s — `nodes=2 frames=69` (ticks 26–30 consecutivos) |
+| `functional-compass` | sweet **0° magnet=bad**; Realme sin probe en 36 s (logd intermitente) |
+
+### Resumen ticks 22–30 (~1,5 h post-cierre)
+| Área | Estado |
+|------|--------|
+| BLE mesh | ✅ Estable; `device-test` PASS en cada tick |
+| Brújula Realme | ✅ ~97–104° cuando probe visible |
+| Brújula sweet | ❌ `magnet=bad` — sin calibración manual en campo |
+| Fixes aplicados | `device-test`: HEARTBEAT_ON, poll 60 s, fallback Realme, fix `set -e` (`cc9bd44`) |
+
+### Bloqueador único
+Calibración magnética sweet (`./scripts/demo.sh compass-miui sweet` + figura-8).
