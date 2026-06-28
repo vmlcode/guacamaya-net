@@ -347,3 +347,24 @@ Sin regresión — último `ble-reverse-test` bidireccional PASS (tick 14).
 ### Pendiente tick 16
 - Calibración magnética sweet en campo → repetir `functional-compass`
 - Con sweet usable: comparar `rel=` en probe con teléfonos paralelos apuntando al mismo rumbo
+
+---
+
+## Iteración 15 — 2026-06-28 (loop 10m, tick 16)
+
+### Cambios
+- **`CompassHeading`**: heading se actualiza con `magnet=bad` (usable sigue false); prioriza fallback accel+magnet sobre rotation vector en MIUI
+- **`demo.sh compass-miui`**: abre brújula MIUI / ajustes ubicación + instrucción figura-8
+
+### Brújula sweet
+Sigue requiriendo **calibración física** (`magnet=bad`). Código ahora permite heading degradado cuando el magnetómetro reporta datos pero accuracy=unreliable.
+
+### Uso adb
+```bash
+./scripts/demo.sh compass-miui sweet   # figura-8 manual ~15 s
+./scripts/demo.sh functional-compass     # comparar Realme vs sweet
+```
+
+### Pendiente tick 17
+- Repetir brújula cruzada tras calibración sweet en campo
+- ENU `rel=` / bearing entre dispositivos

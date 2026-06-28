@@ -328,6 +328,15 @@ case "${1:-help}" in
       adb -s "$serial" shell am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d "package:$PKG"
     ;;
 
+  compass-miui)
+    serial="$(adb_serial "$DEVICE_HINT")"
+    echo "[compass-miui] Abrir brújula/calibración MIUI → serial=$serial"
+    adb -s "$serial" shell am start -n com.miui.compass/.CompassActivity 2>/dev/null || \
+      adb -s "$serial" shell monkey -p com.miui.compass -c android.intent.category.LAUNCHER 1 2>/dev/null || \
+      adb -s "$serial" shell am start -a android.settings.LOCATION_SOURCE_SETTINGS 2>/dev/null || true
+    echo "Mueve el sweet en figura-8 ~15 s, luego: ./scripts/demo.sh functional-compass sweet"
+    ;;
+
   tamper)
     echo "[tamper] generate tampered frame on host"
     python3 scripts/tamper_test.py

@@ -109,14 +109,14 @@ fun rememberCompassState(reloadKey: Int = 0): CompassState {
         var hasAccel = false
         var hasMagnet = false
 
-        var magnetAccuracy = SensorManager.SENSOR_STATUS_ACCURACY_HIGH
+        var magnetAccuracy = SensorManager.SENSOR_STATUS_UNRELIABLE
 
         fun publishFromMatrix() {
             val o = CompassMath.remappedOrientation(rotMatrix, displayRotation)
-            val usable = CompassMath.isOrientationUsable(o[1], o[2])
-            if (usable) {
+            val orientationOk = CompassMath.isOrientationUsable(o[1], o[2])
+            if (orientationOk) {
                 val alpha = when (magnetAccuracy) {
-                    SensorManager.SENSOR_STATUS_UNRELIABLE -> 0.06f
+                    SensorManager.SENSOR_STATUS_UNRELIABLE -> 0.08f
                     SensorManager.SENSOR_STATUS_ACCURACY_LOW -> 0.10f
                     SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM -> 0.14f
                     else -> 0.20f
@@ -124,11 +124,12 @@ fun rememberCompassState(reloadKey: Int = 0): CompassState {
                 val corrected = CompassMath.normalizeDegrees(o[0] + offset)
                 heading = CompassMath.smooth(heading, corrected, alpha)
             }
+            val magnetOk = magnetAccuracy > SensorManager.SENSOR_STATUS_UNRELIABLE
             state = CompassState(
                 headingDeg = heading,
                 pitchDeg = o[1],
                 rollDeg = o[2],
-                usable = usable,
+                usable = orientationOk && magnetOk,
                 magnetAccuracy = magnetAccuracy,
             )
         }
@@ -140,6 +141,11 @@ fun rememberCompassState(reloadKey: Int = 0): CompassState {
                     Sensor.TYPE_ROTATION_VECTOR,
                     Sensor.TYPE_GAME_ROTATION_VECTOR,
                     -> {
+                        if (magnetAccuracy <= SensorManager.SENSOR_STATUS_UNRELIABLE &&
+                            hasAccel && hasMagnet
+                        ) {
+                            return
+                        }
                         SensorManager.getRotationMatrixFromVector(rotMatrix, event.values)
                         publishFromMatrix()
                     }
