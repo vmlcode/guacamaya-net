@@ -4,14 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this branch is
 
-The **`develop` branch is the Guacamaya Red backend** — a Bun + TypeScript monorepo. Its job in the
-current design is narrow: be the optional **data-mule ingestion point** for the SOSNet Android mesh.
-Phones that recover connectivity upload the signed mesh frames they collected; the backend
-re-verifies and persists them.
+The **`develop` branch is the consolidated monorepo** holding both products:
 
-> The Expo app under `app/` is **dropped** — the native Kotlin app (SOSNet, on the `init-sosnet`
-> branch) replaces it. Ignore `app/`; do not build features there. The two products live on separate
-> branch lineages in the same repo — see the SOSNet branch's `CLAUDE.md` for the mesh side.
+- **`backend/` + `packages/`** — the Guacamaya Red backend (Bun + TypeScript). Its job is narrow: be
+  the optional **data-mule ingestion point** for the SOSNet Android mesh. Phones that recover
+  connectivity upload the signed mesh frames they collected; the backend re-verifies and persists them.
+- **`android/`** — the SOSNet native Android app (Kotlin + Compose), the connectionless BLE/Wi-Fi-Aware
+  mesh. It is a **self-contained Gradle project** (its own `gradlew`, `build.gradle.kts`, `docs/`,
+  `CLAUDE.md`). Open `android/` directly in Android Studio. See **`android/CLAUDE.md`** for the mesh side.
+
+The dropped Expo app that used to live in `app/` has been removed — the Kotlin app replaces it.
+`android/` is **not** a Bun workspace; keep it out of the root `package.json` workspaces.
 
 Working language of comments/docs is Spanish in places; code identifiers are English.
 
