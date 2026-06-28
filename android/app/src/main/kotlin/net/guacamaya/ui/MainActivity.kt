@@ -71,8 +71,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.mesh.NodeCatalog
+import net.guacamaya.backend.OfficialAlert
 import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.service.GuacamayaForegroundService
+import org.json.JSONObject
 import android.util.Log
 import net.guacamaya.util.BatteryHelper
 import kotlin.math.roundToInt
@@ -222,6 +224,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     val latestNodes by vm.latestNodes.collectAsState()
     val devicesReceived by vm.devicesReceived.collectAsState()
     val totalFrames by vm.totalFrames.collectAsState()
+    val alerts by vm.alerts.collectAsState()
     val ctx = LocalContext.current
     val probeCompass = rememberCompassState()
     val probeLocation = rememberLiveLocation(ctx, highAccuracy = false)
@@ -288,6 +291,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
                 mode = mode,
                 latestNodes = latestNodes,
                 devicesReceived = devicesReceived,
+                alerts = alerts,
                 onPower = { onPower() },
                 onSelectMode = { onSelectMode(it) },
                 onOpenMap = { showMap = true },
@@ -330,6 +334,7 @@ private fun HomeScreen(
     mode: MeshMode,
     latestNodes: List<MessageEntity>,
     devicesReceived: Int,
+    alerts: List<OfficialAlert>,
     onPower: () -> Unit,
     onSelectMode: (MeshMode) -> Unit,
     onOpenMap: () -> Unit,
@@ -346,6 +351,11 @@ private fun HomeScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Header(nodeIdHex)
+
+        if (alerts.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            AlertsBanner(alerts = alerts)
+        }
 
         if (showBatteryHint) {
             Spacer(Modifier.height(10.dp))
@@ -438,6 +448,68 @@ private fun BatteryHintBanner(isXiaomi: Boolean, onConfigure: () -> Unit, onDism
                     .clickable(onClick = onDismiss)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) { Text("Ahora no", color = TextLo, fontSize = 12.sp) }
+        }
+    }
+}
+
+/** Channel id → human label for official alerts. */
+private fun officialChannelLabel(channel: String): String = when (channel) {
+    "alertas" -> "Alerta oficial"
+    "refugios" -> "Refugio"
+    "ayuda-medica" -> "Ayuda médica"
+    else -> channel
+}
+
+/** Best-effort (title, body) from the verbatim payload JSON; never throws. */
+private fun alertDisplay(payloadRaw: String): Pair<String, String?> = try {
+    val o = JSONObject(payloadRaw)
+    fun first(vararg keys: String): String? =
+        keys.firstNotNullOfOrNull { k -> o.optString(k).ifBlank { null } }
+    val title = first("titulo", "title", "encabezado") ?: "Mensaje oficial"
+    val body = first("mensaje", "message", "body", "descripcion", "detalle")
+    title to body
+} catch (_: Exception) {
+    payloadRaw.take(120) to null
+}
+
+/**
+ * Read-only banner of backend-verified official alerts (downlink). Only records whose
+ * Ed25519 signature checked out reach here (see AlertsRepository) — the green accent and
+ * ✓ marker signal that authenticity, distinct from community mesh SOS.
+ */
+@Composable
+private fun AlertsBanner(alerts: List<OfficialAlert>) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Card)
+            .border(1.dp, Online.copy(alpha = 0.55f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Text(
+            "✓ ${alerts.size} ${if (alerts.size == 1) "alerta oficial verificada" else "alertas oficiales verificadas"}",
+            color = Online,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        alerts.take(3).forEach { alert ->
+            val (title, body) = alertDisplay(alert.payloadRaw)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "${officialChannelLabel(alert.channel)} · $title",
+                color = TextHi,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (body != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(body, color = TextLo, fontSize = 12.sp)
+            }
+        }
+        if (alerts.size > 3) {
+            Spacer(Modifier.height(6.dp))
+            Text("+${alerts.size - 3} más", color = TextLo, fontSize = 12.sp)
         }
     }
 }

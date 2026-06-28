@@ -29,7 +29,7 @@ class IngestUploadWorker(
 
     override suspend fun doWork(): Result {
         val dao = GuacamayaDatabase.get(applicationContext).messageDao()
-        val repo = IngestRepository(dao, IngestClient(BuildConfig.INGEST_BASE_URL))
+        val repo = IngestRepository(dao, IngestClient(BuildConfig.BACKEND_BASE_URL))
 
         val summary = repo.uploadPending()
         Log.i(

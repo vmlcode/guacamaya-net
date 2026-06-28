@@ -77,13 +77,15 @@ de ubicaciones: la misma compuerta Ed25519 que protege los registros protege las
 
 ## 10. Dos esquemas de cripto, un solo puente
 
-No son intercambiables:
+No son intercambiables — son **cuatro caminos de cripto distintos**:
 - **Guacamaya mesh** firma el payload binario crudo de 22 B (Ed25519 sobre los bytes).
-- **Backend** (registros oficiales) firma un hash canónico del `ChannelRecord`.
+- **Backend** (registros oficiales) firma `SHA-256(content canónico)` del `ChannelRecord` (mensaje = el hash de 32 B, no el content). La app lo verifica en el downlink — ver [[Downlink Alertas Oficiales]].
 - **Resolve** introduce un tercer formato canónico (`guacamaya.resolve.v1`) co-firmado por testigos.
+- En Android, `Signer.verify` (22 B) y `Signer.verifyMessage` (longitud arbitraria) cubren los dos primeros; mantenerlos separados.
 
-El puente de la malla al backend es `POST /ingest`, que re-verifica con la lógica de la malla. Ver
-[[Backend Data-Mule]] y [[Resolve y Confirmacion de Rescate]].
+El puente de la malla al backend es `POST /ingest` (uplink), que re-verifica con la lógica de la malla.
+La app **nunca** porta llaves de servidor; lo que consume (`/ingest`, `/pubkey`, `/channels`) no requiere
+llave. Ver [[Backend Data-Mule]], [[Seguridad Backend]] y [[Resolve y Confirmacion de Rescate]].
 
 ## 11. Filtro BLE por software, no por hardware
 

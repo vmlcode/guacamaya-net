@@ -13,7 +13,8 @@ Foto del estado de [[GuacamayaProject]] al **2026-06-28** (rama `develop`, monor
 - ✅ **Radar + brújula + mapa de cuadrícula offline** nuevos (`CompassHeading`, `GeoProximity`, `GridMap`); **osmdroid eliminado** y quitada la dependencia de GMS para el render. Ver [[Guacamaya (Android)]].
 - ✅ Pruning de la DB Room (conserva 25 000 filas, batcheado cada 128 inserts).
 - ✅ **`IngestClient` (data-mule uploader)** implementado: persiste la firma (migración Room v3), arma el frame de 118 B y hace `POST /ingest` vía WorkManager al recuperar red. Build + tests JVM verdes. **Pata de aceptación del backend verificada** contra server real (ingesta/dedup/rechazo/locations); falta el smoke en dispositivo. Ver [[IngestClient (Data-Mule Uploader)]].
-- ✅ Tests unitarios verdes (codec, crypto, geo/compass/proximity, ingest).
+- ✅ **Downlink de alertas oficiales** + alcanzabilidad: `BackendClient` descarga `/channels/:id/records` y **verifica la firma** (esquema oficial, `OfficialRecordVerifier`); banner en la UI; `BACKEND_BASE_URL` configurable (debug LAN override + cleartext de debug). Tests JVM verdes; falta smoke en dispositivo. Ver [[Downlink Alertas Oficiales]].
+- ✅ Tests unitarios verdes (codec, crypto, geo/compass/proximity, ingest, backend/alertas).
 
 ### [[Backend Data-Mule]]
 - ✅ `POST /ingest` zero-trust verificado contra server real (válido ingesta; alterado/forjado rechazado).
@@ -37,6 +38,7 @@ Foto del estado de [[GuacamayaProject]] al **2026-06-28** (rama `develop`, monor
       `10.0.2.2`). Ver [[IngestClient (Data-Mule Uploader)]].
 - [ ] **Fallback de ubicación sin Google Play Services**: el fix GPS aún usa `FusedLocationProviderClient` (GMS). Alternativa robusta para gama baja sin GMS: `LocationManager` de plataforma.
 - [ ] **Calibrar/robustecer brújula MIUI** en campo (`functional-compass` con Δheading ≈ 0° en paralelo).
+- [ ] **WebSocket `/ws`** en la app: suscribir `solicito-ayuda` para SOS comunitarios en vivo (siguiente nivel de wiring BE↔app). Ver [[Downlink Alertas Oficiales]].
 - [ ] **Integrar Wi-Fi Aware** al servicio (publish/subscribe del `NanMessenger`).
 - [ ] **Clientes de Resolve**: app del buscador + consola del coordinador (ver nota dedicada).
 - [ ] **Endurecer `/ingest`**: rate-limit por origen además del global; moderación de reportes de comunidad.

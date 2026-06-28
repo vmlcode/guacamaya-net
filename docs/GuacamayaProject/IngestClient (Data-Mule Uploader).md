@@ -40,9 +40,9 @@ se **excluyen** de la subida (filtro `length(sig) = 64`). Detalle del schema en
 1. **Migración real** `Migration(2,3)`, no destructiva (preservar frames recogidos en campo).
 2. **`HttpURLConnection`**, no OkHttp/Retrofit — cero deps nuevas de red (acorde al recorte de osmdroid/RAM gama baja).
 3. **`NetworkType.CONNECTED`** (Wi-Fi o LTE), no solo Wi-Fi — en un desastre la recuperación por LTE es justo el caso.
-4. **URL del backend** vía `BuildConfig.INGEST_BASE_URL`, **partida por build type**:
-   - `debug` → `http://10.0.2.2:3000` (loopback del host del emulador; cleartext permitido por el `network_security_config`).
-   - `release` → HTTPS desplegado; hoy un placeholder no resoluble (`https://guacamaya.invalid`) porque aún no hay backend desplegado. Override con `-PINGEST_RELEASE_URL=https://…` o env `INGEST_RELEASE_URL` (ver `android/app/build.gradle.kts`, val `ingestReleaseUrl`). Debe ser HTTPS — el `network_security_config` solo abre cleartext al loopback de dev.
+4. **URL del backend** vía `BuildConfig.BACKEND_BASE_URL` (renombrado desde `INGEST_BASE_URL`; uplink y downlink comparten host — ver [[Downlink Alertas Oficiales]]), **partida por build type**:
+   - `debug` → default `http://10.0.2.2:3000` (emulador); override para LAN/teléfono físico con `-PBACKEND_BASE_URL=http://192.168.x.y:3000`. El `network_security_config` de **debug** permite cleartext a cualquier host.
+   - `release` → HTTPS desplegado; placeholder no resoluble (`https://guacamaya.invalid`) hasta que exista. Override `-PBACKEND_RELEASE_URL=https://…`. Release sigue HTTPS-only.
 
 ## El contrato de respuesta condiciona el bookkeeping
 

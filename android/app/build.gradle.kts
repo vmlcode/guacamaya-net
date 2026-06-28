@@ -4,15 +4,21 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// Release /ingest endpoint. No backend is deployed yet, so this defaults to a
-// non-resolvable placeholder (a release build just fails the best-effort upload
-// rather than hitting a wrong host). Override once the HTTPS host exists, via
-// `-PINGEST_RELEASE_URL=https://…` or an INGEST_RELEASE_URL env var. Must be HTTPS:
-// the network-security-config only whitelists cleartext for the dev loopback.
-val ingestReleaseUrl: String =
-    (project.findProperty("INGEST_RELEASE_URL") as String?)
-        ?: System.getenv("INGEST_RELEASE_URL")
-        ?: "https://guacamaya.invalid"
+// Backend base URL (uplink /ingest + downlink /channels, /pubkey, /health).
+//
+// debug   → emulator host loopback by default; override for a LAN backend (physical
+//           phones) with `-PBACKEND_BASE_URL=http://192.168.x.y:3000`. The debug
+//           network-security-config permits cleartext to any host.
+// release → deployed HTTPS backend. No host exists yet, so it defaults to a
+//           non-resolvable placeholder (a release build just fails the best-effort
+//           call rather than hitting a wrong host). Override via
+//           `-PBACKEND_RELEASE_URL=https://…` or a BACKEND_RELEASE_URL env var.
+//           Must be HTTPS — the release network-security-config is HTTPS-only.
+fun prop(name: String, fallback: String): String =
+    (project.findProperty(name) as String?) ?: System.getenv(name) ?: fallback
+
+val backendDebugUrl: String = prop("BACKEND_BASE_URL", "http://10.0.2.2:3000")
+val backendReleaseUrl: String = prop("BACKEND_RELEASE_URL", "https://guacamaya.invalid")
 
 android {
     namespace = "net.guacamaya"
@@ -36,14 +42,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Deployed HTTPS backend (placeholder until one exists — see ingestReleaseUrl).
-            buildConfigField("String", "INGEST_BASE_URL", "\"$ingestReleaseUrl\"")
+            // Deployed HTTPS backend (placeholder until one exists — see backendReleaseUrl).
+            buildConfigField("String", "BACKEND_BASE_URL", "\"$backendReleaseUrl\"")
         }
         debug {
             isMinifyEnabled = false
-            // Emulator host loopback (10.0.2.2 → host's localhost:3000), cleartext
-            // allowed by network_security_config. Override per device as needed.
-            buildConfigField("String", "INGEST_BASE_URL", "\"http://10.0.2.2:3000\"")
+            // Emulator loopback by default; override with -PBACKEND_BASE_URL for a LAN backend.
+            // Cleartext allowed broadly by the debug network-security-config.
+            buildConfigField("String", "BACKEND_BASE_URL", "\"$backendDebugUrl\"")
         }
     }
 
