@@ -150,6 +150,24 @@ class Broadcaster private constructor(
     }
 
     companion object {
+        /**
+         * Whether this device can transmit a Guacamalla frame — i.e. has a Bluetooth
+         * adapter that supports multiple + extended LE advertising. False on emulators
+         * and chips without BLE 5 extended advertising. Read-only, no side effects;
+         * the UI uses it to warn before the user picks a broadcasting mode.
+         */
+        fun isSupported(context: Context): Boolean {
+            val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            val adapter = bm?.adapter ?: return false
+            if (!adapter.isMultipleAdvertisementSupported) return false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !adapter.isLeExtendedAdvertisingSupported
+            ) {
+                return false
+            }
+            return adapter.bluetoothLeAdvertiser != null
+        }
+
         fun create(context: Context): Broadcaster? {
             val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
             val adapter = bm?.adapter ?: run {

@@ -14,6 +14,7 @@ import net.guacamaya.BuildConfig
 import net.guacamaya.backend.AlertsRepository
 import net.guacamaya.backend.BackendClient
 import net.guacamaya.backend.OfficialAlert
+import net.guacamaya.ble.Broadcaster
 import net.guacamaya.crypto.Identity
 import net.guacamaya.mesh.MessageDao
 import net.guacamaya.mesh.MessageEntity
@@ -60,6 +61,12 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     /** User-selected operating mode for the big power button. Default: BOTH. */
     private val _mode = MutableStateFlow(MeshMode.BOTH)
     val mode: StateFlow<MeshMode> = _mode.asStateFlow()
+
+    /**
+     * Whether this device can transmit SOS over BLE (extended advertising). False on
+     * emulators / chips without BLE 5 — the UI warns before a broadcasting mode is used.
+     */
+    val broadcastSupported: Boolean = Broadcaster.isSupported(app)
 
     /**
      * Verified official alerts pulled from the optional backend (downlink). Empty

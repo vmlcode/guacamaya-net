@@ -39,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Foreground service that keeps BLE (and, when added, Wi-Fi Aware) alive while
@@ -179,11 +180,16 @@ class GuacamayaForegroundService : Service() {
             val bcast = broadcaster ?: Broadcaster.create(this@GuacamayaForegroundService)?.also { broadcaster = it }
             if (bcast == null) {
                 Log.e(tag, "Broadcaster.create failed — extended BLE ADV not supported")
-                android.widget.Toast.makeText(
-                    this@GuacamayaForegroundService,
-                    "BLE broadcast not supported on this device",
-                    android.widget.Toast.LENGTH_LONG,
-                ).show()
+                // Toast must be created on a thread with a Looper; this coroutine runs on
+                // Dispatchers.Default. Marshal to the main thread or it crashes (the UI also
+                // warns proactively via MapViewModel.broadcastSupported).
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        this@GuacamayaForegroundService,
+                        "Este equipo no puede transmitir SOS por BLE",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                }
             } else {
                 bcast.start(payload, id.publicKey, sig)
             }

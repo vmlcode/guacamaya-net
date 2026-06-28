@@ -318,6 +318,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
                 alerts = alerts,
                 onPower = { onPower() },
                 onSelectMode = { onSelectMode(it) },
+                broadcastSupported = vm.broadcastSupported,
                 onOpenRadar = { showRadar = true },
             )
         }
@@ -354,6 +355,7 @@ private fun HomeScreen(
     alerts: List<OfficialAlert>,
     onPower: () -> Unit,
     onSelectMode: (MeshMode) -> Unit,
+    broadcastSupported: Boolean,
     onOpenRadar: () -> Unit,
 ) {
     val lastNode = latestNodes.firstOrNull()
@@ -401,9 +403,14 @@ private fun HomeScreen(
 
         ModeSelector(selected = mode, onSelect = onSelectMode)
 
+        if (!broadcastSupported && mode != MeshMode.FIND) {
+            Spacer(Modifier.height(Space.sm))
+            BroadcastUnsupportedBanner()
+        }
+
         Spacer(Modifier.weight(1f))
 
-        PowerButton(active = running, onClick = onPower)
+        PowerButton(active = running, mode = mode, onClick = onPower)
 
         Spacer(Modifier.height(Space.xl))
 
@@ -427,6 +434,31 @@ private fun HomeScreen(
         Spacer(Modifier.height(Space.sm))
 
         RadarEntry(latestNodes = latestNodes, onClick = onOpenRadar)
+    }
+}
+
+/** Warns (amber, icon + word) that this device can't transmit SOS over BLE — e.g. emulators. */
+@Composable
+private fun BroadcastUnsupportedBanner() {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(GuacamayaPalette.WarningSoft)
+            .border(1.dp, GuacamayaPalette.Warning.copy(alpha = 0.55f), MaterialTheme.shapes.medium)
+            .padding(Space.sm),
+    ) {
+        Text(
+            "⚠ Este equipo no puede transmitir SOS",
+            color = GuacamayaPalette.Warning,
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Spacer(Modifier.height(Space.xxs))
+        Text(
+            "Sin soporte de publicidad BLE extendida. Aún puedes recibir alertas en modo Encontrar.",
+            color = TextLo,
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
@@ -583,11 +615,13 @@ private fun Header(nodeIdHex: String?) {
 }
 
 @Composable
-private fun PowerButton(active: Boolean, onClick: () -> Unit) {
-    // Flat hero button (prototype-aligned). Active = solid brand yellow + black SOS asterisk
-    // with an expanding beacon pulse; idle = flat dark surface + muted asterisk.
-    val fill by animateColorAsState(if (active) Brand else CardElevated, tween(250), label = "fill")
-    val glyph = if (active) OnBrand else TextLo
+private fun PowerButton(active: Boolean, mode: MeshMode, onClick: () -> Unit) {
+    // Flat hero button (prototype-aligned). Active fill follows the mode: SOS = danger red
+    // (distress), Encontrar/Ambos = brand yellow. Idle = flat dark surface + muted asterisk.
+    val accent = if (mode == MeshMode.SOS) DangerC else Brand
+    val onAccent = if (mode == MeshMode.SOS) GuacamayaPalette.OnSemantic else OnBrand
+    val fill by animateColorAsState(if (active) accent else CardElevated, tween(250), label = "fill")
+    val glyph = if (active) onAccent else TextLo
 
     Box(contentAlignment = Alignment.Center) {
         if (active) {
@@ -599,8 +633,8 @@ private fun PowerButton(active: Boolean, onClick: () -> Unit) {
                 label = "pulseProgress",
             )
             // Two staggered rings emanating from the button edge — "broadcasting" beacon.
-            PulseRing(progress = p)
-            PulseRing(progress = (p + 0.5f) % 1f)
+            PulseRing(progress = p, color = accent)
+            PulseRing(progress = (p + 0.5f) % 1f, color = accent)
         }
         Box(
             Modifier
@@ -621,12 +655,12 @@ private fun PowerButton(active: Boolean, onClick: () -> Unit) {
 
 /** Expanding ring that fades as it grows — the connected-state beacon pulse. */
 @Composable
-private fun PulseRing(progress: Float) {
+private fun PulseRing(progress: Float, color: Color) {
     Box(
         Modifier
             .size(200.dp)
             .scale(1f + progress * 0.45f)
-            .border(3.dp, Brand.copy(alpha = (1f - progress) * 0.5f), CircleShape),
+            .border(3.dp, color.copy(alpha = (1f - progress) * 0.5f), CircleShape),
     )
 }
 
