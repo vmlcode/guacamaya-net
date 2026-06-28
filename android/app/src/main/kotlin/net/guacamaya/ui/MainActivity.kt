@@ -71,6 +71,7 @@ import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.mesh.NodeCatalog
 import net.guacamaya.service.GuacamayaForegroundService
 import android.util.Log
+import net.guacamaya.util.BatteryHelper
 import kotlin.math.roundToInt
 
 /**
