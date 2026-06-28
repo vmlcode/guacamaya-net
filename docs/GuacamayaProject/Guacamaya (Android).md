@@ -69,9 +69,10 @@ primeros 4 B de `SHA-256(pubkey)` — esto **ata el payload a la llave que lo fi
 `mesh/MessageStore.kt` — DB Room `guacamaya.db` (`GuacamayaDatabase`, tabla `messages`), solo frames
 **verificados**. Detalles que importan:
 
-- `MessageEntity` guarda `payloadRaw` (22 B), `pubkey` (32 B), más campos derivados (lat/lon, sosType,
-  flags, rssi, `receivedAt`). **No guarda la firma de 64 B** — dato clave para el `IngestClient`
-  pendiente (hay que añadir columna `sig`). Ver [[Estado y Pendientes]].
+- `MessageEntity` guarda `payloadRaw` (22 B), `pubkey` (32 B), **la firma `sig` (64 B)**, un flag
+  `uploaded`, más campos derivados (lat/lon, sosType, flags, rssi, `receivedAt`). La `sig` y `uploaded`
+  se añadieron en la migración Room **v3** para el [[IngestClient (Data-Mule Uploader)]] (antes la firma
+  no se persistía). Las filas pre-v3 quedan con `sig` vacía y se excluyen de la subida.
 - Pruning batcheado: cada `PRUNE_EVERY_INSERTS = 128` inserts conserva las `MAX_STORED_MESSAGES =
   25_000` filas más recientes (antes eran 500). `DEFAULT_RECENT_LIMIT = 2_000` para la UI.
 - `MessageDao.observeLatestPerNode` da la última fila por `node_id` (un dispositivo = un pin en
@@ -91,7 +92,7 @@ cada 30 s y reinicia scan si pasan 60 s sin frame Guacamaya.
   desde API 33, pero minSdk es 26). Firmar/verificar siempre por `crypto.Signer`.
 - El broadcast BLE requiere chip con **Extended Advertising** (`isLeExtendedAdvertisingSupported`);
   si no, `Broadcaster.create` devuelve null.
-- **Sin cliente HTTP ni WorkManager** en las deps todavía (solo core/lifecycle/compose/bouncycastle/
-  room/play-services-location) — relevante para construir el `IngestClient`.
+- Red: **WorkManager 2.9.1** (para el [[IngestClient (Data-Mule Uploader)]]) + `HttpURLConnection` de la
+  plataforma (sin OkHttp/Retrofit). `INTERNET`/`ACCESS_NETWORK_STATE` ya estaban en el manifest.
 
 Cómo compilar y correr: [[Build y Entorno]]. Estado y pendientes: [[Estado y Pendientes]].

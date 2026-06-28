@@ -34,6 +34,7 @@ excepción: el nombre de rama remota `init-sosnet` es literal hasta que se renom
 - [[Backend Data-Mule]] — backend TS, API HTTP/WS, ingesta zero-trust, histórico de ubicación.
 - [[Seguridad Backend]] — endurecimiento: API keys, CORS, rate limits, auth de WebSocket.
 - [[Resolve y Confirmacion de Rescate]] — quórum M-de-N de testigos co-firmantes para dar por resuelto un SOS.
+- [[IngestClient (Data-Mule Uploader)]] — el uploader Kotlin que sube los frames recogidos al `POST /ingest`.
 - [[Arquitectura y Decisiones]] — monorepo, rebrand, descarte de Briar/Expo/osmdroid, decisiones de diseño.
 - [[Build y Entorno]] — cómo compilar y correr cada parte.
 - [[Estado y Pendientes]] — qué funciona, qué está parcial, trabajo abierto.
