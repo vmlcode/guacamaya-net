@@ -368,3 +368,22 @@ Sigue requiriendo **calibración física** (`magnet=bad`). Código ahora permite
 ### Pendiente tick 17
 - Repetir brújula cruzada tras calibración sweet en campo
 - ENU `rel=` / bearing entre dispositivos
+
+---
+
+## Iteración 16 — 2026-06-28 (loop 10m, tick 17)
+
+### Prueba adb
+| Check | Resultado |
+|-------|-----------|
+| Realme brújula | **heading 98–109°**, `usable=true magnet=high` |
+| sweet brújula | **heading=0**, `magnet=bad usable=false` (sin calibración física) |
+| sweet BLE RX | **OK** — `saw_uuid`, `FloodRouter OK` nodo Realme `752de3df` |
+| `functional-compass` | Mejorado: poll 27 s + resumen Δheading |
+
+### Cambios
+- **`functional-compass`**: poll probe hasta 27 s por dispositivo; imprime Δheading si ambos responden
+
+### Pendiente tick 18
+- `./scripts/demo.sh compass-miui sweet` + figura-8 → repetir `functional-compass`
+- Brújula usable en sweet para validar ENU `rel=` cruzado

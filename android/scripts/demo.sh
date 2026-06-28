@@ -431,6 +431,7 @@ case "${1:-help}" in
     SWEET="${DEVICE_TEST_RX:-sweet}"
     echo "[functional-compass] brújula en ambos dispositivos"
     JAVA_HOME="$JAVA_HOME" ./gradlew :app:installDebug -q
+    SWEET_H="" REALME_H=""
     for pair in "$SWEET:sweet" "$REALME:realme"; do
       hint="${pair%%:*}"
       label="${pair##*:}"
@@ -440,15 +441,28 @@ case "${1:-help}" in
       adb -s "$serial" shell am force-stop "$PKG" 2>/dev/null || true
       sleep 1
       am_start_action "$serial" "${PKG}.action.HEARTBEAT_ON"
-      sleep 18
       echo "=== $label ($dev $serial) ==="
-      probe="$(adb -s "$serial" shell pidof "$PKG" 2>/dev/null | awk '{print $1}' | tr -d '\r\n')"
-      if [ -n "$probe" ]; then
-        adb -s "$serial" logcat -d --pid="$probe" 2>/dev/null | grep 'guacamaya.probe' | tail -4 || true
+      line=""
+      for _ in 1 2 3 4 5 6 7 8 9; do
+        sleep 3
+        snap="$(probe_snapshot "$serial")"
+        line="$(printf '%s\n' "$snap" | grep 'heading=' | tail -1 || true)"
+        [ -n "$line" ] && break
+      done
+      if [ -n "$line" ]; then
+        echo "$line"
+        h="$(printf '%s' "$line" | sed -n 's/.*heading=\([^ ]*\).*/\1/p')"
+        magnet="$(printf '%s' "$line" | sed -n 's/.*magnet=\([^ ]*\).*/\1/p')"
+        usable="$(printf '%s' "$line" | sed -n 's/.*usable=\([^ ]*\).*/\1/p')"
+        echo "  → heading=${h:-?}° usable=${usable:-?} magnet=${magnet:-?}"
+        if [ "$label" = "sweet" ]; then SWEET_H="$h"; else REALME_H="$h"; fi
       else
-        adb -s "$serial" logcat -d -s guacamaya.probe:I 2>/dev/null | tail -4 || true
+        echo "  (sin probe heading en 27 s — usar: ./scripts/demo.sh compass-miui $hint)"
       fi
     done
+    if [ -n "$SWEET_H" ] && [ -n "$REALME_H" ]; then
+      echo "[functional-compass] Δheading Realme−sweet ≈ $(( (REALME_H - SWEET_H + 540) % 360 - 180 ))° (paralelos → ~0°)"
+    fi
     echo "[functional-compass] Coloca ambos teléfonos paralelos y compara heading en probe."
     ;;
 
