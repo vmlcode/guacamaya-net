@@ -175,10 +175,13 @@ start_fg_service() {
 # JDK 17+ required. AGP 8.5.2 runs cleanly on JDK 21. Resolution order:
 #   1. caller-provided JAVA_HOME
 #   2. Android Studio's bundled JBR (JDK 21)
-#   3. system default on PATH
+#   3. /usr/lib/jvm/java-17-openjdk (avoid JDK 26+ — Kotlin cannot parse 26.0.1)
+#   4. system default on PATH
 if [ -z "${JAVA_HOME:-}" ]; then
   if [ -x /opt/android-studio/jbr/bin/java ]; then
     JAVA_HOME=/opt/android-studio/jbr
+  elif [ -x /usr/lib/jvm/java-17-openjdk/bin/java ]; then
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk
   else
     JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
   fi
