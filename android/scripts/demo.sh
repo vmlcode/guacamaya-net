@@ -146,8 +146,8 @@ wait_rx_probe() {
       echo "[wait-rx] FloodRouter OK=$ok after ${elapsed}s"
       return 0
     fi
-    if probe_rx_ok "$serial" >/dev/null 2>&1; then
-      probe_rx_ok "$serial"
+    if out="$(probe_rx_ok "$serial" 2>&1)"; then
+      echo "$out"
       echo "[wait-rx] probe visible after ${elapsed}s"
       return 0
     fi
@@ -286,8 +286,8 @@ case "${1:-help}" in
     am_start_action "$(adb_serial "$REALME")" "${PKG}.action.START"
     echo "[device-test] waiting 20s + probe poll..."
     sleep 20
-    wait_rx_probe "$SWEET_SERIAL" 60
-    PROBE_OK=$?
+    PROBE_OK=0
+    wait_rx_probe "$SWEET_SERIAL" 60 || PROBE_OK=$?
     serial="$SWEET_SERIAL"
     ok="$(rx_ok_count "$serial")"
     echo "[device-test] sweet Received(OK)=$ok"
