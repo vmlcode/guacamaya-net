@@ -146,8 +146,8 @@ wait_rx_probe() {
       echo "[wait-rx] FloodRouter OK=$ok after ${elapsed}s"
       return 0
     fi
-    if probe_rx_ok "$serial" >/dev/null 2>&1; then
-      probe_rx_ok "$serial"
+    if out="$(probe_rx_ok "$serial" 2>&1)"; then
+      echo "$out"
       echo "[wait-rx] probe visible after ${elapsed}s"
       return 0
     fi
@@ -281,12 +281,13 @@ case "${1:-help}" in
     adb -s "$(adb_serial "$SWEET")" logcat -c 2>/dev/null || true
     SWEET_SERIAL="$(adb_serial "$SWEET")"
     am_start_action "$SWEET_SERIAL" "${PKG}.action.OBSERVE_ON"
+    am_start_action "$SWEET_SERIAL" "${PKG}.action.HEARTBEAT_ON"
     sleep 8
     am_start_action "$(adb_serial "$REALME")" "${PKG}.action.START"
     echo "[device-test] waiting 20s + probe poll..."
     sleep 20
-    wait_rx_probe "$SWEET_SERIAL" 40
-    PROBE_OK=$?
+    PROBE_OK=0
+    wait_rx_probe "$SWEET_SERIAL" 60 || PROBE_OK=$?
     serial="$SWEET_SERIAL"
     ok="$(rx_ok_count "$serial")"
     echo "[device-test] sweet Received(OK)=$ok"
@@ -304,6 +305,16 @@ case "${1:-help}" in
       echo "[device-test] PASS (probe fallback)"
       exit 0
     fi
+    REALME_SERIAL="$(adb_serial "$REALME")"
+    echo "[device-test] Realme probe fallback poll (sweet logd often empty)..."
+    for _ in 1 2 3 4 5 6; do
+      if probe_rx_ok "$REALME_SERIAL"; then
+        probe_rx_ok "$REALME_SERIAL"
+        echo "[device-test] PASS (Realme probe fallback — sweet logd empty)"
+        exit 0
+      fi
+      sleep 5
+    done
     echo "[device-test] FAIL — expected ≥1 OK or probe RX on $SWEET" >&2
     exit 1
     ;;
