@@ -33,6 +33,7 @@ class Observer private constructor(
     @Volatile private var scanProfile = BleConfig.ScanProfile.AGGRESSIVE
     private var lastCallbackAt = 0L
     @Volatile private var lastGuacamayaFrameAt = 0L
+    private var scanCallbackCount = 0
     private val activeCallback = AtomicReference<ScanCallback?>(null)
 
     /** Called on every Guacamaya-shaped frame. Implementations must be thread-safe. */
@@ -47,6 +48,9 @@ class Observer private constructor(
     private fun newCallback(): ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             lastCallbackAt = SystemClock.elapsedRealtime()
+            if (++scanCallbackCount % 2000 == 0) {
+                Log.i(tag, "scan callbacks=$scanCallbackCount profile=$scanProfile")
+            }
             handle(result)
         }
 
@@ -65,6 +69,10 @@ class Observer private constructor(
 
     private fun handle(result: ScanResult) {
         val rec = result.scanRecord ?: return
+        val sawUuid = rec.serviceUuids?.contains(BleConfig.SERVICE_PARCEL_UUID) == true
+        if (sawUuid) {
+            Log.i(tag, "saw UUID rssi=${result.rssi} legacy=${result.isLegacy} len=${rec.bytes?.size ?: 0}")
+        }
         val blob = extractServiceData(rec)
         if (blob == null || blob.size != BleConfig.SERVICE_DATA_SIZE) {
             val sawUuid = rec.serviceUuids?.contains(BleConfig.SERVICE_PARCEL_UUID) == true

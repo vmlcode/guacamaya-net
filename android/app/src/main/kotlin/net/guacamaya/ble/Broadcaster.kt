@@ -28,6 +28,9 @@ class Broadcaster private constructor(
     private val activeSet = AtomicReference<AdvertisingSet?>(null)
     @Volatile private var currentServiceData: ByteArray = ByteArray(BleConfig.SERVICE_DATA_SIZE)
     @Volatile private var activeCallback: AdvertisingSetCallback? = null
+    @Volatile private var pendingPayload: Quad? = null
+
+    private data class Quad(val p22: ByteArray, val pub: ByteArray, val sig: ByteArray, val ttl: Int)
 
     /** True if advertising is currently on. */
     val isAdvertising: Boolean get() = activeSet.get() != null
@@ -38,7 +41,13 @@ class Broadcaster private constructor(
      * Service UUID. [ttl] is the unsigned hop budget (0..15) written at offset 0.
      */
     fun start(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int = BleConfig.ORIGIN_HOP_TTL) {
-        val combined = frame(payload22, pub32, sig64, ttl)
+        pendingPayload = Quad(payload22, pub32, sig64, ttl)
+        beginAdvertising(BleConfig.parametersCompat, "1M/1M")
+    }
+
+    private fun beginAdvertising(params: android.bluetooth.le.AdvertisingSetParameters, label: String) {
+        val pending = pendingPayload ?: return
+        val combined = frame(pending.p22, pending.pub, pending.sig, pending.ttl)
         currentServiceData = combined
 
         val data = AdvertiseData.Builder()
@@ -48,13 +57,19 @@ class Broadcaster private constructor(
             .addServiceData(BleConfig.SERVICE_PARCEL_UUID, combined)
             .build()
 
+        activeCallback?.let { advertiser.stopAdvertisingSet(it) }
+        activeSet.set(null)
+
         val callback = object : AdvertisingSetCallback() {
             override fun onAdvertisingSetStarted(set: AdvertisingSet?, txPower: Int, status: Int) {
                 if (status == ADVERTISE_SUCCESS) {
                     activeSet.set(set)
-                    Log.i(tag, "advertising started, txPower=$txPower dBm, frame=${combined.size} B")
+                    Log.i(tag, "advertising started ($label), txPower=$txPower dBm, frame=${combined.size} B")
+                } else if (params == BleConfig.parametersCompat) {
+                    Log.w(tag, "compat ADV failed status=$status — retry 1M/CODED")
+                    beginAdvertising(BleConfig.parameters, "1M/CODED")
                 } else {
-                    Log.e(tag, "advertising start failed status=$status")
+                    Log.e(tag, "advertising start failed status=$status ($label)")
                 }
             }
 
@@ -73,8 +88,7 @@ class Broadcaster private constructor(
             }
         }
         activeCallback = callback
-
-        advertiser.startAdvertisingSet(BleConfig.parameters, data, null, null, null, callback)
+        advertiser.startAdvertisingSet(params, data, null, null, null, callback)
     }
 
     /**

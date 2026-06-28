@@ -74,6 +74,20 @@ object BleConfig {
         .build()
 
     /**
+     * 1M primary + 1M secondary extended ADV. Required for Redmi Note 10 (sweet)
+     * class receivers — they often miss CODED secondary from Qualcomm broadcasters.
+     * Prefer this as the default; fall back to [parameters] if the controller rejects it.
+     */
+    val parametersCompat: AdvertisingSetParameters = AdvertisingSetParameters.Builder()
+        .setConnectable(false)
+        .setScannable(false)
+        .setPrimaryPhy(BluetoothDevice.PHY_LE_1M)
+        .setSecondaryPhy(BluetoothDevice.PHY_LE_1M)
+        .setInterval(AdvertisingSetParameters.INTERVAL_MIN)
+        .setTxPowerLevel(AdvertisingSetParameters.TX_POWER_MAX)
+        .build()
+
+    /**
      * Scan profiles for the Observer. Extended ADV (119 B service-data) requires
      * `legacy=false`; hardware ScanFilter is avoided (see Observer.kt).
      *
@@ -111,10 +125,8 @@ object BleConfig {
                     builder.setMatchMode(ScanSettings.MATCH_MODE_STICKY)
                     builder.setNumOfMatches(ScanSettings.MATCH_NUM_ONE_ADVERTISEMENT)
                     builder.setPhy(
-                        when {
-                            adapter.isLeCodedPhySupported -> ScanSettings.PHY_LE_ALL_SUPPORTED
-                            else -> BluetoothDevice.PHY_LE_1M
-                        },
+                        if (adapter.isLeCodedPhySupported) ScanSettings.PHY_LE_ALL_SUPPORTED
+                        else BluetoothDevice.PHY_LE_1M,
                     )
                 }
             }

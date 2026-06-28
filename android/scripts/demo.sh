@@ -140,6 +140,34 @@ case "${1:-help}" in
     adb -s "$serial" logcat -d -s guacamaya.mesh.FloodRouter:I 2>/dev/null | grep ' OK ' | tail -5 || true
     ;;
 
+  device-test)
+    REALME="${DEVICE_TEST_TX:-6LRGONDE6LRG9XCY}"
+    SWEET="${DEVICE_TEST_RX:-sweet}"
+    echo "[device-test] install + BLE smoke: TX=$REALME → observe $SWEET"
+    JAVA_HOME="$JAVA_HOME" ./gradlew :app:installDebug -q
+    adb -s "$(adb_serial "$REALME")" shell am start -n "$ACTIVITY" >/dev/null || true
+    adb -s "$(adb_serial "$SWEET")" shell am start -n "$ACTIVITY" >/dev/null || true
+    adb -s "$(adb_serial "$SWEET")" logcat -c 2>/dev/null || true
+    start_fg_service() {
+      local serial action
+      serial="$1"; action="$2"
+      adb -s "$serial" shell am start -a "$action" -n "$ACTIVITY" >/dev/null
+    }
+    start_fg_service "$(adb_serial "$SWEET")" "${PKG}.action.OBSERVE_ON"
+    start_fg_service "$(adb_serial "$REALME")" "${PKG}.action.START"
+    echo "[device-test] waiting 20s..."
+    sleep 20
+    serial="$(adb_serial "$SWEET")"
+    ok="$(adb -s "$serial" logcat -d -s guacamaya.mesh.FloodRouter:I 2>/dev/null | grep -c ' OK ' || true)"
+    echo "[device-test] sweet Received(OK)=$ok"
+    adb -s "$serial" logcat -d -s guacamaya.ble.Observer:D guacamaya.mesh.FloodRouter:I 2>/dev/null | tail -8 || true
+    if [ "${ok:-0}" -lt 1 ]; then
+      echo "[device-test] FAIL — expected ≥1 OK on $SWEET" >&2
+      exit 1
+    fi
+    echo "[device-test] PASS"
+    ;;
+
   sweet)
     DEVICE_HINT=sweet
     serial="$(adb_serial sweet)"
@@ -186,7 +214,7 @@ Commands:
   broadcast-off [dev] stop broadcast
   heartbeat-on [dev]  start signed presence beacon (radar)
   heartbeat-off [dev] stop presence beacon
-  received [dev]  count OK/DROP lines from logcat (Received proxy)
+  device-test        BLE smoke: Realme START → sweet observe (exit 1 if 0 OK)
   sweet         print Redmi Note 10 (sweet) adb info
   tamper        run tamper_test.py, push JSON to /sdcard if device attached
   logcat [dev]  stream colorized guacamaya logcat
