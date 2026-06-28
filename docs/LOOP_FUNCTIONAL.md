@@ -568,3 +568,27 @@ Calibración magnética sweet (`./scripts/demo.sh compass-miui sweet` + figura-8
 
 ### Nota
 Loop continúa en modo vigilancia; sin avance posible sin intervención manual (Realme USB + figura-8 sweet).
+
+---
+
+## Iteración 25 — 2026-06-28 (loop 10m, tick 70)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| Dispositivos | Solo **sweet**; Realme ausente (ticks 38–70) |
+| `device-test` | **PASS** parcial @0 s — sweet `nodes=2 frames=69` |
+| `functional-compass` | sweet **0° magnet=bad**; Realme N/A |
+
+### Resumen ticks 61–70
+| Área | Estado |
+|------|--------|
+| Validación | ⚠️ Degradada — 33 ticks consecutivos solo sweet |
+| Fix tick 61 | JDK 17 fallback (`716c283`) — Java 26 rompía Gradle |
+| Brújula sweet | ❌ `magnet=bad` — sin calibración manual |
+| BLE bidireccional | ⏸️ Pausado desde tick 38 |
+
+### Bloqueadores (sin cambio)
+1. Reconectar Realme por USB
+2. Figura-8 en sweet
+3. `ble-reverse-test` + `functional-compass` con ambos dispositivos
