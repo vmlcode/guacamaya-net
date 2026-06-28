@@ -5,15 +5,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this branch is
 
 The **`develop` branch is the Guacamaya Red backend** — a Bun + TypeScript monorepo. Its job in the
-current design is narrow: be the optional **data-mule ingestion point** for the SOSNet Android mesh.
+current design is narrow: be the optional **data-mule ingestion point** for the Guacamaya Android mesh.
 Phones that recover connectivity upload the signed mesh frames they collected; the backend
 re-verifies and persists them.
 
-> The Expo app under `app/` is **dropped** — the native Kotlin app (SOSNet, on the `init-sosnet`
-> branch) replaces it. Ignore `app/`; do not build features there. The two products live on separate
-> branch lineages in the same repo — see the SOSNet branch's `CLAUDE.md` for the mesh side.
+> The Expo app under `app/` is **dropped** — the native Kotlin Guacamaya app (mesh side, on the
+> `init-sosnet` branch) replaces it. Ignore `app/`; do not build features there. The two products live
+> on separate branch lineages in the same repo — see the mesh branch's `CLAUDE.md` for the mesh side.
 
 Working language of comments/docs is Spanish in places; code identifiers are English.
+
+## Brand rules
+
+- The app / mesh product is called **Guacamaya** (the whole project is **Guacamaya Red** / Guacamaya
+  Net). **Never call it "SOSNet"** in prose, docs, comments, identifiers, or UI — that is a retired
+  name. New code and docs must use *Guacamaya*.
+- Exceptions, because they are real artifacts that still carry the old name (rename them at the source
+  before changing them here, or the reference breaks):
+  - the git branch **`init-sosnet`** (the mesh app lives there) — keep the literal branch name until
+    it is actually renamed.
+  - the Kotlin package **`org.sosnet.proto.*`** that `backend/src/mesh/frame.ts` mirrors — keep the
+    literal identifier until the mesh branch renames the package, then update both sides together.
+
+> **Context rule:** when a request touches anything under `backend/` or the shared user flow (API
+> contracts, data shapes shared between mesh and backend, WebSocket events, channel/location
+> ingestion), read `backend/CLAUDE.md` first — it has the three-layer stack pattern, the dedup
+> invariant, environment setup, and per-domain commands.
 
 ## Run / test (Bun-first — never npm/node)
 
@@ -25,10 +42,11 @@ bun run build           # typecheck/build shared + backend
 ```
 
 Bun installs to `~/.bun/bin`. Runs out of the box with **no database**: if `SUPABASE_URL` /
-`SUPABASE_SERVICE_ROLE_KEY` are unset, the data layer falls back to an in-memory store
-(`backend/src/channels/store.ts`). Configure `backend/.env` from `backend/.env.example`; set
-`BACKEND_PRIVATE_KEY_HEX` so the server's Ed25519 identity (and public key) stays stable across
-reboots — otherwise a fresh ephemeral keypair is generated each boot (it warns on startup).
+`SUPABASE_SERVICE_ROLE_KEY` are unset, the data layer falls back to in-memory stores
+(`backend/src/channels/store.ts`, `backend/src/locations/store.ts`). Configure `backend/.env` from
+`backend/.env.example`; set `BACKEND_PRIVATE_KEY_HEX` so the server's Ed25519 identity (and public
+key) stays stable across reboots — otherwise a fresh ephemeral keypair is generated each boot (it
+warns on startup).
 
 ## Architecture
 
@@ -38,16 +56,22 @@ content (`packages/shared/src/crypto.ts` → `getRecordId`), so storage dedupes 
 union+dedupe the mesh gossip log uses. `verified:true` means **backend-signed official**; community
 reports are always `verified:false`.
 
+A second unit, **`LocationPoint`** (`{ id, deviceId, lat, lon, timestamp, accuracy? }`), carries GPS
+trajectory for the moving-map dashboard. Like records, `id` = SHA-256 of canonical content
+(`getLocationId`) so re-uploaded points dedupe.
+
 ### Layout
 
-- `packages/shared/` — `ChannelRecord` type, `getRecordId`, `verifyRecordSignature`, `mergeLogs`
-  (union + dedupe + signature check). Pure, has `bun:test` coverage. The contract both sides share.
-- `backend/src/index.ts` — Fastify bootstrap (CORS, rate-limit 100/min), routes, WS, graceful shutdown.
-- `backend/src/channels/routes.ts` — HTTP API (see below).
+- `packages/shared/` — `ChannelRecord` + `LocationPoint` types, `getRecordId`, `getLocationId`,
+  `verifyRecordSignature`, `mergeLogs` (union + dedupe + signature check). Pure, `bun:test` coverage.
+  The contract both sides share. Keep it framework-agnostic.
+- `backend/src/index.ts` — Fastify bootstrap (CORS, rate-limit 100/min), registers route plugins, WS, graceful shutdown.
+- `backend/src/channels/routes.ts` — channel HTTP API + `/ingest` (see below). `store.ts` — in-memory fallback.
+- `backend/src/locations/routes.ts` — location HTTP API (see below). `store.ts` — in-memory fallback.
 - `backend/src/crypto/` — `keys.ts` (server identity), `signer.ts` (signs official records).
-- `backend/src/mesh/frame.ts` — **decodes + zero-trust-verifies SOSNet binary mesh frames** for `/ingest`.
-- `backend/src/db/` — `channelsRepo.ts` (Supabase with in-memory fallback), `supabase.ts`. Schema: `backend/supabase/schema.sql`.
-- `backend/src/ws/server.ts` — WebSocket `/ws`, subscribe/unsubscribe per channel, `broadcastRecord`.
+- `backend/src/mesh/frame.ts` — **decodes + zero-trust-verifies Guacamaya binary mesh frames** for `/ingest`.
+- `backend/src/db/` — `channelsRepo.ts`, `locationsRepo.ts` (Supabase with in-memory fallback), `supabase.ts`. Schema: `backend/supabase/schema.sql`.
+- `backend/src/ws/server.ts` — WebSocket `/ws`, subscribe/unsubscribe per channel, `broadcastRecord`, `broadcastLocation`.
 
 ### HTTP API
 
@@ -55,11 +79,13 @@ reports are always `verified:false`.
 - `GET /channels` — channel list.
 - `GET /channels/:id/records?since=<ms>` — records since a timestamp.
 - `POST /channels/:id/records` — create an **official** record: backend signs it (`verified:true`), persists, broadcasts over WS.
-- `POST /ingest` — **data-mule upload from the mesh** (see below).
+- `POST /ingest` — **data-mule upload of signed binary mesh frames** (see below). Also populates the
+  location history: each verified frame's lat/lon becomes a `LocationPoint`.
+- `GET /locations?since=<ms>&deviceId=<id>` — location points for the moving-map dashboard (read-only).
 
 ### `POST /ingest` — the data-mule bridge (most important flow)
 
-Body: `{ "frames": ["<base64>", ...] }`. Each frame is the SOSNet BLE service-data **with the leading
+Body: `{ "frames": ["<base64>", ...] }`. Each frame is the Guacamaya BLE service-data **with the leading
 hop-TTL byte stripped** → 118 bytes = `22 B payload + 32 B pubkey + 64 B signature` (a full 119-byte
 frame is tolerated by dropping the first byte).
 
@@ -72,10 +98,24 @@ here — a mule legitimately uploads stale reports. Verified frames become `veri
 records on channel `solicito-ayuda`, with `id = SHA-256(payload)` for dedupe. Response reports
 `{ ingested, duplicate, rejected, reasons }`.
 
+Note that the 22-byte payload **already carries lat/lon** (bytes 0..7, int32 E7) and a unix-seconds
+timestamp — so a verified SOS frame is itself a geolocated point. `decodeAndVerifyFrame` returns that
+`LocationPoint` alongside the record (`deviceId = device-<origin pubkey>`, not the mule; no accuracy
+field; `null` when the frame has no GPS fix), and `/ingest` persists it via `locationsRepo` and
+broadcasts it to `"locations"` WS subscribers — same zero-trust gate, no separate trusted endpoint.
+
 ## Conventions worth keeping
 
 - **Bun only** for package management and scripts (project preference). `.env.example` mentioning `npm` is stale.
 - `/ingest` must **never** persist a frame whose signature it hasn't re-verified. Verification is the gate.
 - Keep `packages/shared` framework-agnostic — it's the contract; don't pull backend-only deps into it.
-- The binary frame layout in `frame.ts` mirrors `proto/Payload.kt` on the SOSNet branch; if the wire
+- The binary frame layout in `frame.ts` mirrors `proto/Payload.kt` on the mesh branch; if the wire
   format changes there (offsets, sizes, CRC), update both or `/ingest` silently rejects valid frames.
+- **Always recompute `id` server-side** (`getRecordId` / `getLocationId`) on ingest — never trust a
+  client-supplied id.
+- **Locations are frame-derived, never client-trusted.** The canonical, authenticated source of a
+  device's position is the **lat/lon inside a verified mesh frame** — `decodeAndVerifyFrame` emits the
+  `LocationPoint` and `/ingest` persists it. There is intentionally **no** trusted-JSON location
+  ingest endpoint (the original `POST /ingest/locations` was removed): the same Ed25519 gate that
+  guards records guards positions. `deviceId` is derived from the verified pubkey, never supplied by
+  the client. `GET /locations` stays read-only.

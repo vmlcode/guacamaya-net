@@ -18,3 +18,12 @@ export interface ChannelRecord {
 }
 
 export type RecordMap = Map<string, ChannelRecord>;
+
+export interface LocationPoint {
+  id: string;         // SHA-256 of canonical content → dedup key
+  deviceId: string;   // pseudonymous id of the origin device (not the mule)
+  lat: number;        // latitude  [-90, 90]
+  lon: number;        // longitude [-180, 180]
+  timestamp: number;  // unix ms of the GPS fix
+  accuracy?: number;  // precision in meters (optional)
+}

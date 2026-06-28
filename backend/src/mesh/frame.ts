@@ -1,10 +1,10 @@
 import * as ed from "@noble/ed25519";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { ChannelRecord } from "@guacamaya/shared";
+import { ChannelRecord, LocationPoint, getLocationId } from "@guacamaya/shared";
 
 /**
- * Server-side decoder + verifier for SOSNet BLE mesh frames uploaded by the
+ * Server-side decoder + verifier for Guacamaya BLE mesh frames uploaded by the
  * Android app acting as a data mule.
  *
  * The phone uploads each frame as Base64. The on-wire BLE service data is
@@ -37,7 +37,7 @@ const PAYLOAD_OFF = 0;
 const PUBKEY_OFF = PAYLOAD_OFF + PAYLOAD_LEN; // 22
 const SIG_OFF = PUBKEY_OFF + PUBKEY_LEN; // 54
 
-/** SOS type codes — mirror of org.sosnet.proto.SosType. */
+/** SOS type codes — mirror of org.sosnet.proto.SosType (Kotlin pkg pending rebrand to Guacamaya). */
 const SOS_TYPES = [
   "medical",
   "distress",
@@ -67,13 +67,15 @@ function crc16(data: Uint8Array, offset = 0, length = data.length): number {
 }
 
 export type FrameResult =
-  | { ok: true; record: ChannelRecord }
+  | { ok: true; record: ChannelRecord; location: LocationPoint | null }
   | { ok: false; reason: string };
 
 /**
  * Decode and cryptographically verify a single Base64-encoded mesh frame.
  * Returns a community `ChannelRecord` (verified === false — the Ed25519 check is
- * the ingestion gate, NOT the "official/backend-signed" flag) or a rejection.
+ * the ingestion gate, NOT the "official/backend-signed" flag) plus the geolocated
+ * `LocationPoint` carried by the same signed payload (null when the frame has no
+ * usable GPS fix), or a rejection.
  */
 export async function decodeAndVerifyFrame(frameB64: string): Promise<FrameResult> {
   let raw: Buffer;
@@ -139,6 +141,8 @@ export async function decodeAndVerifyFrame(frameB64: string): Promise<FrameResul
 
   const pubkeyHex = bytesToHex(pubkey);
   const nodeIdHex = bytesToHex(nodeId);
+  const lat = latE7 / 1e7;
+  const lon = lonE7 / 1e7;
 
   // Deterministic id = SHA-256 of the signed payload, hex. Same payload → same id,
   // so re-uploads of the same frame dedupe on Supabase's `id` primary key — the
@@ -157,8 +161,8 @@ export async function decodeAndVerifyFrame(frameB64: string): Promise<FrameResul
       nodeId: nodeIdHex,
       msgId,
       tsUnix,
-      lat: latE7 / 1e7,
-      lon: lonE7 / 1e7,
+      lat,
+      lon,
       sosType: SOS_TYPES[sosTypeCode] ?? "other",
       sosTypeCode,
       critical,
@@ -170,5 +174,25 @@ export async function decodeAndVerifyFrame(frameB64: string): Promise<FrameResul
     sig: bytesToHex(sig),
   };
 
-  return { ok: true, record };
+  // The same verified payload is also a geolocated point for the moving-map
+  // history. The authenticated origin is the signing pubkey (NOT the mule that
+  // uploaded the frame), so deviceId mirrors the record's `author`. The binary
+  // frame carries no accuracy field, and the timestamp is unix ms. A frame with
+  // no fix (null-island 0,0 or an out-of-range coordinate) yields no point.
+  let location: LocationPoint | null = null;
+  const hasFix =
+    Number.isFinite(lat) && Number.isFinite(lon) &&
+    lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 &&
+    !(lat === 0 && lon === 0);
+  if (hasFix) {
+    const point = {
+      deviceId: `device-${pubkeyHex}`,
+      lat,
+      lon,
+      timestamp: tsUnix * 1000,
+    };
+    location = { id: getLocationId(point), ...point };
+  }
+
+  return { ok: true, record, location };
 }

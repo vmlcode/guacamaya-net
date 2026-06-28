@@ -1,7 +1,7 @@
 import * as ed from "@noble/ed25519";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { ChannelRecord } from "./types.js";
+import { ChannelRecord, LocationPoint } from "./types.js";
 
 /**
  * Computes the SHA-256 hash byte array of a record's canonical contents.
@@ -18,6 +18,15 @@ export function getRecordHashContent(record: Omit<ChannelRecord, "id" | "sig">):
 export function getRecordId(record: Omit<ChannelRecord, "id" | "sig">): string {
   const hashBytes = getRecordHashContent(record);
   return bytesToHex(hashBytes);
+}
+
+/**
+ * Generates the deterministic unique identifier for a LocationPoint.
+ * Mirror of getRecordId; same content → same id across all mules.
+ */
+export function getLocationId(p: Omit<LocationPoint, "id">): string {
+  const content = `${p.deviceId}:${p.lat}:${p.lon}:${p.timestamp}:${p.accuracy ?? ""}`;
+  return bytesToHex(sha256(new TextEncoder().encode(content)));
 }
 
 /**
