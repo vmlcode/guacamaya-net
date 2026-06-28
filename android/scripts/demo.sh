@@ -117,6 +117,30 @@ rx_ok_count() {
   adb -s "$serial" logcat -d -s guacamaya.mesh.FloodRouter:I 2>/dev/null | grep -c ' OK ' || true
 }
 
+# Poll until FloodRouter OK or probe mesh fields appear (MIUI log lag on sweet).
+wait_rx_probe() {
+  local serial="$1"
+  local timeout="${2:-45}"
+  local elapsed=0 ok
+  echo "[wait-rx] serial=$serial timeout=${timeout}s"
+  while [ "$elapsed" -lt "$timeout" ]; do
+    ok="$(rx_ok_count "$serial")"
+    if [ "${ok:-0}" -ge 1 ]; then
+      echo "[wait-rx] FloodRouter OK=$ok after ${elapsed}s"
+      return 0
+    fi
+    if probe_rx_ok "$serial" >/dev/null 2>&1; then
+      probe_rx_ok "$serial"
+      echo "[wait-rx] probe visible after ${elapsed}s"
+      return 0
+    fi
+    sleep 5
+    elapsed=$((elapsed + 5))
+  done
+  echo "[wait-rx] timeout ${timeout}s — no RX evidence in logcat"
+  return 1
+}
+
 launch_app() {
   am_start_action "$(adb_serial "${DEVICE_HINT:-}")" "${1:-net.guacamaya.action.OBSERVE_ON}"
 }
@@ -447,12 +471,15 @@ case "${1:-help}" in
       adb -s "$SWEET_SERIAL" shell input tap 540 1100 2>/dev/null || true
     done
     am_start_action "$SWEET_SERIAL" "${PKG}.action.OBSERVE_ON"
-    sleep 25
-    ./scripts/demo.sh received "$SWEET"
-    SWEET_OK="$(rx_ok_count "$(adb_serial "$SWEET")")"
+    wait_rx_probe "$SWEET_SERIAL" 45
+    SWEET_PROBE_OK=$?
+    DEVICE_HINT=sweet ./scripts/demo.sh received
+    SWEET_OK="$(rx_ok_count "$SWEET_SERIAL")"
     if [ "${SWEET_OK:-0}" -ge 1 ]; then
       echo "[ble-reverse] Realme→sweet PASS (FloodRouter OK=$SWEET_OK)"
-    elif probe_rx_ok "$(adb_serial "$SWEET")"; then
+    elif [ "$SWEET_PROBE_OK" -eq 0 ]; then
+      echo "[ble-reverse] Realme→sweet PASS (probe poll)"
+    elif probe_rx_ok "$SWEET_SERIAL"; then
       echo "[ble-reverse] Realme→sweet PASS (probe fallback)"
     else
       echo "[ble-reverse] Realme→sweet FAIL (no FloodRouter OK, probe empty)" >&2

@@ -279,3 +279,24 @@ logd en sweet pierde logs `FloodRouter`/`Observer`; usar `guacamaya.probe` con `
 ### Pendiente tick 13
 - Poll `received` hasta probe/mesh visible (timeout 45 s) en fase 2
 - Brújula sweet en campo
+
+---
+
+## Iteración 12 — 2026-06-28 (loop 10m, tick 13)
+
+### Cambios
+- **`wait_rx_probe()`**: poll cada 5 s hasta 45 s — FloodRouter OK o probe mesh visible
+- **`ble-reverse-test` fase 2**: PASS si `wait_rx_probe` exitoso (no re-fallar por rotación logcat)
+
+### Prueba adb (`ble-reverse-test`)
+| Fase | Resultado |
+|------|-----------|
+| sweet→Realme | **92 OK**, `nodes=2 frames=67` |
+| Realme→sweet | `wait_rx_probe` **probe visible @25 s** — PASS con fix (logcat vacío en `received` instantáneo) |
+
+### Brújula
+Sin cambio en sweet (`magnet=bad`); Realme `usable=true magnet=high`.
+
+### Pendiente tick 14
+- Brújula sweet: figura-8 física
+- Confirmar `saw UUID` / FloodRouter OK en sweet fase 2 (logd `--pid=`)
