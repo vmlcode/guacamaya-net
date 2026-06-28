@@ -6,7 +6,9 @@ verificados que el teléfono recogió y los sube al `POST /ingest` del
 existe uploader Kotlin". Parte de [[GuacamayaProject]].
 
 > **Estado:** implementado en `develop` (commit `eee3508`), build + tests JVM en
-> verde. **No verificado aún end-to-end contra un backend real** (ver abajo).
+> verde. **Pata de aceptación del backend verificada** contra un server real (2026-06-28,
+> ver abajo); **pata en dispositivo** (app → BLE → WorkManager → POST) aún sin smoke en
+> hardware.
 
 Paquete: `net.guacamaya.ingest`.
 
@@ -65,11 +67,32 @@ añadió `res/xml/network_security_config.xml` que permite cleartext **solo** a
 `10.0.2.2` / `localhost` / `127.0.0.1`; todo lo demás sigue HTTPS-only. Cambiar a
 HTTPS para cualquier despliegue real.
 
+## Verificación contra backend real (2026-06-28)
+
+Verificada la **pata de aceptación del backend** — que un frame con el layout exacto de
+`IngestFrame` (118 B, `payload@0 ‖ pubkey@22 ‖ sig@54`) pasa la cascada zero-trust. El orden
+de bytes coincide en las tres fuentes: `IngestFrame.encode` (Kotlin) == `gen-postman-frames.ts`
+== offsets de `frame.ts`. Contra `bun run dev:backend` (store en memoria, llaves efímeras):
+
+| Caso | Resultado |
+|---|---|
+| Longitud del frame generado | **118 B** = `IngestFrame.SIZE` ✅ |
+| POST 2 frames válidos | `ingested:2, locationsIngested:2, rejected:0` ✅ |
+| Re-POST de los mismos (dedup) | `duplicate:2` ✅ |
+| Byte de firma alterado | `rejected:1, reasons:{"signature invalid":1}` ✅ |
+| `GET /locations` sin key | **401** (hardening OK) ✅ |
+| `GET /locations` con read key | 2 puntos derivados del frame, coords correctas, `deviceId = device-<pubkey origen>` ✅ |
+
+Esto prueba toda la cadena de la que depende el uploader: CRC → binding de pubkey → verify
+Ed25519 → `ChannelRecord` + `LocationPoint`, con dedup y rechazo de manipulación. El riesgo de
+sync de wire-format de 3 vías está **en sync** hoy.
+
 ## Pendiente / siguiente
 
-- [ ] **Verificación end-to-end** contra `bun run dev:backend`: app en **emulador**
-      (para que `10.0.2.2` llegue al host) → Observe recoge un frame → el worker hace
-      POST al recuperar red → confirmar `{ ingested, ... }` y `GET /locations`.
+- [ ] **Smoke de la pata en dispositivo** (no cubierto arriba): app en **emulador** o dos
+      teléfonos → Observe recoge un frame BLE real → Room persiste `sig` → `IngestUploadWorker`
+      dispara al recuperar red → `HttpURLConnection` POST a `10.0.2.2:3000`. Hoy solo cubierto por
+      tests JVM (`IngestFrameTest`, `IngestRepositoryTest`); un emulador sin BLE no recoge frames.
 - [ ] **Tinte de "rejected"**: hoy se marca `uploaded` aunque el backend rechace (para
       no reintentar infinito). Si en campo aparecieran rechazos reales, distinguir un
       estado terminal `rejected` para no perder el frame en silencio.

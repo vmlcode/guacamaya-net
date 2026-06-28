@@ -12,7 +12,7 @@ Foto del estado de [[GuacamayaProject]] al **2026-06-28** (rama `develop`, monor
 - ✅ TTL de salto que decrementa por relay y para en 0 (byte sin firmar al frente). Ver [[Protocolo y Frame]].
 - ✅ **Radar + brújula + mapa de cuadrícula offline** nuevos (`CompassHeading`, `GeoProximity`, `GridMap`); **osmdroid eliminado** y quitada la dependencia de GMS para el render. Ver [[Guacamaya (Android)]].
 - ✅ Pruning de la DB Room (conserva 25 000 filas, batcheado cada 128 inserts).
-- ✅ **`IngestClient` (data-mule uploader)** implementado: persiste la firma (migración Room v3), arma el frame de 118 B y hace `POST /ingest` vía WorkManager al recuperar red. Build + tests JVM verdes; **falta verificación end-to-end contra backend real**. Ver [[IngestClient (Data-Mule Uploader)]].
+- ✅ **`IngestClient` (data-mule uploader)** implementado: persiste la firma (migración Room v3), arma el frame de 118 B y hace `POST /ingest` vía WorkManager al recuperar red. Build + tests JVM verdes. **Pata de aceptación del backend verificada** contra server real (ingesta/dedup/rechazo/locations); falta el smoke en dispositivo. Ver [[IngestClient (Data-Mule Uploader)]].
 - ✅ Tests unitarios verdes (codec, crypto, geo/compass/proximity, ingest).
 
 ### [[Backend Data-Mule]]
@@ -32,8 +32,9 @@ Foto del estado de [[GuacamayaProject]] al **2026-06-28** (rama `develop`, monor
 
 ## Trabajo abierto (siguiente)
 
-- [ ] **Verificar el `IngestClient` end-to-end** contra `bun run dev:backend` (emulador → `10.0.2.2`).
-      El código ya está (commit `eee3508`); falta el smoke real. Ver [[IngestClient (Data-Mule Uploader)]].
+- [ ] **Smoke en dispositivo del `IngestClient`**: la pata de aceptación del backend ya está
+      verificada (commit `eee3508`); falta el camino en hardware (app → BLE → WorkManager → POST a
+      `10.0.2.2`). Ver [[IngestClient (Data-Mule Uploader)]].
 - [ ] **Fallback de ubicación sin Google Play Services**: el fix GPS aún usa `FusedLocationProviderClient` (GMS). Alternativa robusta para gama baja sin GMS: `LocationManager` de plataforma.
 - [ ] **Calibrar/robustecer brújula MIUI** en campo (`functional-compass` con Δheading ≈ 0° en paralelo).
 - [ ] **Integrar Wi-Fi Aware** al servicio (publish/subscribe del `NanMessenger`).
