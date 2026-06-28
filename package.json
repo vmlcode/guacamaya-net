@@ -1,0 +1,17 @@
+{
+  "name": "guacamaya-net",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "backend"
+  ],
+  "scripts": {
+    "dev:backend": "bun run --cwd backend dev",
+    "build": "bun run --cwd packages/shared build && bun run --cwd backend build",
+    "test": "bun test",
+    "keygen": "bun run backend/src/security/keygen.ts"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  }
+}

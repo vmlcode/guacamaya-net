@@ -1,0 +1,19 @@
+---
+description: Siempre probar cambios Android en dispositivos adb conectados antes de dar por buena una mejora
+alwaysApply: true
+---
+
+# Device-test primero (Guacamaya Android)
+
+Antes de afirmar que una mejora BLE/UI/radar funciona:
+
+1. **Instalar** en dispositivos conectados: `cd android && ./scripts/demo.sh install` o `./gradlew :app:installDebug`
+2. **Abrir** la app: `adb shell am start -n net.guacamaya/.ui.MainActivity`
+3. **Smoke BLE** (Realme TX → sweet RX): `./scripts/demo.sh device-test`
+4. **Revisar logs**: `./scripts/demo.sh received sweet` y `./scripts/demo.sh logcat sweet`
+
+Dispositivos habituales: `sweet` (Redmi Note 10, e06518dd), Realme `6LRGONDE6LRG9XCY`.
+
+El heartbeat emite cada **~60 s**; para pruebas rápidas usar `broadcast-on` / `START`, no solo `heartbeat-on`.
+
+Documentar resultado en `docs/LOOP_PROGRESS.md` o `docs/LOOP_SYNC.md`.

@@ -1,0 +1,513 @@
+{
+  "info": {
+    "name": "Guacamaya Net — Backend",
+    "description": "Endpoint tests for the @guacamaya/backend Fastify HTTP server.\n\nSet the `baseUrl` collection variable (default `http://localhost:3000`).\n\n## Auth (security model)\n\nThe backend now enforces API keys (timing-safe, `X-Api-Key: <key>` or `Authorization: Bearer <key>`):\n- **`POST /channels/:id/records`** (official alerts) requires the **admin** key → set `{{adminKey}}` from `GUACAMAYA_ADMIN_KEY`.\n- **`GET /locations`** (trajectory history) requires the **read** key → set `{{readKey}}` from `GUACAMAYA_READ_KEY` (falls back to admin).\n- **`POST /resolve/evidence`** requires the read key when `RESOLVE_EVIDENCE_REQUIRE_AUTH=true` (default in production).\n- **WebSocket `/ws`** requires `?token=<wsKey>` (or `Sec-WebSocket-Protocol: guacamaya.<wsKey>`) for sensitive channels → `{{wsKey}}` from `GUACAMAYA_WS_KEY` (falls back to read).\n- **`POST /ingest`** is NOT key-gated — the Ed25519 zero-trust frame check is its gate. Rate-limited 30/min, batch ≤ `MAX_INGEST_BATCH` (200), each frame base64 ≤ `MAX_FRAME_B64_LENGTH` (256).\n- `GET /`, `/health`, `/pubkey`, `GET /channels`, `GET /channels/:id/records` are public.\n\nThe `adminKey` / `readKey` / `wsKey` variables ship EMPTY (type `secret`) — paste your values from `backend/.env` into Postman's variable editor (current value, not exported). NODE_ENV=production refuses to boot without `GUACAMAYA_ADMIN_KEY`.\n\n## Data-mule ingest (binary + zero-trust)\n\n`POST /ingest` takes `{ \"frames\": [\"<base64>\"] }` — each frame is a signed 118 B Guacamaya mesh frame (22 B payload + 32 B pubkey + 64 B signature; a 119 B frame with the leading hop-TTL byte is also tolerated). Every frame is re-verified server-side (CRC16 → pubkey↔node_id binding → Ed25519) before anything is persisted. Verified frames become `verified:false` community records on `solicito-ayuda`, and the lat/lon inside the signed payload is persisted as a `LocationPoint` on the SAME path (no trusted-JSON location ingest). The `validFrame` / `validFrame2` variables hold real signed frames (regenerate via `backend/scripts/gen-postman-frames.ts`).\n\n## Resolve flow\n\nFinder co-signed disarm of an active SOS: `POST /resolve/evidence` (upload image → imageHash + uploadToken) then `POST /resolve` (witness envelope; backend re-verifies every Ed25519 witness signature and runs the anti-troll cascade). Requires `resolve_receipts` / `resolve_witnesses` tables — apply `backend/supabase/schema.sql` (idempotent).\n\nWebSocket note: connect with Postman's WebSocket request to `ws://localhost:3000/ws?token={{wsKey}}`, then send `{\"type\":\"subscribe\",\"channel\":\"locations\"}` (sensitive channels need the token; `solicito-ayuda` does not).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "channelId", "value": "alertas", "type": "string", "description": "Official channel for the admin write test (alertas | refugios | ayuda-medica)." },
+    {
+      "key": "adminKey",
+      "value": "",
+      "type": "secret",
+      "description": "GUACAMAYA_ADMIN_KEY from backend/.env. Required for POST /channels/:id/records."
+    },
+    {
+      "key": "readKey",
+      "value": "",
+      "type": "secret",
+      "description": "GUACAMAYA_READ_KEY from backend/.env. Required for GET /locations and (in prod) POST /resolve/evidence."
+    },
+    {
+      "key": "wsKey",
+      "value": "",
+      "type": "secret",
+      "description": "GUACAMAYA_WS_KEY from backend/.env. Token for the WebSocket /ws upgrade on sensitive channels."
+    },
+    {
+      "key": "deviceId",
+      "value": "device-9af220d724884841c19ba0285cf30c272b480e78c75977893daedec2184cb1f2",
+      "type": "string",
+      "description": "Origin device of the sample frames (= device-<origin pubkey>). Used by GET /locations filter and as the resolve target author."
+    },
+    {
+      "key": "sampleSosId",
+      "value": "f0cc91d65526a64c8512eea907b7f3f7c365bb02928b47bd4c46cf43434846cc",
+      "type": "string",
+      "description": "Record id (= SHA-256 of payload) of validFrame's SOS on solicito-ayuda. Used as the resolve target. Run POST /ingest first so the target exists."
+    },
+    {
+      "key": "validFrame",
+      "value": "CLkbyMoNvjhmfXzgzhRfxAIAEJKmEpryINckiEhBwZugKFzzDCcrSA54x1l3iT2u3sIYTLHyn2HsQ2oy60F1dkEPOc6sG3rkEKB+VkIWB/U8pHrhvqM1aL3YIm3KJWlWPshPV7YhQHLiUkmcZMUUMuyiLUSrCA==",
+      "type": "string",
+      "description": "A real signed 118 B mesh frame (medical SOS, critical, Guatemala City 14.6349,-90.5069). Passes CRC + pubkey binding + Ed25519."
+    },
+    {
+      "key": "validFrame2",
+      "value": "CLlGwMoNj1hmfX84zhRfxBADEJMaYZryINckiEhBwZugKFzzDCcrSA54x1l3iT2u3sIYTLHyT/SPSe6pMwdxnPgl1YIg6ZDAUYMxFCgppgEeK92srUvlX30aLurHpI6bFsdrhd6bHdTvUhT8AfP3rhod3mnyDQ==",
+      "type": "string",
+      "description": "A second signed frame (water request) — different payload, different content-hash id."
+    },
+    {
+      "key": "tamperedFrame",
+      "value": "AAkbyMoNvjhmfXzgzhRfxAIAEJKmEpryINckiEhBwZugKFzzDCcrSA54x1l3iT2u3sIYTLHyn2HsQ2oy60F1dkEPOc6sG3rkEKB+VkIWB/U8pHrhvqM1aL3YIm3KJWlWPshPV7YhQHLiUkmcZMUUMuyiLUSrCA==",
+      "type": "string",
+      "description": "validFrame with a flipped payload byte — fails verification (rejected, not persisted)."
+    }
+  ],
+  "item": [
+    {
+      "name": "Meta",
+      "item": [
+        {
+          "name": "GET / — root",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/", "host": ["{{baseUrl}}"], "path": [""] },
+            "description": "Welcome message. Confirms the server is reachable. Public."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('has welcome message', () => pm.expect(pm.response.json()).to.have.property('message'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /health — health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+            "description": "Liveness probe. Returns { ok: true }. Public."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ok is true', () => pm.expect(pm.response.json().ok).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /pubkey — backend public key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/pubkey", "host": ["{{baseUrl}}"], "path": ["pubkey"] },
+            "description": "Returns the backend's Ed25519 public identity key (hex) used by clients to verify signed official records. Public."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns publicKey', () => pm.expect(pm.response.json()).to.have.property('publicKey'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Channels",
+      "item": [
+        {
+          "name": "GET /channels — list channels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/channels", "host": ["{{baseUrl}}"], "path": ["channels"] },
+            "description": "Lists the available emergency channels and whether each accepts only verified (official) records. Public."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns a non-empty array', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /channels/:id/records — create official record (admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{adminKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": {\n    \"title\": \"Evacuación inmediata\",\n    \"body\": \"Diríjase al refugio más cercano por la ruta norte.\",\n    \"severity\": \"high\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/channels/{{channelId}}/records",
+              "host": ["{{baseUrl}}"],
+              "path": ["channels", "{{channelId}}", "records"]
+            },
+            "description": "Creates a backend-signed (verified) record on an OFFICIAL channel (alertas | refugios | ayuda-medica), persists it, and broadcasts it over WS. Requires the admin key (`X-Api-Key: {{adminKey}}`). The server sets timestamp, ttl, author, signature and the content-hash id. Rate-limited 20/min. A non-official channel returns 403; an oversized/empty payload returns 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const rec = pm.response.json();",
+                  "pm.test('record has id and signature', () => {",
+                  "  pm.expect(rec).to.have.property('id');",
+                  "  pm.expect(rec).to.have.property('sig');",
+                  "  pm.expect(rec.verified).to.eql(true);",
+                  "});",
+                  "if (rec && rec.timestamp) {",
+                  "  pm.collectionVariables.set('lastRecordTimestamp', rec.timestamp);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /channels/:id/records — no key (401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": { \"title\": \"x\" }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/channels/{{channelId}}/records",
+              "host": ["{{baseUrl}}"],
+              "path": ["channels", "{{channelId}}", "records"]
+            },
+            "description": "Auth case: without a valid admin key the official-write endpoint returns 401 before any payload validation."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('unauthorized', () => pm.expect(pm.response.json()).to.have.property('error'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /channels/:id/records — missing payload (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Api-Key", "value": "{{adminKey}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/channels/{{channelId}}/records",
+              "host": ["{{baseUrl}}"],
+              "path": ["channels", "{{channelId}}", "records"]
+            },
+            "description": "Validation case: authenticated (admin key) but a body without a valid `payload` is rejected with 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('has error message', () => pm.expect(pm.response.json()).to.have.property('error'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /channels/:id/records — list records since",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/channels/{{channelId}}/records?since=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["channels", "{{channelId}}", "records"],
+              "query": [
+                { "key": "since", "value": "0", "description": "unix ms; return only records with timestamp > since (default 0 = all)" }
+              ]
+            },
+            "description": "Retrieves records for a channel created after `since`. Public. An unknown channel id returns 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /ingest — data-mule signed frame upload",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"frames\": [\n    \"{{validFrame}}\",\n    \"{{validFrame2}}\"\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/ingest", "host": ["{{baseUrl}}"], "path": ["ingest"] },
+            "description": "Uploads a batch of signed binary mesh frames (Base64) collected by a data mule. NOT key-gated — the Ed25519 zero-trust check is the gate. Each frame is re-decoded and re-verified (CRC16 → pubkey↔node_id binding → Ed25519) before anything is persisted. Verified frames become `verified:false` community records on `solicito-ayuda` (id = SHA-256 of the signed payload), and the lat/lon inside each payload is persisted as a LocationPoint on the same path. Response: `{ success, ingested, duplicate, rejected, locationsIngested, reasons }`.\n\nRate-limited 30/min; batch ≤ 200; each frame base64 ≤ 256 chars. Run once for `ingested:2`; run again and the same frames dedup to `duplicate:2, ingested:0`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('success with full ingest report', () => {",
+                  "  pm.expect(b.success).to.eql(true);",
+                  "  pm.expect(b).to.have.property('ingested');",
+                  "  pm.expect(b).to.have.property('duplicate');",
+                  "  pm.expect(b).to.have.property('rejected');",
+                  "  pm.expect(b).to.have.property('locationsIngested');",
+                  "});",
+                  "pm.test('valid frames are not rejected', () => pm.expect(b.rejected).to.eql(0));",
+                  "pm.test('each ingested record also yields a location', () => {",
+                  "  pm.expect(b.locationsIngested).to.eql(b.ingested);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /ingest — tampered frame is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"frames\": [\n    \"{{tamperedFrame}}\"\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/ingest", "host": ["{{baseUrl}}"], "path": ["ingest"] },
+            "description": "Zero-trust gate: a frame with a flipped payload byte fails verification and is counted under `rejected` with a `reasons` breakdown — nothing is persisted."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('nothing ingested', () => pm.expect(b.ingested).to.eql(0));",
+                  "pm.test('frame rejected with a reason', () => {",
+                  "  pm.expect(b.rejected).to.eql(1);",
+                  "  pm.expect(Object.keys(b.reasons)).to.have.length.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /ingest — invalid frames array (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"frames\": \"not-an-array\"\n}" },
+            "url": { "raw": "{{baseUrl}}/ingest", "host": ["{{baseUrl}}"], "path": ["ingest"] },
+            "description": "Validation case: `frames` missing or not an array (or exceeding the batch cap) returns 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('has error message', () => pm.expect(pm.response.json()).to.have.property('error'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Locations",
+      "description": "Location history is read-only at the HTTP edge and now READ-KEY GATED. Points are NOT ingested here — they are derived from Ed25519-verified mesh frames in `POST /ingest` (see the Channels folder). `deviceId` always comes from the verified origin pubkey.",
+      "item": [
+        {
+          "name": "GET /locations — moving-map query (read key)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Api-Key", "value": "{{readKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/locations?since=0&deviceId={{deviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["locations"],
+              "query": [
+                { "key": "since", "value": "0", "description": "unix ms; return only points with timestamp > since (default 0 = all)" },
+                { "key": "deviceId", "value": "{{deviceId}}", "description": "optional; filter to one device's trajectory (must match /^device-[0-9a-f]{64}$/). Remove for all devices. Run POST /ingest first to populate.", "disabled": false }
+              ]
+            },
+            "description": "Returns location points for the moving-map dashboard, optionally filtered by `since` and `deviceId`. Requires the read key (`X-Api-Key: {{readKey}}`). An invalid deviceId filter returns 400."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /locations — no key (401)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/locations?since=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["locations"],
+              "query": [ { "key": "since", "value": "0" } ]
+            },
+            "description": "Auth case: without the read key, trajectory history is rejected with 401."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('unauthorized', () => pm.expect(pm.response.json()).to.have.property('error'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Resolve",
+      "description": "Finder co-signed disarm of an active SOS. Upload evidence → submit a witness envelope. The backend re-verifies every Ed25519 witness signature and runs the anti-troll cascade (target exists → recency ≤ 72h → rate-limit → witness ≠ originator → one-per-target → geo ≤ radius → signature → upload-token → quorum M-of-N). Needs the `resolve_receipts` / `resolve_witnesses` tables — apply backend/supabase/schema.sql.",
+      "item": [
+        {
+          "name": "POST /resolve/evidence — upload image (read key in prod)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/octet-stream" },
+              { "key": "X-Api-Key", "value": "{{readKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "demo-evidence-image-bytes-not-a-real-jpeg",
+              "options": { "raw": { "language": "text" } }
+            },
+            "url": { "raw": "{{baseUrl}}/resolve/evidence", "host": ["{{baseUrl}}"], "path": ["resolve", "evidence"] },
+            "description": "Uploads one raw image (application/octet-stream). Returns `{ imageHash, storageKey, uploadToken, expiresInMs }`. The `uploadToken` binds the bytes and is later supplied per-witness in POST /resolve. When `RESOLVE_EVIDENCE_REQUIRE_AUTH=true` (default in production) the read key is required. Body here is placeholder bytes; send a real image in practice (≤ 8 MiB). The test stashes imageHash + uploadToken for the next request."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('returns imageHash + uploadToken', () => {",
+                  "  pm.expect(b).to.have.property('imageHash');",
+                  "  pm.expect(b).to.have.property('uploadToken');",
+                  "});",
+                  "if (b.imageHash) pm.collectionVariables.set('evidenceImageHash', b.imageHash);",
+                  "if (b.uploadToken) pm.collectionVariables.set('evidenceUploadToken', b.uploadToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /resolve — submit witness envelope",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetSosId\": \"{{sampleSosId}}\",\n  \"targetSosAuthor\": \"{{deviceId}}\",\n  \"submittedAt\": 1782645600000,\n  \"note\": \"finder on scene\",\n  \"witnesses\": [\n    {\n      \"deviceId\": \"device-1111111111111111111111111111111111111111111111111111111111111111\",\n      \"pubkey\": \"2222222222222222222222222222222222222222222222222222222222222222\",\n      \"sig\": \"33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333\",\n      \"lat\": 14.6350,\n      \"lon\": -90.5070,\n      \"ts\": 1782645600000,\n      \"imageHash\": \"4444444444444444444444444444444444444444444444444444444444444444\"\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/resolve", "host": ["{{baseUrl}}"], "path": ["resolve"] },
+            "description": "Submits a witness envelope to disarm the SOS in `targetSosId` (= validFrame's record, so run POST /ingest first). NOTE: the witness `pubkey`/`sig` here are placeholder hex — they are the right SHAPE (so the envelope passes structural validation and the cascade runs) but the Ed25519 signature is NOT valid, so the witness is skipped at the signature gate and the response is `accepted:false`. To get `accepted:true` you must sign the canonical envelope per-witness (see verifyWitnessSignature / getResolveId in packages/shared) and supply a real uploadToken from POST /resolve/evidence. Rate-limited per witness deviceId."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200/404/410', () => pm.expect(pm.response.code).to.be.oneOf([200, 404, 410]));",
+                  "const b = pm.response.json();",
+                  "pm.test('placeholder witness is not accepted', () => pm.expect(b.accepted).to.eql(false));",
+                  "pm.test('reports a cascade reason', () => pm.expect(b).to.have.property('reason'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
