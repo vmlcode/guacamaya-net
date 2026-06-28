@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import { channelRoutes } from "./channels/routes.js";
 import { locationRoutes } from "./locations/routes.js";
 import { resolveRoutes } from "./resolve/routes.js";
+import { dashboardRoutes } from "./dashboard/routes.js";
 import { resolvesRepo } from "./db/resolvesRepo.js";
 import { initWebSocketServer } from "./ws/server.js";
 import { securityConfig } from "./security/config.js";
@@ -30,9 +31,10 @@ await app.register(rateLimit, securityConfig.globalRateLimit);
 await app.register(channelRoutes);
 await app.register(locationRoutes);
 await app.register(resolveRoutes);
+await app.register(dashboardRoutes);
 
 app.get("/health", async () => ({ ok: true }));
-app.get("/", async () => ({ message: "Welcome to Guacamaya Net!" }));
+app.get("/", async () => ({ message: "Welcome to Guacamalla Net!" }));
 
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 

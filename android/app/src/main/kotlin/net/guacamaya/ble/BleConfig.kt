@@ -11,7 +11,7 @@ import java.util.UUID
 /**
  * BLE constants + parameters. See docs/payload-binary-layout.md.
  *
- * Frame layout inside the BLE service data, keyed by the 128-bit Guacamaya Service UUID:
+ * Frame layout inside the BLE service data, keyed by the 128-bit Guacamalla Service UUID:
  *
  *   byte 0        unsigned hop TTL (mutable, NOT signed)
  *   bytes 1..22   22 B signed payload

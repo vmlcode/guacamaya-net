@@ -5,7 +5,7 @@ import { getRecordId, verifyRecordSignature } from "./crypto.js";
 import { mergeLogs } from "./merge.js";
 import { ChannelRecord } from "./types.js";
 
-describe("Guacamaya Shared Utilities", () => {
+describe("Guacamalla Shared Utilities", () => {
   const privKey = ed.utils.randomPrivateKey();
   let pubKeyHex: string;
 

@@ -1,0 +1,20 @@
+# Keep the build context small and never ship secrets or the mobile app.
+.git
+.gitignore
+node_modules
+**/node_modules
+android
+.claude
+.evidence
+dist
+**/dist
+*.tsbuildinfo
+*.log
+.env
+.env.*
+**/.env
+**/.env.*
+Dockerfile
+.dockerignore
+*.md
+**/*.md

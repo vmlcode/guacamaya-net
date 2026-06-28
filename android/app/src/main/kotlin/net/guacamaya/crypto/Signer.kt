@@ -33,13 +33,23 @@ object Signer {
 
     /** Verify a 64-byte signature against a 22-byte payload. Constant-time per BouncyCastle. */
     fun verify(publicKey: ByteArray, payload: ByteArray, signature: ByteArray): Boolean {
+        if (payload.size != PayloadBytes.PAYLOAD_SIZE) return false
+        return verifyMessage(publicKey, payload, signature)
+    }
+
+    /**
+     * Verify a 64-byte signature over an **arbitrary-length** message. Used for the
+     * backend's official-record scheme, where the signed message is the 32-byte
+     * SHA-256 of the canonical record content (a different scheme than the 22-byte
+     * mesh-frame signature above). See net.guacamaya.backend.OfficialRecordVerifier.
+     */
+    fun verifyMessage(publicKey: ByteArray, message: ByteArray, signature: ByteArray): Boolean {
         if (publicKey.size != PUBLIC_KEY_SIZE) return false
         if (signature.size != SIGNATURE_SIZE) return false
-        if (payload.size != PayloadBytes.PAYLOAD_SIZE) return false
         return try {
             val verifier = Ed25519Signer().apply {
                 init(false, Ed25519PublicKeyParameters(publicKey, 0))
-                update(payload, 0, payload.size)
+                update(message, 0, message.size)
             }
             verifier.verifySignature(signature)
         } catch (t: Throwable) {

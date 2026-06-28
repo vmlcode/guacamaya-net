@@ -1,8 +1,8 @@
 <resources>
-    <string name="app_name">Guacamaya</string>
+    <string name="app_name">GuacaMalla</string>
     <string name="app_tagline">Connectionless SOS mesh</string>
 
-    <string name="perm_rationale_bluetooth">Guacamaya needs Bluetooth to broadcast and observe SOS frames. No pairing — frames ride BLE Extended Advertising.</string>
+    <string name="perm_rationale_bluetooth">GuacaMalla needs Bluetooth to broadcast and observe SOS frames. No pairing — frames ride BLE Extended Advertising.</string>
     <string name="perm_rationale_location">Android requires location to scan BLE advertisements (hardware policy, not app use).</string>
     <string name="perm_rationale_aware">Wi-Fi Aware (NAN) carries heavy payloads without pairing.</string>
 
@@ -15,7 +15,7 @@
     <string name="node_id_label">Node ID</string>
     <string name="empty_inbox">No SOS received yet.</string>
 
-    <string name="channel_name">Servicio Guacamaya</string>
+    <string name="channel_name">Servicio GuacaMalla</string>
     <string name="channel_desc">Mantiene BLE + Wi-Fi activos escuchando SOS en segundo plano.</string>
-    <string name="service_running">Guacamaya protegido — escuchando SOS</string>
+    <string name="service_running">GuacaMalla protegido — escuchando SOS</string>
 </resources>

@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Supabase connection for the Guacamaya backend.
+ * Supabase connection for the Guacamalla backend.
  *
  * The backend is a trusted server, so it authenticates with the
  * SERVICE ROLE key (bypasses Row Level Security). This key must never be

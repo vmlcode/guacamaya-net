@@ -2,8 +2,8 @@ package net.guacamaya.aware
 
 /**
  * Constants for Wi-Fi Aware (NAN). Service name is the wire prefix subscribers
- * match on; Guacamaya uses a stable prefix so any nearby node can subscribe to
- * the whole family via "guacamaya::*" semantics (Android matches on exact prefix).
+ * match on; Guacamalla uses a stable prefix so any nearby node can subscribe to
+ * the whole family via "guacamalla::*" semantics (Android matches on exact prefix).
  *
  * SSI (Service Specific Info) carries up to 255 B at the MAC layer — no IP, no
  * auth, no user-facing pairing. See docs/protocol-flows.md Flow 4.

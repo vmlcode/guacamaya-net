@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guacamaya — demo runner.
+# Guacamalla — demo runner.
 #
 # Usage:
 #   ./scripts/demo.sh build     # assemble debug APK
@@ -175,10 +175,13 @@ start_fg_service() {
 # JDK 17+ required. AGP 8.5.2 runs cleanly on JDK 21. Resolution order:
 #   1. caller-provided JAVA_HOME
 #   2. Android Studio's bundled JBR (JDK 21)
-#   3. system default on PATH
+#   3. /usr/lib/jvm/java-17-openjdk (avoid JDK 26+ — Kotlin cannot parse 26.0.1)
+#   4. system default on PATH
 if [ -z "${JAVA_HOME:-}" ]; then
   if [ -x /opt/android-studio/jbr/bin/java ]; then
     JAVA_HOME=/opt/android-studio/jbr
+  elif [ -x /usr/lib/jvm/java-17-openjdk/bin/java ]; then
+    JAVA_HOME=/usr/lib/jvm/java-17-openjdk
   else
     JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")"
   fi
@@ -205,7 +208,7 @@ case "${1:-help}" in
     dev="$(adb -s "$serial" shell getprop ro.product.device | tr -d '\r\n')"
     echo "[2/2] Install on serial=$serial device=$dev"
     adb -s "$serial" install -r "$APK"
-    echo "Done. Open Guacamaya on the phone."
+    echo "Done. Open Guacamalla on the phone."
     ;;
 
   observe-on)
@@ -555,7 +558,7 @@ case "${1:-help}" in
 
   *)
     cat <<USAGE
-Guacamaya demo runner.
+Guacamalla demo runner.
 
 Commands:
   build         assembleDebug
@@ -571,7 +574,7 @@ Commands:
   battery-whitelist [dev]  adb whitelist (sin popup MIUI)
   battery-miui [dev]       abrir Autostart MIUI manualmente
   tamper        run tamper_test.py, push JSON to /sdcard if device attached
-  logcat [dev]  stream colorized guacamaya logcat
+  logcat [dev]  stream colorized guacamalla logcat
   tap-pct X Y [dev]  tap at screen percent (0-100)
   tap-power / tap-mode-both / tap-radar / tap-map / tap-back / tap-calibrate-north
   probe-dump [dev]  last guacamaya.probe logcat lines

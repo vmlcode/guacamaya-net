@@ -478,3 +478,117 @@ Sigue requiriendo **calibración física** (`magnet=bad`). Código ahora permite
 ### Notas
 - Sin cambio en brújula sweet; sigue bloqueada en calibración manual.
 - BLE mesh estable; sin cambios de código en este tick.
+
+---
+
+## Iteración 21 — 2026-06-28 (loop 10m, tick 30)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| `device-test` | **PASS** @0 s — `nodes=2 frames=69` (ticks 26–30 consecutivos) |
+| `functional-compass` | sweet **0° magnet=bad**; Realme sin probe en 36 s (logd intermitente) |
+
+### Resumen ticks 22–30 (~1,5 h post-cierre)
+| Área | Estado |
+|------|--------|
+| BLE mesh | ✅ Estable; `device-test` PASS en cada tick |
+| Brújula Realme | ✅ ~97–104° cuando probe visible |
+| Brújula sweet | ❌ `magnet=bad` — sin calibración manual en campo |
+| Fixes aplicados | `device-test`: HEARTBEAT_ON, poll 60 s, fallback Realme, fix `set -e` (`cc9bd44`) |
+
+### Bloqueador único
+Calibración magnética sweet (`./scripts/demo.sh compass-miui sweet` + figura-8).
+
+---
+
+## Iteración 22 — 2026-06-28 (loop 10m, tick 40)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| Dispositivos | Solo **sweet** (`e06518dd`); Realme desconectado desde tick 38 |
+| `device-test` | **PASS** parcial — sweet `nodes=2 frames=69` (sin TX Realme) |
+| `functional-compass` | sweet **0° magnet=bad**; Realme N/A |
+
+### Resumen ticks 31–40
+| Área | Estado |
+|------|--------|
+| BLE (2 dispositivos) | ✅ PASS ticks 31–37 |
+| Realme adb | ❌ Desconectado ticks 38–40 |
+| Brújula sweet | ❌ `magnet=bad` — sin calibración manual |
+
+### Acción requerida
+1. Reconectar Realme por USB (`adb devices`)
+2. Calibrar magnetómetro sweet (figura-8)
+3. Re-ejecutar `ble-reverse-test` y `functional-compass`
+
+---
+
+## Iteración 23 — 2026-06-28 (loop 10m, tick 50)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| Dispositivos | Solo **sweet**; Realme ausente (ticks 38–50) |
+| `device-test` | **PASS** parcial @5 s — sweet `nodes=2 frames=69` |
+| `functional-compass` | sweet **0° magnet=bad**; Realme N/A |
+
+### Resumen loop (50 ticks, ~8 h)
+| Área | Estado |
+|------|--------|
+| BLE bidireccional | ✅ Validado ticks 1–37 (`ble-reverse-test`, `device-test`) |
+| Validación degradada | ⚠️ Ticks 38–50 — solo sweet conectado |
+| Brújula Realme | ✅ ~87–109° (cuando probe visible) |
+| Brújula sweet | ❌ `magnet=bad` — calibración manual pendiente |
+| UI | Sin cambios (alcance intencional) |
+
+### Bloqueadores para retomar
+1. Reconectar Realme por USB
+2. Figura-8 en sweet (`./scripts/demo.sh compass-miui sweet`)
+3. `ble-reverse-test` + `functional-compass` con ambos dispositivos
+
+---
+
+## Iteración 24 — 2026-06-28 (loop 10m, tick 60)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| Dispositivos | Solo **sweet**; Realme ausente (ticks 38–60) |
+| `device-test` | **PASS** parcial @10 s — sweet `nodes=2 frames=69` |
+| `functional-compass` | sweet **0° magnet=bad**; Realme N/A |
+
+### Resumen ticks 51–60
+| Área | Estado |
+|------|--------|
+| Validación | ⚠️ Degradada — solo sweet, sin cambios |
+| Brújula sweet | ❌ `magnet=bad` — sin calibración manual |
+| BLE bidireccional | ⏸️ Pausado — requiere Realme reconectado |
+
+### Nota
+Loop continúa en modo vigilancia; sin avance posible sin intervención manual (Realme USB + figura-8 sweet).
+
+---
+
+## Iteración 25 — 2026-06-28 (loop 10m, tick 70)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| Dispositivos | Solo **sweet**; Realme ausente (ticks 38–70) |
+| `device-test` | **PASS** parcial @0 s — sweet `nodes=2 frames=69` |
+| `functional-compass` | sweet **0° magnet=bad**; Realme N/A |
+
+### Resumen ticks 61–70
+| Área | Estado |
+|------|--------|
+| Validación | ⚠️ Degradada — 33 ticks consecutivos solo sweet |
+| Fix tick 61 | JDK 17 fallback (`716c283`) — Java 26 rompía Gradle |
+| Brújula sweet | ❌ `magnet=bad` — sin calibración manual |
+| BLE bidireccional | ⏸️ Pausado desde tick 38 |
+
+### Bloqueadores (sin cambio)
+1. Reconectar Realme por USB
+2. Figura-8 en sweet
+3. `ble-reverse-test` + `functional-compass` con ambos dispositivos

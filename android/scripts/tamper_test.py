@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Guacamaya tamper demo.
+Guacamalla tamper demo.
 
-Generates one valid Guacamaya BLE frame and one with a single bit flipped in the
+Generates one valid Guacamalla BLE frame and one with a single bit flipped in the
 22-byte payload, then verifies the math:
 
     python3 scripts/tamper_test.py
@@ -64,7 +64,7 @@ def crc16_ccitt(data: bytes) -> int:
     return crc
 
 
-# ---------- Guacamaya 22-byte payload ---------------------------------------------------
+# ---------- Guacamalla 22-byte payload ---------------------------------------------------
 
 def build_payload(lat_e7: int, lon_e7: int, ts_unix: int, node_id: bytes,
                   has_heavy: bool, critical: bool, battery: int, hop_ttl: int,

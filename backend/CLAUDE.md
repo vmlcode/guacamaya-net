@@ -31,7 +31,7 @@ are generated and logged if unset. Generate keys with `bun run keygen` from the 
 - **Official records** — `POST /channels/:id/records` requires `X-Api-Key` / `Authorization: Bearer`
   matching `GUACAMAYA_ADMIN_KEY`; only official channels (`alertas`, `refugios`, `ayuda-medica`).
 - **Location history** — `GET /locations` requires the read key (`GUACAMAYA_READ_KEY` or admin).
-- **WebSocket** — `/ws?token=<key>` or `Sec-WebSocket-Protocol: guacamaya.<key>`; uses
+- **WebSocket** — `/ws?token=<key>` or `Sec-WebSocket-Protocol: guacamalla.<key>`; uses
   `GUACAMAYA_WS_KEY` or read key.
 - **Ingest** — zero-trust frame verification unchanged; batch capped at `MAX_INGEST_BATCH` (default 200)
   with per-route rate limit (30/min). `@fastify/helmet` enabled.

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG ONLY. Overrides the strict main config so a debug build can reach a backend
+  on any LAN host over cleartext HTTP (e.g. a laptop at 192.168.x.y:3000, set via
+  -PBACKEND_BASE_URL). Release builds use src/main's HTTPS-only config.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

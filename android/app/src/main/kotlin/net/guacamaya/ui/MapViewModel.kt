@@ -3,12 +3,18 @@ package net.guacamaya.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import net.guacamaya.BuildConfig
+import net.guacamaya.backend.AlertsRepository
+import net.guacamaya.backend.BackendClient
+import net.guacamaya.backend.OfficialAlert
+import net.guacamaya.ble.Broadcaster
 import net.guacamaya.crypto.Identity
 import net.guacamaya.mesh.MessageDao
 import net.guacamaya.mesh.MessageEntity
@@ -56,9 +62,32 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     private val _mode = MutableStateFlow(MeshMode.BOTH)
     val mode: StateFlow<MeshMode> = _mode.asStateFlow()
 
+    /**
+     * Whether this device can transmit SOS over BLE (extended advertising). False on
+     * emulators / chips without BLE 5 — the UI warns before a broadcasting mode is used.
+     */
+    val broadcastSupported: Boolean = Broadcaster.isSupported(app)
+
+    /**
+     * Verified official alerts pulled from the optional backend (downlink). Empty
+     * when offline or the backend is unreachable — the mesh never depends on it.
+     * Only signature-verified records appear here (see [AlertsRepository]).
+     */
+    private val alertsRepo = AlertsRepository(BackendClient(BuildConfig.BACKEND_BASE_URL))
+    private val _alerts = MutableStateFlow<List<OfficialAlert>>(emptyList())
+    val alerts: StateFlow<List<OfficialAlert>> = _alerts.asStateFlow()
+
     init {
         viewModelScope.launch {
             _identity.value = Identity.loadOrCreate(app)
+        }
+        refreshAlerts()
+    }
+
+    /** Best-effort pull of verified official alerts. Safe to call on resume / connectivity. */
+    fun refreshAlerts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            alertsRepo.fetchVerifiedAlerts().onSuccess { _alerts.value = it }
         }
     }
 
