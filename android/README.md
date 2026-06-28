@@ -1,4 +1,4 @@
-# SOSNet
+# Guacamaya Net
 
 Malla de mensajería L2 sin conexión para difusión de SOS. Los teléfonos
 funcionan como balizas de radio, no como pares: **sin pairing, sin handshake,
@@ -12,7 +12,7 @@ mediante **firmas Ed25519**.
 ## Tesis
 
 Las apps de mensajería comerciales abren canales dedicados entre dos
-endpoints y autentican en la capa de enlace (pairing, WPA2, …). SOSNet
+endpoints y autentican en la capa de enlace (pairing, WPA2, …). Guacamaya
 descarta ese modelo. El enlace es intencionalmente abierto — esto es un SOS
 público, cualquiera en alcance debe recibirlo y retransmitirlo. La confianza
 vive en la capa de payload: cada frame de 22 bytes va firmado con Ed25519, y
@@ -50,7 +50,7 @@ formales con diagramas de secuencia y FSMs.
 
 ### Opción A — Android Studio (recomendado)
 
-1. Abrir esta carpeta en Android Studio: `File → Open → SOSNet`.
+1. Abrir esta carpeta en Android Studio: `File → Open → Guacamaya`.
 2. Esperar al Gradle sync (la primera vez descarga dependencias).
 3. `Build → Build Bundle(s)/APK(s) → Build APK(s)`.
 4. El APK queda en `app/build/outputs/apk/debug/app-debug.apk`.
@@ -95,7 +95,7 @@ python3 scripts/tamper_test.py
 
 Imprime `verify=True` para el frame válido y `verify=False` para el
 manipulado (un bit flipeado en el byte 5 del payload). Escribe
-`/tmp/sosnet_test_frames.json`.
+`/tmp/guacamaya_test_frames.json`.
 
 ---
 
@@ -115,11 +115,11 @@ manipulado (un bit flipeado en el byte 5 del payload). Escribe
 ## Estructura del repo
 
 ```
-SOSNet/
+Guacamaya/
 ├── README.md
 ├── docs/                       # spec — entregable para el jurado
 ├── app/                        # proyecto Gradle Android Studio
-│   └── src/main/kotlin/org/sosnet/
+│   └── src/main/kotlin/net/guacamaya/
 │       ├── crypto/             # identidad Ed25519, sign/verify
 │       ├── proto/              # codec payload 22 B + CRC16
 │       ├── ble/                # Broadcaster (ADV_EXT_IND, 1M/Coded) + Observer

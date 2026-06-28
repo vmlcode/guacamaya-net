@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Colorize SOSNet logcat lines for the jury demo.
+Colorize Guacamaya logcat lines for the jury demo.
 
     adb logcat -v time | python3 scripts/logcat_pretty.py
 
@@ -24,8 +24,8 @@ ANSI = {
     "bold":   "\033[1m",
 }
 
-SOSNET_TAGS = re.compile(
-    r"(sosnet\.(ble|aware|mesh|service)|crypto|proto)"
+GUACAMAYA_TAGS = re.compile(
+    r"(guacamaya\.(ble|aware|mesh|service)|crypto|proto)"
 )
 
 DROP_RE  = re.compile(r"\bDROP\b", re.IGNORECASE)
@@ -34,7 +34,7 @@ AWARE_RE = re.compile(r"(Aware|publish|subscribe|NDP)", re.IGNORECASE)
 
 
 def colorize(line: str) -> str:
-    if not SOSNET_TAGS.search(line):
+    if not GUACAMAYA_TAGS.search(line):
         return f"{ANSI['dim']}{line.rstrip()}{ANSI['reset']}"
 
     if DROP_RE.search(line):
