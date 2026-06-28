@@ -256,7 +256,10 @@ class GuacamayaForegroundService : Service() {
 
     private fun startObserving() {
         restoreWantObserving()
-        if (!wantObserving) return
+        if (!wantObserving) {
+            probeLog("observe skipped want=false")
+            return
+        }
         val adapter = (getSystemService(BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
         if (adapter?.isEnabled != true) {
             Log.w(tag, "observe deferred — Bluetooth off")
@@ -322,9 +325,11 @@ class GuacamayaForegroundService : Service() {
         fun kickObserve(context: Context) {
             val svc = instance
             if (svc != null) {
+                svc.probeLog("kickObserve instance ok")
                 svc.setWantObserving(true)
                 svc.startObserving()
             } else {
+                Log.i("guacamaya.probe", "kickObserve no instance — start FGS")
                 ContextCompat.startForegroundService(
                     context,
                     Intent(context, GuacamayaForegroundService::class.java).apply {

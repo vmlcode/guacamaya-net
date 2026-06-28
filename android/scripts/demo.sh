@@ -351,15 +351,18 @@ case "${1:-help}" in
     DEVICE_HINT="${2:-sweet}"
     serial="$(adb_serial "$DEVICE_HINT")"
     echo "[functional-compass-calibrate] $DEVICE_HINT ($serial)"
+    adb -s "$serial" shell am force-stop "$PKG" 2>/dev/null || true
+    sleep 1
     am_start_action "$serial" "${PKG}.action.HEARTBEAT_ON"
-    sleep 2
+    sleep 3
     DEVICE_HINT="$DEVICE_HINT" ./scripts/demo.sh tap-mode-both
     DEVICE_HINT="$DEVICE_HINT" ./scripts/demo.sh tap-power
     sleep 2
+    am_start_action "$serial" "${PKG}.action.HEARTBEAT_ON"
     DEVICE_HINT="$DEVICE_HINT" ./scripts/demo.sh tap-radar
     sleep 4
     DEVICE_HINT="$DEVICE_HINT" ./scripts/demo.sh tap-calibrate-north
-    sleep 3
+    sleep 6
     ./scripts/demo.sh probe-dump "$DEVICE_HINT"
     ;;
 
@@ -384,12 +387,13 @@ case "${1:-help}" in
     am_start_action "$(adb_serial "$REALME")" "${PKG}.action.START"
     am_start_action "$(adb_serial "$SWEET")" "${PKG}.action.OBSERVE_ON"
     SWEET_SERIAL="$(adb_serial "$SWEET")"
-    for _ in 1 2 3 4; do
-      sleep 15
+    for _ in 1 2 3 4 5 6 7; do
+      sleep 10
       adb -s "$SWEET_SERIAL" shell input keyevent KEYCODE_WAKEUP 2>/dev/null || true
+      adb -s "$SWEET_SERIAL" shell am start -a "${PKG}.action.OBSERVE_ON" -n "$ACTIVITY" >/dev/null 2>&1 || true
       adb -s "$SWEET_SERIAL" shell input tap 540 1100 2>/dev/null || true
     done
-    sleep 10
+    sleep 5
     ./scripts/demo.sh received "$SWEET"
     SPID="$(adb -s "$(adb_serial "$SWEET")" shell pidof "$PKG" 2>/dev/null | tr -d '\r\n' || true)"
     if [ -n "$SPID" ]; then
