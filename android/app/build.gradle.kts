@@ -17,6 +17,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
+
+        // Backend /ingest base URL. Default targets the emulator's host loopback
+        // (10.0.2.2 → host's localhost:3000). Override per build/device as needed.
+        buildConfigField("String", "INGEST_BASE_URL", "\"http://10.0.2.2:3000\"")
     }
 
     buildTypes {
@@ -43,6 +47,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
@@ -85,6 +90,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     implementation(libs.play.services.location)
+    implementation(libs.androidx.work.runtime)
 
     debugImplementation(libs.androidx.ui.tooling)
 

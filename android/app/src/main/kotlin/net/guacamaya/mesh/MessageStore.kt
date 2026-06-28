@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 import kotlinx.coroutines.flow.Flow
 
@@ -44,8 +46,13 @@ data class MessageEntity(
     @ColumnInfo(name = "battery_bucket") val batteryBucket: Int,
     @ColumnInfo(name = "pubkey") val pubkey: ByteArray,
     @ColumnInfo(name = "payload_raw") val payloadRaw: ByteArray,
+    /** 64-byte Ed25519 signature — needed to rebuild the 118 B /ingest frame.
+     *  Empty for rows written before schema v3 (excluded from upload). */
+    @ColumnInfo(name = "sig", defaultValue = "x''") val sig: ByteArray = ByteArray(0),
     @ColumnInfo(name = "rssi") val rssi: Int,
     @ColumnInfo(name = "received_at") val receivedAt: Long,
+    /** Set once the frame has been accepted by the backend's POST /ingest. */
+    @ColumnInfo(name = "uploaded", defaultValue = "0") val uploaded: Boolean = false,
 ) {
     // Room needs equals/hashCode for ByteArray fields.
     override fun equals(other: Any?): Boolean = this === other
@@ -96,9 +103,39 @@ interface MessageDao {
 
     @Query("DELETE FROM messages")
     suspend fun clear()
+
+    /**
+     * Oldest-first batch of frames not yet uploaded to the backend. Only rows that
+     * carry a full 64-byte signature are eligible — pre-v3 rows (empty sig) cannot
+     * rebuild the 118 B /ingest frame and are skipped. Oldest-first so frames near
+     * the prune horizon are mule-uploaded before they are evicted.
+     */
+    @Query(
+        "SELECT * FROM messages WHERE uploaded = 0 AND length(sig) = 64 " +
+            "ORDER BY received_at ASC LIMIT :limit"
+    )
+    suspend fun selectUploadable(limit: Int): List<MessageEntity>
+
+    @Query("UPDATE messages SET uploaded = 1 WHERE id IN (:ids)")
+    suspend fun markUploaded(ids: List<Long>)
+
+    @Query("SELECT COUNT(*) FROM messages WHERE uploaded = 0 AND length(sig) = 64")
+    suspend fun countUploadable(): Int
 }
 
-@Database(entities = [MessageEntity::class], version = 2, exportSchema = false)
+/**
+ * v2 → v3: add the signature and upload-tracking columns required by the data-mule
+ * uploader (see net.guacamaya.ingest). Non-destructive — existing collected frames
+ * are kept; they simply get an empty sig and are excluded from upload.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE messages ADD COLUMN sig BLOB NOT NULL DEFAULT x''")
+        db.execSQL("ALTER TABLE messages ADD COLUMN uploaded INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+@Database(entities = [MessageEntity::class], version = 3, exportSchema = false)
 abstract class GuacamayaDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
 
@@ -111,7 +148,10 @@ abstract class GuacamayaDatabase : RoomDatabase() {
                     context.applicationContext,
                     GuacamayaDatabase::class.java,
                     "guacamaya.db"
-                ).fallbackToDestructiveMigration().build().also { instance = it }
+                )
+                    .addMigrations(MIGRATION_2_3)
+                    .fallbackToDestructiveMigration() // safety net for any unhandled jump
+                    .build().also { instance = it }
             }
     }
 }
