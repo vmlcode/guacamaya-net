@@ -499,3 +499,26 @@ Sigue requiriendo **calibración física** (`magnet=bad`). Código ahora permite
 
 ### Bloqueador único
 Calibración magnética sweet (`./scripts/demo.sh compass-miui sweet` + figura-8).
+
+---
+
+## Iteración 22 — 2026-06-28 (loop 10m, tick 40)
+
+### Prueba adb (milestone)
+| Test | Resultado |
+|------|-----------|
+| Dispositivos | Solo **sweet** (`e06518dd`); Realme desconectado desde tick 38 |
+| `device-test` | **PASS** parcial — sweet `nodes=2 frames=69` (sin TX Realme) |
+| `functional-compass` | sweet **0° magnet=bad**; Realme N/A |
+
+### Resumen ticks 31–40
+| Área | Estado |
+|------|--------|
+| BLE (2 dispositivos) | ✅ PASS ticks 31–37 |
+| Realme adb | ❌ Desconectado ticks 38–40 |
+| Brújula sweet | ❌ `magnet=bad` — sin calibración manual |
+
+### Acción requerida
+1. Reconectar Realme por USB (`adb devices`)
+2. Calibrar magnetómetro sweet (figura-8)
+3. Re-ejecutar `ble-reverse-test` y `functional-compass`
