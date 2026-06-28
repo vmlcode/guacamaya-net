@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -76,6 +77,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
 import net.guacamaya.mesh.MessageEntity
@@ -358,6 +361,18 @@ private fun HomeScreen(
     val lastSeen = lastNode?.receivedAt?.let { NodeCatalog.formatLastHeartbeat(it) }
     val ctx = LocalContext.current
     var showBatteryHint by remember { mutableStateOf(BatteryHelper.shouldShowHint(ctx)) }
+    // Re-check on resume: after the user grants the battery exemption in system settings
+    // (or dismisses), `shouldShowHint` flips to false and the banner goes away.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                showBatteryHint = BatteryHelper.shouldShowHint(ctx)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = Space.md, vertical = Space.md),
@@ -435,7 +450,7 @@ private fun BatteryHintBanner(isXiaomi: Boolean, onConfigure: () -> Unit, onDism
             if (isXiaomi) {
                 "Para BLE en segundo plano: Autostart ON y batería «Sin restricciones»."
             } else {
-                "Permite que Guacamalla siga escuchando SOS con la pantalla apagada."
+                "Permite que GuacaMalla siga escuchando SOS con la pantalla apagada."
             },
             color = TextLo,
             style = MaterialTheme.typography.bodySmall,
@@ -547,7 +562,7 @@ private fun Header(nodeIdHex: String?) {
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column {
-            Text("Guacamalla", color = TextHi, style = MaterialTheme.typography.titleLarge)
+            Text("GuacaMalla", color = TextHi, style = MaterialTheme.typography.titleLarge)
             Text("Red SOS sin internet", color = TextLo, style = MaterialTheme.typography.labelMedium)
         }
         Box(
