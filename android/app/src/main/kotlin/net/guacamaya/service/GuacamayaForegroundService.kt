@@ -28,6 +28,8 @@ import net.guacamaya.R
 import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.ble.Broadcaster
 import net.guacamaya.crypto.Identity
+import kotlinx.coroutines.flow.first
+import net.guacamaya.mesh.GuacamayaDatabase
 import net.guacamaya.proto.Flags
 import net.guacamaya.proto.Payload
 import net.guacamaya.proto.SosType
@@ -149,6 +151,7 @@ class GuacamayaForegroundService : Service() {
     private fun ensureObserveHealthLoop() {
         if (observeHealthJob?.isActive == true) return
         observeHealthJob = scope.launch {
+            val dao = GuacamayaDatabase.get(this@GuacamayaForegroundService).messageDao()
             while (isActive && wantObserving) {
                 delay(OBSERVE_HEALTH_MS)
                 if (!wantObserving) break
@@ -156,6 +159,9 @@ class GuacamayaForegroundService : Service() {
                     Log.w(tag, "observe health tick — scan inactive, restarting")
                     BleMeshRuntime.ensureObserving(this@GuacamayaForegroundService)
                 }
+                val nodes = dao.observeNodeCount().first()
+                val frames = dao.observeCount().first()
+                Log.i(probeTag, "mesh nodes=$nodes frames=$frames scanning=${BleMeshRuntime.isScanning()}")
             }
         }
     }

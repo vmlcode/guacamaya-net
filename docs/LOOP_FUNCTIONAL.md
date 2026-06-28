@@ -233,3 +233,26 @@ logd en sweet pierde logs `FloodRouter`/`Observer`; usar `guacamaya.probe` con `
 - Validar Realme→sweet vía `probe nodes≥1 frames>0` como criterio de éxito
 - Capturar `saw UUID` en sweet si frames=0
 - Brújula sweet: calibración física
+
+---
+
+## Iteración 10 — 2026-06-28 (loop 10m, tick 11)
+
+### Cambios
+- **`demo.sh`**: `probe_rx_ok()` — éxito RX si `nodes≥1`, `frames≥1` o `target=` (fallback logd MIUI)
+- **`ble-reverse-test` / `device-test`**: PASS explícito con probe fallback
+- **`GuacamayaForegroundService`**: health loop log `mesh nodes=N frames=M` en `guacamaya.probe` (sin UI)
+
+### Prueba adb (Realme START → sweet OBSERVE, 75 s)
+| Métrica | Resultado |
+|---------|-----------|
+| FloodRouter OK | **1** |
+| probe | `nodes=2 frames=26 target=752de3df` |
+| Realme→sweet | **PASS** |
+
+### Nota
+`observe-on sweet` (activity foreground) + broadcast Realme START. Sin UI, probe UI no corre; FGS `mesh nodes=` cubre validación adb-only.
+
+### Pendiente tick 12
+- Brújula sweet: calibración física + `functional-compass-calibrate sweet`
+- Estabilizar Realme→sweet en `ble-reverse-test` completo (140 s)
