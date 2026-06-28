@@ -16,12 +16,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,8 +41,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -70,8 +63,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -79,6 +70,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -91,7 +83,10 @@ import net.guacamaya.service.GuacamayaForegroundService
 import org.json.JSONObject
 import android.util.Log
 import net.guacamaya.util.BatteryHelper
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /**
  * VPN-style single screen. One big power button toggles mesh participation
@@ -341,7 +336,7 @@ private fun statusTitle(running: Boolean, mode: MeshMode): String = when {
     !running -> "Desconectado"
     mode == MeshMode.SOS -> "Emitiendo SOS"
     mode == MeshMode.FIND -> "Buscando SOS"
-    else -> "Protegido"
+    else -> "Conectado"
 }
 
 private fun statusSubtitle(running: Boolean, mode: MeshMode): String = when {
@@ -584,70 +579,49 @@ private fun Header(nodeIdHex: String?) {
 
 @Composable
 private fun PowerButton(active: Boolean, onClick: () -> Unit) {
-    val accent = Brand
-    val transition = rememberInfiniteTransition(label = "glow")
-    val glow by transition.animateFloat(
-        initialValue = 0.25f,
-        targetValue = 0.6f,
-        animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
-        label = "glowAlpha",
-    )
-    val ring by animateColorAsState(if (active) accent else OffRing, tween(400), label = "ring")
-    val haloAlpha = if (active) glow else 0f
+    // Flat hero button — no gradient, no glow (prototype-aligned). Active = solid brand
+    // yellow with a black SOS asterisk; idle = flat dark surface with a muted asterisk.
+    val fill by animateColorAsState(if (active) Brand else CardElevated, tween(250), label = "fill")
+    val glyph = if (active) OnBrand else TextLo
 
-    Box(contentAlignment = Alignment.Center) {
-        // Outer pulsing halo (only when active)
-        Box(
-            Modifier
-                .size(240.dp)
-                .clip(CircleShape)
-                .background(accent.copy(alpha = haloAlpha * 0.25f)),
-        )
-        Box(
-            Modifier
-                .size(200.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.verticalGradient(
-                        if (active) listOf(accent.copy(alpha = 0.16f), Canvas0)
-                        else listOf(CardElevated, CardBg),
-                    )
-                )
-                .border(3.dp, ring, CircleShape)
-                .clickable(
-                    onClick = onClick,
-                    onClickLabel = if (active) "Apagar la malla" else "Encender la malla",
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            PowerGlyph(color = if (active) accent else TextLo)
-        }
+    Box(
+        Modifier
+            .size(200.dp)
+            .clip(CircleShape)
+            .background(fill)
+            .then(if (active) Modifier else Modifier.border(2.dp, OffRing, CircleShape))
+            .clickable(
+                onClick = onClick,
+                onClickLabel = if (active) "Apagar la malla" else "Encender la malla",
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        SosAsteriskGlyph(color = glyph)
     }
 }
 
+/** SOS beacon mark — an 8-spoke asterisk (✳), drawn flat. */
 @Composable
-private fun PowerGlyph(color: Color) {
-    Canvas(Modifier.size(72.dp)) {
-        val sw = 7.dp.toPx()
-        val r = size.minDimension / 2 - sw
-        val cx = size.width / 2
-        val cy = size.height / 2
-        drawArc(
-            color = color,
-            startAngle = 110f,
-            sweepAngle = 320f,
-            useCenter = false,
-            topLeft = Offset(cx - r, cy - r),
-            size = Size(r * 2, r * 2),
-            style = Stroke(width = sw, cap = StrokeCap.Round),
-        )
-        drawLine(
-            color = color,
-            start = Offset(cx, cy - r * 1.05f),
-            end = Offset(cx, cy - r * 0.15f),
-            strokeWidth = sw,
-            cap = StrokeCap.Round,
-        )
+private fun SosAsteriskGlyph(color: Color) {
+    Canvas(Modifier.size(100.dp)) {
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val rOuter = size.minDimension / 2f
+        val rInner = rOuter * 0.14f
+        val sw = size.minDimension * 0.12f
+        val arms = 8
+        for (i in 0 until arms) {
+            val ang = (PI * 2f / arms * i).toFloat()
+            val dx = cos(ang)
+            val dy = sin(ang)
+            drawLine(
+                color = color,
+                start = Offset(cx + dx * rInner, cy + dy * rInner),
+                end = Offset(cx + dx * rOuter, cy + dy * rOuter),
+                strokeWidth = sw,
+                cap = StrokeCap.Round,
+            )
+        }
     }
 }
 
@@ -665,22 +639,15 @@ private fun StatsRow(devices: Int, lastSeen: String?, lastRssi: Int?) {
 
 @Composable
 private fun StatCell(label: String, value: String, modifier: Modifier = Modifier, suffix: String? = null) {
-    Card(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = CardBg),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, CardLine),
+    // No surface/box — stats sit directly on the canvas.
+    Column(
+        modifier.padding(vertical = Space.xs),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(
-            Modifier.fillMaxWidth().padding(vertical = Space.sm),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(value, color = TextHi, style = MaterialTheme.typography.titleLarge)
-            if (suffix != null) Text(suffix, color = TextLo, style = MaterialTheme.typography.labelSmall)
-            Spacer(Modifier.height(2.dp))
-            Text(label, color = TextLo, style = MaterialTheme.typography.labelMedium)
-        }
+        Text(value, color = TextHi, style = MaterialTheme.typography.titleLarge)
+        if (suffix != null) Text(suffix, color = TextLo, style = MaterialTheme.typography.labelSmall)
+        Spacer(Modifier.height(2.dp))
+        Text(label, color = TextLo, style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -690,39 +657,37 @@ private fun RadarEntry(latestNodes: List<MessageEntity>, onClick: () -> Unit) {
     val heading = rememberCompassHeading()
     val location = rememberLiveLocation(ctx, highAccuracy = false)
     val target = location?.let { GeoProximity.nearest(it, latestNodes) }
-    val targetNode = target?.let { t -> latestNodes.firstOrNull { it.nodeId.toHex() == t.nodeId } }
     val relative = target?.let {
         if (it.coLocated) 0f else CompassMath.relativeBearing(it.bearing, heading)
     } ?: 0f
 
+    // Compact entry — small compass + one status line + chevron.
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.large)
+            .clip(MaterialTheme.shapes.medium)
             .background(CardBg)
-            .border(1.dp, CardLine, MaterialTheme.shapes.large)
+            .border(1.dp, CardLine, MaterialTheme.shapes.medium)
             .clickable(onClick = onClick, onClickLabel = "Abrir radar completo")
-            .padding(Space.sm),
+            .padding(horizontal = Space.sm, vertical = Space.xs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Space.sm),
     ) {
-        RadarCompass(sizeDp = 96, heading = heading, relative = relative, target = target)
+        RadarCompass(sizeDp = 40, heading = heading, relative = relative, target = target)
 
         Column(Modifier.weight(1f)) {
-            Text("Radar", color = TextHi, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(Space.xxs))
-            if (target == null) {
-                Text("Sin objetivo con GPS aún", color = TextLo, style = MaterialTheme.typography.bodySmall)
-                Text("Tocar para abrir radar completo", color = TextLo, style = MaterialTheme.typography.labelSmall)
-            } else {
-                Text("Nodo ${target.nodeId.take(8)}", color = TextHi, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    "${GeoProximity.formatDistance(target)} · ${targetNode?.let { NodeCatalog.formatLastHeartbeat(it.receivedAt) } ?: "—"}",
-                    color = TextLo,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-            }
+            Text("Radar", color = TextHi, style = MaterialTheme.typography.titleSmall)
+            Text(
+                if (target == null) "Sin objetivo con GPS aún"
+                else "Nodo ${target.nodeId.take(8)} · ${GeoProximity.formatDistance(target)}",
+                color = TextLo,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+
+        Text("›", color = TextLo, style = MaterialTheme.typography.titleMedium)
     }
 }
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guacamaya — demo runner.
+# Guacamalla — demo runner.
 #
 # Usage:
 #   ./scripts/demo.sh build     # assemble debug APK
@@ -208,7 +208,7 @@ case "${1:-help}" in
     dev="$(adb -s "$serial" shell getprop ro.product.device | tr -d '\r\n')"
     echo "[2/2] Install on serial=$serial device=$dev"
     adb -s "$serial" install -r "$APK"
-    echo "Done. Open Guacamaya on the phone."
+    echo "Done. Open Guacamalla on the phone."
     ;;
 
   observe-on)
@@ -558,7 +558,7 @@ case "${1:-help}" in
 
   *)
     cat <<USAGE
-Guacamaya demo runner.
+Guacamalla demo runner.
 
 Commands:
   build         assembleDebug
@@ -574,7 +574,7 @@ Commands:
   battery-whitelist [dev]  adb whitelist (sin popup MIUI)
   battery-miui [dev]       abrir Autostart MIUI manualmente
   tamper        run tamper_test.py, push JSON to /sdcard if device attached
-  logcat [dev]  stream colorized guacamaya logcat
+  logcat [dev]  stream colorized guacamalla logcat
   tap-pct X Y [dev]  tap at screen percent (0-100)
   tap-power / tap-mode-both / tap-radar / tap-map / tap-back / tap-calibrate-north
   probe-dump [dev]  last guacamaya.probe logcat lines
