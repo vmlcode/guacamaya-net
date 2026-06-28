@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { Server } from "http";
-import { ChannelRecord } from "@guacamaya/shared";
+import { ChannelRecord, LocationPoint } from "@guacamaya/shared";
 
 interface Client {
   ws: WebSocket;
@@ -59,6 +59,18 @@ export function broadcastRecord(record: ChannelRecord) {
   const payload = JSON.stringify({ type: "record", data: record });
   for (const client of clients) {
     if (client.channels.has(record.channel) && client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(payload);
+    }
+  }
+}
+
+/**
+ * Broadcasts a LocationPoint to all clients subscribed to the "locations" channel.
+ */
+export function broadcastLocation(point: LocationPoint) {
+  const payload = JSON.stringify({ type: "location", data: point });
+  for (const client of clients) {
+    if (client.channels.has("locations") && client.ws.readyState === WebSocket.OPEN) {
       client.ws.send(payload);
     }
   }
