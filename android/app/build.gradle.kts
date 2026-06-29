@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.appdistribution)
 }
 
 // Backend base URL (uplink /ingest + downlink /channels, /pubkey, /health).
@@ -50,6 +52,10 @@ android {
             // Emulator loopback by default; override with -PBACKEND_BASE_URL for a LAN backend.
             // Cleartext allowed broadly by the debug network-security-config.
             buildConfigField("String", "BACKEND_BASE_URL", "\"$backendDebugUrl\"")
+            firebaseAppDistribution {
+                groups = "internal-testers"
+                releaseNotesFile = "release-notes.txt"
+            }
         }
     }
 
