@@ -47,6 +47,10 @@
         android:theme="@style/Theme.Guacamaya"
         android:hardwareAccelerated="true">
 
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            android:value="${firebase_crashlytics_collection_enabled}" />
+
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"

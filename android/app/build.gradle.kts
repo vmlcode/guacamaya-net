@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
     alias(libs.plugins.firebase.appdistribution)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 // Backend base URL (uplink /ingest + downlink /channels, /pubkey, /health).
@@ -40,6 +41,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            manifestPlaceholders["firebase_crashlytics_collection_enabled"] = "true"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -52,6 +54,7 @@ android {
             // Emulator loopback by default; override with -PBACKEND_BASE_URL for a LAN backend.
             // Cleartext allowed broadly by the debug network-security-config.
             buildConfigField("String", "BACKEND_BASE_URL", "\"$backendDebugUrl\"")
+            manifestPlaceholders["firebase_crashlytics_collection_enabled"] = "true"
             firebaseAppDistribution {
                 groups = "internal-testers"
                 releaseNotesFile = "app/release-notes.txt"
@@ -114,6 +117,8 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.play.services.location)
     implementation(libs.androidx.work.runtime)
+    implementation(platform(libs.firebase.bom))
+    implementation("com.google.firebase:firebase-crashlytics-ktx")
 
     debugImplementation(libs.androidx.ui.tooling)
 
