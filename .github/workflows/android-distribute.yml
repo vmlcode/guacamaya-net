@@ -19,6 +19,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
 
       - name: Write release notes from last commit
         run: git log -1 --pretty=format:"%s%n%n%b" > android/app/release-notes.txt
