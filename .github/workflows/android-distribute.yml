@@ -31,4 +31,4 @@ jobs:
         working-directory: android
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
-        run: ./gradlew appDistributionUploadDebug
+        run: ./gradlew assembleDebug appDistributionUploadDebug
