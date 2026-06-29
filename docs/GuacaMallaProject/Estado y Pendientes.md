@@ -1,16 +1,17 @@
 # Estado y Pendientes
 
-Foto del estado de [[GuacamallaProject]] al **2026-06-28** (rama `develop`, monorepo consolidado).
+Foto del estado de [[GuacaMallaProject]] al **2026-06-28** (rama `develop`, monorepo consolidado).
 
 ## Qué funciona
 
-### [[Guacamalla (Android)]]
+### [[GuacaMalla (Android)]]
 - ✅ Plano BLE end-to-end: firmar → emitir frame de 119 B → observar → cascada de rechazo → persistir → retransmitir multi-salto.
 - ✅ **BLE mesh bidireccional verificado en dos teléfonos físicos** (`device-test` PASS, `nodes=2 frames=47`). Ya no es solo "build + smoke".
 - ✅ Identidad Ed25519 real sellada en Keystore.
 - ✅ Ubicación GPS real en el payload + sonda ENU (lat/lon/acc/bearing/`rel=`/`co_loc`).
 - ✅ TTL de salto que decrementa por relay y para en 0 (byte sin firmar al frente). Ver [[Protocolo y Frame]].
-- ✅ **Radar + brújula + mapa de cuadrícula offline** nuevos (`CompassHeading`, `GeoProximity`, `GridMap`); **osmdroid eliminado** y quitada la dependencia de GMS para el render. Ver [[Guacamalla (Android)]].
+- ✅ **Store-and-forward**: rotación de re-emisión en el servicio (frame propio ↔ últimos help-requests por nodo) + ventana de edad selectiva (`AgePolicy`: 24 h para help-requests, fresh-only para presence). Un SOS sobrevive al apagado de su origen y llega a equipos que entran después. Tests JVM de `AgePolicy`/`isHelpRequest` verdes; **⚠️ cambia la cadencia de broadcast — requiere validación de campo en 2-3 teléfonos (MIUI)**. Ver [[Protocolo y Frame]].
+- ✅ **Radar + brújula + mapa de cuadrícula offline** nuevos (`CompassHeading`, `GeoProximity`, `GridMap`); **osmdroid eliminado** y quitada la dependencia de GMS para el render. Ver [[GuacaMalla (Android)]].
 - ✅ Pruning de la DB Room (conserva 25 000 filas, batcheado cada 128 inserts).
 - ✅ **`IngestClient` (data-mule uploader)** implementado: persiste la firma (migración Room v3), arma el frame de 118 B y hace `POST /ingest` vía WorkManager al recuperar red. Build + tests JVM verdes. **Pata de aceptación del backend verificada** contra server real (ingesta/dedup/rechazo/locations); falta el smoke en dispositivo. Ver [[IngestClient (Data-Mule Uploader)]].
 - ✅ **Downlink de alertas oficiales** + alcanzabilidad: `BackendClient` descarga `/channels/:id/records` y **verifica la firma** (esquema oficial, `OfficialRecordVerifier`); banner en la UI; `BACKEND_BASE_URL` configurable (debug LAN override + cleartext de debug). Tests JVM verdes; falta smoke en dispositivo. Ver [[Downlink Alertas Oficiales]].
@@ -42,7 +43,7 @@ están en código y verificados *headless*. Lo que falta, en orden:
    - Compilar debug apuntando ahí: `./gradlew :app:assembleDebug -PBACKEND_BASE_URL=http://<IP-LAN>:3000` (o emulador con el default `10.0.2.2`).
    - **Uplink**: Observe recoge un frame BLE → al recuperar red el `IngestUploadWorker` hace POST → confirmar `{ ingested }` y `GET /locations`.
    - **Downlink**: crear una alerta oficial (`POST /channels/alertas/records` con admin key) → en la app debe aparecer el **banner de alertas verificadas**.
-2. [ ] **WebSocket `/ws`** en la app: suscribir `solicito-ayuda` para SOS comunitarios en vivo (sin polling). Es el siguiente nivel de wiring. Ver `backend_final.md` §4.10 y [[Downlink Alertas Oficiales]].
+2. [ ] **WebSocket en vivo** — cliente Android **hecho** (`net.guacamaya.backend.ws`: `WsFrame` testeado + `LiveSosClient` + `LiveSosIndicator` UI), pero **bloqueado por el backend**: el server **no hace upgrade WS bajo Bun** 🔴 (1006, sin log; verificado con curl crudo y `WebSocket` de Bun). Arreglar el WS del backend (Bun.serve nativo / Node / plugin compatible) — afecta también al dashboard si usa `/ws`. Ver [[Downlink Alertas Oficiales]].
 3. [ ] **Reconciliar `backend_final.md`** (doc del equipo, desactualizado): dice que el `IngestClient` no existe y usa `org.sosnet`/`BACKEND_BASE_URL`. Alinear con la realidad.
 
 ## Trabajo abierto (backlog)

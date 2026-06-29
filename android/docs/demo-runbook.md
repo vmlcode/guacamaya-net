@@ -1,4 +1,4 @@
-# Guacamalla Net — Demo Runbook (90 s, two phones)
+# GuacaMalla Net — Demo Runbook (90 s, two phones)
 
 The narrative the operator reads aloud while the demo runs. Each step links to
 the Flow it demonstrates. Jury sees the sequence diagrams side-by-side on a
@@ -37,7 +37,7 @@ Show: Phone A screen.
 
 Open `nRF Connect` on the third device. Highlight:
 
-- Guacamalla service UUID `8d3d0001-2a1b-4c8e-9c0f-1234567890ab`
+- GuacaMalla service UUID `8d3d0001-2a1b-4c8e-9c0f-1234567890ab`
 - 118-byte service-data block (22 + 32 + 64)
 - **No pairing prompt anywhere on screen.**
 
@@ -53,7 +53,7 @@ Open app on Phone B. Tap **Observe**. Within ~5 seconds:
   OK  node=6f720ded msg=10633 type=DISTRESS rssi=-58 fresh=true hops_left=15
   ```
 
-> "The BLE stack scans with `legacy=false` and filters Guacamalla UUIDs in software — hardware filters would drop the 118-byte extended service-data on some chips (e.g. Qualcomm on Android 11). The app verified the CRC, the ts window, the SHA-256 binding of pubkey to node_id, and finally the Ed25519 signature. The frame is authentic; the relay stores it and rebroadcasts the exact 118 bytes."
+> "The BLE stack scans with `legacy=false` and filters GuacaMalla UUIDs in software — hardware filters would drop the 118-byte extended service-data on some chips (e.g. Qualcomm on Android 11). The app verified the CRC, the ts window, the SHA-256 binding of pubkey to node_id, and finally the Ed25519 signature. The frame is authentic; the relay stores it and rebroadcasts the exact 118 bytes."
 
 ## 0:40 — Flow 6: Battery duty cycle (5 s)
 

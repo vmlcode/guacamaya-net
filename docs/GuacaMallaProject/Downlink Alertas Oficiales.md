@@ -1,6 +1,6 @@
 # Downlink — Alertas Oficiales
 
-La otra mitad del cableado **backend ↔ app** de [[GuacamallaProject]]. Mientras el
+La otra mitad del cableado **backend ↔ app** de [[GuacaMallaProject]]. Mientras el
 [[IngestClient (Data-Mule Uploader)]] es el **uplink** (app → `POST /ingest`), esto es
 el **downlink**: la app **descarga alertas oficiales** del [[Backend Data-Mule]]
 (`GET /channels/:id/records`) y **solo muestra las que verifica criptográficamente**.
@@ -70,12 +70,34 @@ contenido fallaría — documentado; en dev (store en memoria) el orden se prese
   payload/metadata alterada, pubkey errónea, sig faltante, id que no casa → rechazados).
 - **Build debug verde** con el banner en la UI.
 
+## WebSocket en vivo (`/ws`) — cliente listo, ⚠️ servidor bloqueado bajo Bun
+
+Segundo nivel del downlink: la app recibe **SOS comunitarios en vivo** (canal `solicito-ayuda`)
+sin polling. Construido en `net.guacamaya.backend.ws`:
+
+- `WsFrame` — códec RFC 6455 mínimo (FIN, máscara de cliente, longitudes 7/16/64-bit, ping/pong).
+  Puro, **unit-testeado** (`WsFrameTest`: round-trip por fronteras de longitud, frame de cliente
+  enmascarado, EOF, ping, frames consecutivos).
+- `LiveSosClient` — cliente WS hecho a mano sobre `Socket` crudo (sin OkHttp): handshake HTTP upgrade,
+  `{"type":"subscribe","channel":"solicito-ayuda"}`, lee `{"type":"record","data":<ChannelRecord>}`,
+  responde ping→pong, **reconexión con backoff exponencial**. Solo `ws://` (cleartext) por ahora;
+  `wss://` se omite (TLS = endurecimiento futuro). Best-effort: no-op si no hay red.
+- `MapViewModel.liveSos` (`StateFlow`, dedupe por id, tope 50) + `LiveSosIndicator` en la UI
+  (ámbar = comunidad sin confirmar, per DESIGN.md).
+
+> **⚠️ BLOQUEADOR (lado backend):** el servidor **no completa el upgrade WebSocket bajo el runtime
+> Bun**. Verificado: tanto el `WebSocket` de Bun como un `curl` crudo con headers de upgrade fallan
+> con cierre 1006 / sin respuesta, y el server **no loguea** ningún upgrade. El patrón `ws` +
+> `server.on("upgrade", …)` (Node) no funciona en el shim `node:http` de Bun. El cliente Android es
+> correcto (códec testeado, protocolo per spec) y **funcionará cuando el WS del server funcione**.
+> Fix del backend (fuera de este cambio): migrar a WebSocket nativo de `Bun.serve`, o correr bajo
+> Node, o un plugin WS compatible con Bun. Afecta también al **dashboard** si depende de `/ws`.
+
 ## Pendiente / siguiente
 
+- [ ] **Arreglar el WS del backend bajo Bun** (bloqueador de arriba) — sin esto, no hay SOS en vivo.
 - [ ] **Smoke en dispositivo**: app (emulador o teléfono con `-PBACKEND_BASE_URL=<IP-LAN>`) →
       `refreshAlerts()` → banner con la alerta del operador. Headless ya cubierto.
-- [ ] **WebSocket `/ws`** (siguiente nivel de "wiring"): suscribir `solicito-ayuda` para SOS
-      comunitarios en vivo sin polling. Ver `backend_final.md` §4.10.
 - [ ] **`backend_final.md` está desactualizado** (dice que el `IngestClient` no existe, usa
       `org.sosnet`/`BACKEND_BASE_URL`); conviene reconciliarlo con la realidad.
 

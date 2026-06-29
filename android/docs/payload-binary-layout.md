@@ -1,4 +1,4 @@
-# Guacamalla Net — Payload Binary Layout
+# GuacaMalla Net — Payload Binary Layout
 
 Over-the-air frame for the BLE Extended Advertising (ADV_EXT_IND) control plane. Four blocks travel together as BLE service data: a 1 B unsigned hop TTL, a 22 B application payload, the 32 B Ed25519 public key of the origin (so any receiver can verify without a registry), and the 64 B Ed25519 signature over the payload.
 

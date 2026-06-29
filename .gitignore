@@ -6,6 +6,9 @@ dist/
 !.env.example
 .DS_Store
 
+# IDE
+.idea/
+
 # Expo
 app/.expo/
 app/android/

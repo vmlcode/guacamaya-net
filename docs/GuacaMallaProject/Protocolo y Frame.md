@@ -1,6 +1,6 @@
 # Protocolo y Frame
 
-El contrato binario entre todas las capas (y entre [[Guacamalla (Android)]] y el [[Backend Data-Mule]]).
+El contrato binario entre todas las capas (y entre [[GuacaMalla (Android)]] y el [[Backend Data-Mule]]).
 Todo dato es un **payload firmado de 22 bytes** que viaja dentro de un único frame de broadcast.
 
 ## ⚠️ Riesgo crítico: el layout binario se mantiene en sync a mano en TRES lugares
@@ -68,18 +68,34 @@ primero**, antes de almacenarse o retransmitirse:
 
 1. `SHA-256(pubkey)[0..4] == payload.nodeId` (ata pubkey; frena el swap de llave)
 2. `Payload.decode` ok (CRC16 — rechazo barato antes del verify caro)
-3. `|tsUnix − now| ≤ 300 s` (`MAX_TS_SKEW_SECONDS`, ventana de replay)
+3. **Ventana de edad selectiva** (`mesh/AgePolicy`, antes un `±300 s` plano):
+   - **Help-requests** (`Payload.isHelpRequest = critical || sosType != OTHER`): aceptados hasta
+     **24 h** en el pasado → store-and-forward de un SOS viejo.
+   - **Presence/heartbeat** (OTHER no-crítico): fresh-only `±300 s` (un "estoy aquí" viejo no se reenvía).
+   - Cota de futuro `+300 s` siempre (anti clock-skew).
 4. Verificación Ed25519 (`Signer.verify`, el paso caro, al final)
 
 Si pasa → `DedupeCache.admit` → persistir en Room (pruning batcheado, conserva 25 000 filas; ver
-[[Guacamalla (Android)]]) → si es fresco, **retransmitir los bytes payload/pubkey/sig sin cambios** con
-el TTL de salto decrementado; deja de retransmitir cuando llegaría a 0 (el frame igual se guarda para
-que el usuario local lo vea). El loop-back dentro de la ventana lo suprime el dedupe, indexado por
+[[GuacaMalla (Android)]]) → si es fresco, **retransmitir los bytes payload/pubkey/sig sin cambios** con
+el TTL de salto decrementado. El loop-back dentro de la ventana lo suprime el dedupe, indexado por
 `(nodeId, msgId)`, LRU + TTL 5 min.
 
-> **`FloodRouter` recibe `sig64` pero `MessageEntity` NO la persiste** (no hay columna `sig`). Para el
-> `IngestClient` pendiente habrá que añadirla, porque el frame de subida a `/ingest` necesita los 64 B
-> de firma. Ver [[Estado y Pendientes]].
+## Store-and-forward (el SOS sobrevive a su origen)
+
+El relay en recibo es un eco transitorio; la **persistencia del SOS** la da la **rotación de
+re-emisión** del `GuacaMallaForegroundService`: mientras transmite (modo SOS o Ambos), la **única
+ranura de advertising** alterna entre el frame **propio** del equipo y el **último help-request por
+cada otro nodo** (`MessageDao.latestHelpFramesPerNode`, ~20 nodos, dwell 2 s, `REBROADCAST_TTL=2`).
+
+> Así, si el origen **A** se apaga, el relay **B** sigue re-emitiendo el SOS firmado de A desde su
+> almacén; cuando **C** entra en rango, recibe el frame de A (ya viejo) y, por ser help-request, lo
+> acepta dentro de la ventana de 24 h, lo guarda y lo reenvía. C obtiene la ubicación de A **después
+> de que A se fue**. Holders encadenados llevan el SOS por la malla.
+
+> **Seguridad:** relajar la ventana para help-requests permite re-emitir un SOS firmado viejo (la
+> ubicación es genuina, firmada por A; no se puede forjar). Riesgo: un SOS resuelto/viejo se ve como
+> vigente — mitigado mostrando la **edad** ("visto hace X") y con el flujo Resolve del backend. Solo
+> aplica al canal de ayuda, no a presence. Ajustable en `AgePolicy` (constantes).
 
 > En el [[Backend Data-Mule]] la cascada se replica **idéntica salvo el paso 3** (skew de tiempo): un
 > data-mule sube reportes viejos a propósito, así que ahí no se aplica la ventana de replay.

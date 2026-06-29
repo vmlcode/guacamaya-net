@@ -6,7 +6,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Read-only HTTP client for the optional Guacamalla backend (downlink). Built on
+ * Read-only HTTP client for the optional GuacaMalla backend (downlink). Built on
  * [HttpURLConnection] — no OkHttp/Retrofit, matching [net.guacamaya.ingest.IngestClient].
  *
  * Only the endpoints a phone legitimately consumes, all unauthenticated:

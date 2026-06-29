@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Guacamalla design system — Compose token layer.
+ * GuacaMalla design system — Compose token layer.
  *
  * Direct port of `docs/design/DESIGN.md` (yellow + black brand voltage, dark-only,
  * emergency-semantic layer). Per that doc's "Platform Mapping" section, the M3

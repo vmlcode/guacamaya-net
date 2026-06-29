@@ -15,7 +15,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * BLE GAP Observer. Software filter on the Guacamalla Service UUID in [ScanRecord] —
+ * BLE GAP Observer. Software filter on the GuacaMalla Service UUID in [ScanRecord] —
  * hardware ScanFilter is avoided because many stacks omit extended service-data
  * from the record when filtering in silicon. See docs/protocol-flows.md Flow 2.
  *
@@ -84,7 +84,7 @@ class Observer private constructor(
             if (sawUuid || blob != null) {
                 Log.w(
                     tag,
-                    "Guacamalla frame incomplete size=${blob?.size ?: -1} " +
+                    "GuacaMalla frame incomplete size=${blob?.size ?: -1} " +
                         "(need ${BleConfig.SERVICE_DATA_SIZE}) rssi=${result.rssi} legacy=${result.isLegacy}",
                 )
             }
@@ -202,7 +202,7 @@ class Observer private constructor(
         startInternal()
     }
 
-    /** If no Guacamalla frames (legacy) or no callbacks (aggressive) for threshold → restart. */
+    /** If no GuacaMalla frames (legacy) or no callbacks (aggressive) for threshold → restart. */
     private val watchdogRunnable = object : Runnable {
         override fun run() {
             if (!scanning) return
@@ -233,7 +233,7 @@ class Observer private constructor(
     companion object {
         private const val RESTART_DELAY_MS = 1_500L
         private const val WATCHDOG_INTERVAL_MS = 60_000L
-        /** Legacy Xiaomi/sweet: check every 30 s, restart if no Guacamalla frame in 60 s. */
+        /** Legacy Xiaomi/sweet: check every 30 s, restart if no GuacaMalla frame in 60 s. */
         private const val LEGACY_WATCHDOG_INTERVAL_MS = 30_000L
         private const val LEGACY_FRAME_STALL_MS = 60_000L
         /** No BLE callbacks for 3 min while observing → force scan refresh. */

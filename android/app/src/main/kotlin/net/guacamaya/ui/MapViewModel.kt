@@ -1,6 +1,12 @@
 package net.guacamaya.ui
 
 import android.app.Application
+import android.bluetooth.BluetoothAdapter
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +20,8 @@ import net.guacamaya.BuildConfig
 import net.guacamaya.backend.AlertsRepository
 import net.guacamaya.backend.BackendClient
 import net.guacamaya.backend.OfficialAlert
+import net.guacamaya.backend.ws.LiveSos
+import net.guacamaya.backend.ws.LiveSosClient
 import net.guacamaya.ble.Broadcaster
 import net.guacamaya.crypto.Identity
 import net.guacamaya.mesh.MessageDao
@@ -63,10 +71,19 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     val mode: StateFlow<MeshMode> = _mode.asStateFlow()
 
     /**
-     * Whether this device can transmit SOS over BLE (extended advertising). False on
-     * emulators / chips without BLE 5 — the UI warns before a broadcasting mode is used.
+     * Whether this device can transmit SOS over BLE (extended advertising). False only
+     * on chips without BLE 5 once Bluetooth is ON — NOT while BT is off (that produced a
+     * false "no puede transmitir" warning at launch). Reactive: re-checked whenever the
+     * Bluetooth adapter changes state, so enabling BT clears the warning automatically.
      */
-    val broadcastSupported: Boolean = Broadcaster.isSupported(app)
+    private val _broadcastSupported = MutableStateFlow(Broadcaster.isSupported(app))
+    val broadcastSupported: StateFlow<Boolean> = _broadcastSupported.asStateFlow()
+
+    private val btStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == BluetoothAdapter.ACTION_STATE_CHANGED) refreshBroadcastSupport()
+        }
+    }
 
     /**
      * Verified official alerts pulled from the optional backend (downlink). Empty
@@ -77,11 +94,33 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     private val _alerts = MutableStateFlow<List<OfficialAlert>>(emptyList())
     val alerts: StateFlow<List<OfficialAlert>> = _alerts.asStateFlow()
 
+    /**
+     * Live community SOS streamed from the backend over WebSocket (downlink) — reports
+     * relayed from other regions/mules, complementing the local BLE mesh. Best-effort:
+     * empty when offline; deduped by record id, newest first, capped. See [LiveSosClient].
+     */
+    private val liveSosClient = LiveSosClient(BuildConfig.BACKEND_BASE_URL)
+    private val _liveSos = MutableStateFlow<List<LiveSos>>(emptyList())
+    val liveSos: StateFlow<List<LiveSos>> = _liveSos.asStateFlow()
+
     init {
         viewModelScope.launch {
             _identity.value = Identity.loadOrCreate(app)
         }
+        ContextCompat.registerReceiver(
+            app,
+            btStateReceiver,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         refreshAlerts()
+        // Single WS reader thread invokes this callback; the read-modify-write is safe.
+        liveSosClient.start(viewModelScope) { sos ->
+            val current = _liveSos.value
+            if (current.none { it.recordId == sos.recordId }) {
+                _liveSos.value = (listOf(sos) + current).take(MAX_LIVE_SOS)
+            }
+        }
     }
 
     /** Best-effort pull of verified official alerts. Safe to call on resume / connectivity. */
@@ -91,9 +130,24 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Re-evaluate BLE broadcast capability (e.g. after the user turns Bluetooth on). */
+    fun refreshBroadcastSupport() {
+        _broadcastSupported.value = Broadcaster.isSupported(getApplication())
+    }
+
+    override fun onCleared() {
+        liveSosClient.stop()
+        try { getApplication<Application>().unregisterReceiver(btStateReceiver) } catch (_: Exception) {}
+        super.onCleared()
+    }
+
     fun setBroadcasting(on: Boolean) { _broadcasting.value = on }
     fun setObserving(on: Boolean) { _observing.value = on }
     fun setMode(m: MeshMode) { _mode.value = m }
+
+    private companion object {
+        const val MAX_LIVE_SOS = 50
+    }
 }
 
 /** What the big power button does when turned on. */

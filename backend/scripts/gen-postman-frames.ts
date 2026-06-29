@@ -1,5 +1,5 @@
 /**
- * Generates real signed Guacamalla mesh frames for the Postman collection.
+ * Generates real signed GuacaMalla mesh frames for the Postman collection.
  *
  *   bun run backend/scripts/gen-postman-frames.ts
  *

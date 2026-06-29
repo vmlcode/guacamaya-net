@@ -74,7 +74,7 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk ./gradlew :app:assembleDebug
 | Área | Cambio |
 |------|--------|
 | **RSSI** | Suavizado EMA por nodo; cuando GPS dice «junto» muestra hint BLE (`tocando`, `~1 m`, …). Elige nodo por RSSI si todos co-located. |
-| **BLE sweet** | Watchdog legacy: revisa cada **30 s**, reinicia scan si **60 s** sin frame Guacamalla (antes 3 min genérico). |
+| **BLE sweet** | Watchdog legacy: revisa cada **30 s**, reinicia scan si **60 s** sin frame GuacaMalla (antes 3 min genérico). |
 | **UI** | Lista del mapa usa `MessageListItem` + `contentType` → menos recomposiciones en listas largas. |
 
 ### Backlog

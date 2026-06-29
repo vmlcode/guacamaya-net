@@ -4,7 +4,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * Guacamalla application payload — 22 bytes, big-endian.
+ * GuacaMalla application payload — 22 bytes, big-endian.
  *
  * See docs/payload-binary-layout.md for the byte map. The 2-byte CRC16 at the end
  * is computed over bytes 0..19 (cheap reject before the expensive Ed25519 verify).
@@ -21,6 +21,15 @@ data class Payload(
     val sosType: SosType,      // byte  17
     val msgId: Int,            // bytes 18..19 uint16 (kept as Int)
 ) {
+    /**
+     * True for an actual aid request (vs a presence/heartbeat beacon). Used to give
+     * help requests a long store-and-forward age window while keeping presence frames
+     * fresh-only (see mesh/AgePolicy). The presence heartbeat is the only sender that
+     * is non-critical AND [SosType.OTHER]; every real request is critical or a specific
+     * type. No spare flag bit exists, so this is derived from existing fields.
+     */
+    val isHelpRequest: Boolean get() = flags.critical || sosType != SosType.OTHER
+
     init {
         require(nodeId.size == 4) { "nodeId must be 4 bytes, got ${nodeId.size}" }
         require(tsUnix in 0..0xFFFFFFFFL) { "tsUnix out of uint32 range: $tsUnix" }

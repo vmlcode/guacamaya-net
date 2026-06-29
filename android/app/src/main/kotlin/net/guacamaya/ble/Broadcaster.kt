@@ -39,7 +39,7 @@ class Broadcaster private constructor(
 
     /**
      * Start advertising with the given hop TTL + 22 B payload + 32 B pubkey + 64 B
-     * signature, concatenated into a single service-data blob keyed by the Guacamalla
+     * signature, concatenated into a single service-data blob keyed by the GuacaMalla
      * Service UUID. [ttl] is the unsigned hop budget (0..15) written at offset 0.
      */
     fun start(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int = BleConfig.ORIGIN_HOP_TTL) {
@@ -151,7 +151,7 @@ class Broadcaster private constructor(
 
     companion object {
         /**
-         * Whether this device can transmit a Guacamalla frame — i.e. has a Bluetooth
+         * Whether this device can transmit a GuacaMalla frame — i.e. has a Bluetooth
          * adapter that supports multiple + extended LE advertising. False on emulators
          * and chips without BLE 5 extended advertising. Read-only, no side effects;
          * the UI uses it to warn before the user picks a broadcasting mode.
@@ -159,6 +159,13 @@ class Broadcaster private constructor(
         fun isSupported(context: Context): Boolean {
             val bm = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
             val adapter = bm?.adapter ?: return false
+            // Capability cannot be determined while Bluetooth is OFF: getBluetoothLeAdvertiser()
+            // returns null and the support flags are unreliable. Do NOT report "unsupported"
+            // in that case (it produced a false "este equipo no puede transmitir" warning on
+            // capable devices launched with BT off) — assume capable until BT is on and proves
+            // otherwise. Callers should re-check on ACTION_STATE_CHANGED. Genuine BT-5-less
+            // chips are still rejected once BT is enabled, and create() is the final gate.
+            if (!adapter.isEnabled) return true
             if (!adapter.isMultipleAdvertisementSupported) return false
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                 !adapter.isLeExtendedAdvertisingSupported

@@ -1,8 +1,8 @@
 ---
 version: alpha
-name: Guacamalla-mobile-design-system
+name: GuacaMalla-mobile-design-system
 description: >
-  Design system for the Guacamalla emergency-mesh mobile app — a connectionless SOS network for
+  Design system for the GuacaMalla emergency-mesh mobile app — a connectionless SOS network for
   disaster scenarios (earthquakes, Venezuela), Android-first, built for low-end phones used under
   stress. Anchored on near-pure black canvas with electric yellow as the brand voltage (inherited
   from the ClickHouse design language: yellow + black, dark-only, confident sans, hierarchy by size
@@ -287,13 +287,13 @@ components:
 
 ## Overview
 
-Guacamalla's mobile surface inherits the **ClickHouse brand voltage verbatim**: a **near-pure black
+GuacaMalla's mobile surface inherits the **ClickHouse brand voltage verbatim**: a **near-pure black
 canvas** (`{colors.canvas}` — #0a0a0a) with **electric yellow** (`{colors.primary}` — #faff69) as the
 singular brand color, white Inter typography at confident weights, hierarchy built on size and weight
 rather than family contrast, and surface cards that are *barely* lighter than canvas (depth from subtle
 contrast, never drop shadows). It is **dark-only**.
 
-But Guacamalla is not a marketing site — it is a **life-safety tool** used during disasters on **low-end
+But GuacaMalla is not a marketing site — it is a **life-safety tool** used during disasters on **low-end
 Android phones**, possibly outdoors in daylight, possibly one-handed, possibly by a frightened person on
 a cracked screen. That reframes the system in three ways the ClickHouse doc never had to consider:
 
@@ -714,4 +714,4 @@ of the situation, damaged hardware, and dying batteries.
 - **Marketing/landing surface** is explicitly out of scope (this doc is the app). If one is needed later,
   it can reuse the brand layer with ClickHouse's marketing components.
 - This system inherits ClickHouse's color *atmosphere*; the **emergency-semantic and SOS-type hexes are
-  Guacamalla-original** and may be tuned once tested on real low-end panels in daylight.
+  GuacaMalla-original** and may be tuned once tested on real low-end panels in daylight.

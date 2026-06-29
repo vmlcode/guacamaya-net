@@ -5,7 +5,7 @@ import { bytesToHex } from "@noble/hashes/utils.js";
 const priv = ed.utils.randomPrivateKey();
 const pub = await ed.getPublicKeyAsync(priv);
 
-console.log("# Guacamalla Net — generated keys (add to backend/.env)\n");
+console.log("# GuacaMalla Net — generated keys (add to backend/.env)\n");
 console.log(`BACKEND_PRIVATE_KEY_HEX=${bytesToHex(priv)}`);
 console.log(`BACKEND_PUBLIC_KEY_HEX=${bytesToHex(pub)}`);
 console.log(`GUACAMAYA_ADMIN_KEY=${randomBytes(32).toString("hex")}`);
