@@ -54,7 +54,7 @@ android {
             buildConfigField("String", "BACKEND_BASE_URL", "\"$backendDebugUrl\"")
             firebaseAppDistribution {
                 groups = "internal-testers"
-                releaseNotesFile = "release-notes.txt"
+                releaseNotesFile = "app/release-notes.txt"
             }
         }
     }
