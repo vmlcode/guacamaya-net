@@ -6,10 +6,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -255,6 +257,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
 
     var showRadar by remember { mutableStateOf(false) }
     val running = broadcasting || observing
+    val locationGranted = rememberLocationPermission(ctx)
     FunctionalProbe(compass = probeCompass, location = probeLocation, nodes = latestNodes, totalFrames = totalFrames)
 
     // Re-check BLE broadcast capability on resume (e.g. returning from BT/quick settings),
@@ -333,6 +336,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
                 onPower = { onPower() },
                 onSelectMode = { onSelectMode(it) },
                 broadcastSupported = broadcastSupported,
+                locationGranted = locationGranted,
                 onOpenRadar = { showRadar = true },
             )
         }
@@ -371,6 +375,7 @@ private fun HomeScreen(
     onPower: () -> Unit,
     onSelectMode: (MeshMode) -> Unit,
     broadcastSupported: Boolean,
+    locationGranted: Boolean,
     onOpenRadar: () -> Unit,
 ) {
     val lastNode = latestNodes.firstOrNull()
@@ -405,6 +410,11 @@ private fun HomeScreen(
         if (liveSosCount > 0) {
             Spacer(Modifier.height(Space.sm))
             LiveSosIndicator(count = liveSosCount)
+        }
+
+        if (!locationGranted && mode != MeshMode.FIND) {
+            Spacer(Modifier.height(Space.sm))
+            LocationDeniedBanner(ctx)
         }
 
         if (showBatteryHint) {
@@ -454,6 +464,61 @@ private fun HomeScreen(
         Spacer(Modifier.height(Space.sm))
 
         RadarEntry(latestNodes = latestNodes, onClick = onOpenRadar)
+    }
+}
+
+@Composable
+private fun rememberLocationPermission(ctx: Context): Boolean {
+    val check = {
+        ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+    var granted by remember { mutableStateOf(check()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) granted = check()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    return granted
+}
+
+/** Red banner shown when location permission is denied and the mode requires GPS (SOS / Ambos). */
+@Composable
+private fun LocationDeniedBanner(ctx: Context) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .background(GuacamayaPalette.DangerSoft)
+            .border(1.dp, DangerC.copy(alpha = 0.55f), MaterialTheme.shapes.medium)
+            .padding(Space.sm),
+    ) {
+        Text(
+            "⚠ Sin ubicación — SOS sin coordenadas",
+            color = DangerC,
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Spacer(Modifier.height(Space.xxs))
+        Text(
+            "El permiso de ubicación está denegado. Tu SOS se transmitirá sin posición GPS, dificultando el rescate.",
+            color = TextLo,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.height(Space.xs))
+        Button(
+            onClick = {
+                ctx.startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", ctx.packageName, null)
+                    }
+                )
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = DangerC, contentColor = GuacamayaPalette.OnSemantic),
+            shape = MaterialTheme.shapes.small,
+        ) { Text("Activar permiso", style = MaterialTheme.typography.labelLarge) }
     }
 }
 
