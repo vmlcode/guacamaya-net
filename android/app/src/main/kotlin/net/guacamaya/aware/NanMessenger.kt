@@ -1,6 +1,7 @@
 package net.guacamaya.aware
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.wifi.aware.AttachCallback
 import android.net.wifi.aware.DiscoverySessionCallback
 import android.net.wifi.aware.PeerHandle
@@ -10,9 +11,11 @@ import android.net.wifi.aware.SubscribeConfig
 import android.net.wifi.aware.SubscribeDiscoverySession
 import android.net.wifi.aware.WifiAwareManager
 import android.net.wifi.aware.WifiAwareSession
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.core.content.ContextCompat
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -30,6 +33,7 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class NanMessenger private constructor(
     private val manager: WifiAwareManager,
+    private val context: Context,
 ) {
     private val tag = "guacamaya.aware.NanMessenger"
     private val handler = Handler(Looper.getMainLooper())
@@ -55,8 +59,18 @@ class NanMessenger private constructor(
             return
         }
         if (!manager.isAvailable) {
-            Log.w(tag, "WifiAware not available")
+            Log.w(tag, "attach skipped — WifiAware not available")
             onFailed(-1)
+            return
+        }
+        val awarePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            android.Manifest.permission.NEARBY_WIFI_DEVICES
+        } else {
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        if (ContextCompat.checkSelfPermission(context, awarePermission) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(tag, "attach skipped — $awarePermission not granted")
+            onFailed(-3)
             return
         }
         manager.attach(object : AttachCallback() {
@@ -85,7 +99,10 @@ class NanMessenger private constructor(
 
         val session = sessionRef.get() ?: run {
             Log.w(tag, "publish called before attach; attaching then publishing")
-            attach(onAttached = { publish(ssi) })
+            attach(
+                onAttached = { publish(ssi) },
+                onFailed = { Log.e(tag, "publish: attach failed (code=$it), frame lost") },
+            )
             return
         }
 
@@ -123,7 +140,10 @@ class NanMessenger private constructor(
      */
     fun subscribe() {
         val session = sessionRef.get() ?: run {
-            attach(onAttached = { subscribe() })
+            attach(
+                onAttached = { subscribe() },
+                onFailed = { Log.e(tag, "subscribe: attach failed (code=$it)") },
+            )
             return
         }
         val config = SubscribeConfig.Builder()
@@ -170,7 +190,7 @@ class NanMessenger private constructor(
                     Log.w("guacamaya.aware.NanMessenger", "no WifiAwareManager")
                     return null
                 }
-            return NanMessenger(mgr)
+            return NanMessenger(mgr, context.applicationContext)
         }
     }
 }

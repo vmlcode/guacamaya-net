@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "800641010595",
+    "project_id": "guacamalla-app",
+    "storage_bucket": "guacamalla-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:800641010595:android:cb83f00966ab0e87faa816",
+        "android_client_info": {
+          "package_name": "net.guacamaya"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjgHuFOT97JMnINSc1kbKazMxXjgaW05g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
