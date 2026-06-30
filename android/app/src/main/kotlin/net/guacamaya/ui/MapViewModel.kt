@@ -66,8 +66,12 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     private val _observing = MutableStateFlow(false)
     val observing: StateFlow<Boolean> = _observing.asStateFlow()
 
-    /** User-selected operating mode for the big power button. Default: BOTH. */
-    private val _mode = MutableStateFlow(MeshMode.BOTH)
+    /**
+     * User-selected operating mode for the big power button. Default: SOS — this is an
+     * emergency app, so pressing power should call for help first. SOS also observes
+     * (see applyMode), so the radar still populates while broadcasting distress.
+     */
+    private val _mode = MutableStateFlow(MeshMode.SOS)
     val mode: StateFlow<MeshMode> = _mode.asStateFlow()
 
     /**

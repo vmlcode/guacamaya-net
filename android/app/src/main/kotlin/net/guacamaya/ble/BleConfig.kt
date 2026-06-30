@@ -25,15 +25,42 @@ import java.util.UUID
  * authoritative live hop budget is this byte.
  *
  * Observer filters on the UUID in software (extended service-data is often omitted when
- * using hardware filters). The UUID is a placeholder — change before production. Same
- * value must be used by Observer when matching ScanRecord.serviceUuids.
+ * using hardware filters). Same value must be used by Observer when matching
+ * ScanRecord.serviceUuids.
+ *
+ * ## UUID transition (cutover + dual-scan)
+ *
+ * [SERVICE_UUID] is the production identity an origin **broadcasts** under. [LEGACY_UUIDS]
+ * are older values the Observer still **accepts** during a rollout, so a mixed fleet does
+ * not silently partition into two deaf meshes (matching is in software → free). To rotate
+ * the UUID in the future: add the current value to [LEGACY_UUIDS], set a fresh
+ * [SERVICE_UUID], ship; drop the legacy entry a release later once the fleet has updated.
  */
 object BleConfig {
 
-    /** 128-bit Service UUID. */
-    val SERVICE_UUID: UUID = UUID.fromString("8d3d0001-2a1b-4c8e-9c0f-1234567890ab")
+    /**
+     * 128-bit production Service UUID an origin broadcasts under. A random v4 (not a
+     * registry-assigned value) — the 128-bit space makes collision negligible and no
+     * central registration is needed. Replaced the hand-typed `8d3d0001-…` placeholder
+     * (now in [LEGACY_UUIDS] for the transition window).
+     */
+    val SERVICE_UUID: UUID = UUID.fromString("a613421e-f059-4233-a4de-8b08de13fb7e")
+
+    /**
+     * Retired UUIDs the Observer still matches so devices on an older build stay reachable
+     * during a rollout. Broadcast is always [SERVICE_UUID]; only scanning accepts these.
+     */
+    val LEGACY_UUIDS: List<UUID> = listOf(
+        UUID.fromString("8d3d0001-2a1b-4c8e-9c0f-1234567890ab"),
+    )
+
+    /** Every UUID the Observer accepts (current + legacy), newest first. */
+    val MATCH_UUIDS: List<UUID> = listOf(SERVICE_UUID) + LEGACY_UUIDS
 
     val SERVICE_PARCEL_UUID: ParcelUuid = ParcelUuid(SERVICE_UUID)
+
+    /** ParcelUuids for software matching of [MATCH_UUIDS]. */
+    val MATCH_PARCEL_UUIDS: List<ParcelUuid> = MATCH_UUIDS.map { ParcelUuid(it) }
 
     /** Byte offsets within the service-data blob. */
     const val TTL_OFFSET = 0

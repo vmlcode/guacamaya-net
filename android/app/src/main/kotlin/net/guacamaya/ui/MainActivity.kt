@@ -80,7 +80,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.LocationServices
+import net.guacamaya.loc.PlatformLocation
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.mesh.NodeCatalog
 import net.guacamaya.backend.OfficialAlert
@@ -284,9 +287,12 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     fun applyMode(m: MeshMode) {
         when (m) {
             MeshMode.SOS -> {
-                vm.setBroadcasting(true); vm.setObserving(false)
-                send(GuacamayaForegroundService.ACTION_OBSERVE_OFF)
+                // Broadcast distress AND scan: a victim should still see who's around on
+                // the radar while calling for help. ACTION_START handles the SOS broadcast
+                // (own frame + held help-frames); OBSERVE_ON feeds the radar / store-and-forward.
+                vm.setBroadcasting(true); vm.setObserving(true)
                 send(GuacamayaForegroundService.ACTION_HEARTBEAT_OFF)
+                send(GuacamayaForegroundService.ACTION_OBSERVE_ON)
                 send(GuacamayaForegroundService.ACTION_START)
             }
             MeshMode.FIND -> {
@@ -836,7 +842,7 @@ private fun RadarScreen(latestNodes: List<MessageEntity>, onBack: () -> Unit) {
             Text("Sin objetivo con GPS", color = TextHi, style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(Space.xxs))
             Text(
-                "Enciende Ambos en el otro teléfono y espera el heartbeat.",
+                "Enciende SOS o Ambos en el otro teléfono y espera su señal con GPS.",
                 color = TextLo,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
@@ -930,35 +936,39 @@ private fun RadarCompass(sizeDp: Int, heading: Float, relative: Float, target: G
     }
 }
 
+/**
+ * Own-position for the radar. Prefers Fused when Google Play Services is present, but
+ * falls back to the platform [PlatformLocation] (AOSP LocationManager) when GMS is
+ * absent — otherwise the radar is permanently blank on de-Googled / low-end phones.
+ * Always seeds an instant blip from the freshest last-known fix.
+ */
 @SuppressLint("MissingPermission")
 @Composable
 private fun rememberLiveLocation(ctx: Context, highAccuracy: Boolean): Location? {
     var location by remember { mutableStateOf<Location?>(null) }
     DisposableEffect(ctx, highAccuracy) {
-        val fine = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!fine && !coarse) {
+        if (!PlatformLocation.hasPermission(ctx)) {
             onDispose { }
         } else {
-            val client = LocationServices.getFusedLocationProviderClient(ctx)
             var current = location
-            val callback = LocationTracker.listen(
-                client,
-                highAccuracy,
-                ctx.mainLooper,
-            ) { raw ->
+            fun push(raw: Location) {
                 current = LocationTracker.smoothFix(current, raw)
                 location = current
             }
-            client.lastLocation.addOnSuccessListener { fix ->
-                if (fix != null) {
-                    current = LocationTracker.smoothFix(current, fix)
-                    location = current
-                }
+            // Instant seed so the radar has a fix before continuous updates warm up.
+            PlatformLocation.lastKnown(ctx)?.let { push(it) }
+
+            val gmsOk = GoogleApiAvailability.getInstance()
+                .isGooglePlayServicesAvailable(ctx) == ConnectionResult.SUCCESS
+            if (gmsOk) {
+                val client = LocationServices.getFusedLocationProviderClient(ctx)
+                val callback = LocationTracker.listen(client, highAccuracy, ctx.mainLooper) { push(it) }
+                client.lastLocation.addOnSuccessListener { fix -> if (fix != null) push(fix) }
+                onDispose { client.removeLocationUpdates(callback) }
+            } else {
+                val stop = PlatformLocation.listen(ctx, ctx.mainLooper) { push(it) }
+                onDispose { stop?.invoke() }
             }
-            onDispose { client.removeLocationUpdates(callback) }
         }
     }
     return location

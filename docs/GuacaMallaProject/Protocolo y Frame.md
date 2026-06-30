@@ -29,6 +29,15 @@ bytes 55..118 firma Ed25519 (64 B)
 
 `SERVICE_DATA_SIZE = 1 + 22 + 32 + 64 = 119` (`ble/BleConfig.kt`).
 
+> **Service UUID (cutover + dual-scan, jun 2026):** el frame va bajo el **Service UUID de 128 bits**
+> de GuacaMalla; el Observer lo filtra **en software** (no `ScanFilter` de hardware). Se reemplazó el
+> placeholder hecho a mano (`8d3d0001-…`) por un **v4 real** (`a613421e-…`) como `SERVICE_UUID` que se
+> **emite**. El Observer acepta un **conjunto** `MATCH_UUIDS = {nuevo} + LEGACY_UUIDS`, así un parque
+> mixto (build viejo + nuevo) **no se parte en silencio** durante el rollout — emparejar en software es
+> gratis. Para rotar a futuro: mover el actual a `LEGACY_UUIDS`, poner un `SERVICE_UUID` fresco,
+> publicar; quitar el legacy un release después. La emisión es siempre un único UUID (no se duplica el
+> advertising set, que ya lo usa el store-and-forward).
+
 > El **TTL de salto vive FUERA del payload firmado** a propósito: cada relay lo decrementa. Si
 > estuviera dentro de los 22 B firmados, la firma del origen se rompería en el siguiente salto
 > (re-firmar es imposible: el `node_id` está atado a la llave del origen). El payload lleva además un

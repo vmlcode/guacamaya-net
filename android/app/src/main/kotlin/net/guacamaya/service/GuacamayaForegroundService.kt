@@ -29,6 +29,7 @@ import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.ble.Broadcaster
 import net.guacamaya.crypto.Identity
 import net.guacamaya.ingest.IngestUploadWorker
+import net.guacamaya.loc.PlatformLocation
 import kotlinx.coroutines.flow.first
 import net.guacamaya.mesh.GuacamayaDatabase
 import net.guacamaya.mesh.MessageEntity
@@ -278,7 +279,10 @@ class GuacamayaForegroundService : Service() {
      *
      * Uses FusedLocationProviderClient.lastLocation — a cached one-shot read, which is
      * cheap on battery (no continuous updates) and fine for stamping an SOS. On devices
-     * without Google Play Services this resolves to null and the caller falls back.
+     * without Google Play Services Fused resolves to null, so we fall back to the platform
+     * [PlatformLocation.lastKnown] (AOSP LocationManager) — GuacaMalla must geolocate SOS
+     * on de-Googled / low-end phones too. Only when both are empty do we broadcast with no
+     * coordinates.
      */
     @SuppressLint("MissingPermission")
     private suspend fun currentLatLonE7(): Pair<Int, Int>? {
@@ -291,16 +295,19 @@ class GuacamayaForegroundService : Service() {
             return null
         }
         val client = LocationServices.getFusedLocationProviderClient(this)
-        val loc: Location? = suspendCancellableCoroutine { cont ->
+        val fused: Location? = suspendCancellableCoroutine { cont ->
             client.lastLocation
                 .addOnSuccessListener { cont.resume(it) }
                 .addOnFailureListener {
-                    Log.w(tag, "lastLocation failed: ${it.message}")
+                    Log.w(tag, "lastLocation failed (no GMS?): ${it.message}")
                     cont.resume(null)
                 }
         }
+        val loc: Location? = fused ?: PlatformLocation.lastKnown(this)?.also {
+            Log.i(tag, "using platform LocationManager fix (Fused unavailable)")
+        }
         if (loc == null) {
-            Log.w(tag, "no last known location available")
+            Log.w(tag, "no last known location available (Fused + platform)")
             return null
         }
         val latE7 = (loc.latitude * 1e7).toInt().coerceIn(-900_000_000, 900_000_000)
