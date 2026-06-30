@@ -635,3 +635,34 @@ Detener loop hasta reconectar Realme y calibrar brújula sweet; ticks 38–80 no
 
 ### Estado final loop (90 ticks, ~15 h)
 BLE bidireccional validado en ticks 1–37. Ticks 38–90 en vigilancia sin avance — **detener loop** hasta intervención manual.
+
+---
+
+## Iteración 28 — 2026-06-28 (loop 10m, tick 100 — cierre)
+
+### Prueba adb (milestone final)
+| Test | Resultado |
+|------|-----------|
+| Dispositivos | Solo **sweet**; Realme ausente (ticks 38–100) |
+| `device-test` | **PASS** parcial @10 s — sweet `nodes=2 frames=69` |
+| `functional-compass` | sweet **0° magnet=bad**, `co_loc=false` (`dist_m=258`); Realme N/A |
+
+### Resumen loop completo (100 ticks, ~17 h)
+| Fase | Ticks | Resultado |
+|------|-------|-----------|
+| BLE bidireccional | 1–37 | ✅ `ble-reverse-test`, `device-test`, probe mesh |
+| Degradada (solo sweet) | 38–100 | ⚠️ 63 ticks sin avance |
+| Brújula Realme | 1–37 | ✅ ~87–109° cuando probe visible |
+| Brújula sweet | 1–100 | ❌ `magnet=bad` — calibración manual nunca aplicada |
+
+### Entregables del loop
+- Runtime BLE + routing adb MIUI (`AdbCommandReceiver`, `BleMeshRuntime`)
+- Scripts: `ble-reverse-test`, `device-test`, `functional-compass`, `probe-dump`, `compass-miui`
+- Fixes: scan thrashing, probe fallback, `set -e`, JDK 17 fallback
+- Docs: `docs/LOOP_FUNCTIONAL.md` (28 iteraciones)
+
+### Acción requerida (post-loop)
+1. **Detener** el shell loop (`while true; do sleep 600; …`)
+2. Reconectar Realme por USB
+3. Calibrar sweet: `./scripts/demo.sh compass-miui sweet` + figura-8
+4. Validar: `./scripts/demo.sh ble-reverse-test` + `functional-compass`
