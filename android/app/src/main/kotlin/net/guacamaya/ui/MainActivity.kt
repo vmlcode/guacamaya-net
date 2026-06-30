@@ -113,10 +113,12 @@ class MainActivity : ComponentActivity() {
     private val adbHandler = Handler(Looper.getMainLooper())
 
     private var showOnboarding by mutableStateOf(false)
+    private var hasPermissions by mutableStateOf(false)
 
     private val permsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted ->
+        hasPermissions = hasRequiredPermissions()
         if (granted.values.any { it }) {
             routeAdbIntent(getIntent())
         }
@@ -129,6 +131,7 @@ class MainActivity : ComponentActivity() {
         val adbLaunch = isDirectAdbLaunch(intent)
         showOnboarding = !adbLaunch && shouldShowOnboarding()
         if (adbLaunch) ensurePermissions()
+        hasPermissions = hasRequiredPermissions()
         routeAdbIntent(intent)
         setContent {
             GuacamayaTheme {
@@ -141,6 +144,15 @@ class MainActivity : ComponentActivity() {
                                 ensurePermissions()
                             },
                         )
+                    } else if (!hasPermissions) {
+                        PermissionsDeniedScreen(
+                            onRequestPermissions = {
+                                ensurePermissions()
+                            },
+                            onOpenSettings = {
+                                openAppSettings()
+                            }
+                        )
                     } else {
                         Screen()
                     }
@@ -151,6 +163,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        hasPermissions = hasRequiredPermissions()
         routeAdbIntent(intent)
     }
 
@@ -216,13 +229,50 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun openAppSettings() {
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.fromParts("package", packageName, null)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e("guacamaya", "Failed to open settings", e)
+        }
+    }
+
     private fun ensurePermissions() {
         val missing = requiredRuntimePermissions().filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (missing.isNotEmpty()) permsLauncher.launch(missing.toTypedArray())
+        if (missing.isNotEmpty()) {
+            val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+            val requestedBefore = prefs.getBoolean(KEY_PERMISSIONS_REQUESTED, false)
+
+            // On Android, if a permission was requested before and shouldShowRequestPermissionRationale is false,
+            // it means the user denied it with "Don't ask again" (permanently denied).
+            val permanentlyDenied = requestedBefore && missing.any { permission ->
+                !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
+            }
+
+            if (permanentlyDenied) {
+                android.widget.Toast.makeText(
+                    this,
+                    "Permisos desactivados. Actívalos manualmente en Ajustes.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                openAppSettings()
+            } else {
+                prefs.edit().putBoolean(KEY_PERMISSIONS_REQUESTED, true).apply()
+                permsLauncher.launch(missing.toTypedArray())
+            }
+        }
         // No auto-popup before onboarding: MIUI abre PowerDetailActivity y rompe adb/UI. Banner in-app opcional.
     }
+
+    private fun hasRequiredPermissions(): Boolean =
+        requiredRuntimePermissions().all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
 
     private fun requiredRuntimePermissions(): List<String> = buildList {
         add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -256,6 +306,7 @@ class MainActivity : ComponentActivity() {
         private const val PREFS = "guacamaya_adb"
         private const val KEY_ADB_ACTION = "last_action"
         private const val KEY_ONBOARDING_SEEN = "onboarding_seen"
+        private const val KEY_PERMISSIONS_REQUESTED = "permissions_requested"
     }
 }
 
@@ -323,6 +374,89 @@ private fun OnboardingScreen(onContinue: () -> Unit) {
         Spacer(Modifier.height(Space.xs))
         Text(
             "Android te pedirá confirmar cada permiso. Puedes cambiarlo después en Ajustes.",
+            color = TextLo,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun PermissionsDeniedScreen(
+    onRequestPermissions: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Canvas0)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(horizontal = Space.lg, vertical = Space.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(0.7f))
+
+        Box(
+            Modifier
+                .size(112.dp)
+                .clip(CircleShape)
+                .background(DangerC.copy(alpha = 0.15f))
+                .border(2.dp, DangerC, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            SosAsteriskGlyph(color = DangerC)
+        }
+
+        Spacer(Modifier.height(Space.lg))
+
+        Text(
+            "Permisos requeridos",
+            color = TextHi,
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            "No podemos activar la red SOS ni buscar dispositivos porque faltan permisos necesarios.",
+            color = TextLo,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
+
+        Spacer(Modifier.height(Space.lg))
+
+        PermissionExplainerCard(
+            title = "Ubicación e Instrumentación",
+            body = "Permite a la red SOS incluir tus coordenadas geográficas y habilitar la brújula/radar.",
+        )
+        Spacer(Modifier.height(Space.sm))
+        PermissionExplainerCard(
+            title = "Hardware de Radio (Bluetooth y Wi-Fi)",
+            body = "Permite enviar balizas y escuchar señales de otros teléfonos de forma 100% desconectada.",
+        )
+
+        Spacer(Modifier.weight(1f))
+
+        Button(
+            onClick = onRequestPermissions,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = OnBrand),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text("Reintentar permisos", style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(Modifier.height(Space.xs))
+        TextButton(
+            onClick = onOpenSettings,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.textButtonColors(contentColor = TextHi),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text("Ir a Ajustes del Sistema", style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            "Si ya has rechazado los permisos, deberás habilitarlos desde Ajustes.",
             color = TextLo,
             style = MaterialTheme.typography.labelMedium,
             textAlign = TextAlign.Center,
