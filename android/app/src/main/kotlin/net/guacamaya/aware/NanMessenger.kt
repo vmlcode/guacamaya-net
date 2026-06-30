@@ -14,9 +14,10 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import java.util.concurrent.atomic.AtomicReference
+import net.guacamaya.ble.BleConfig
 
 /**
- * Wi-Fi Aware messenger for payloads up to 255 B (BLE frame layout, 118 B).
+ * Wi-Fi Aware messenger for payloads up to 255 B (BLE frame layout, 119 B).
  *
  * Two roles:
  *  - [publish] — radiate the SSI as part of the NAN service discovery frame.
@@ -39,7 +40,7 @@ class NanMessenger private constructor(
     private val subscribeRef = AtomicReference<SubscribeDiscoverySession?>(null)
 
     fun interface Listener {
-        fun onFrame(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, peer: PeerHandle)
+        fun onFrame(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int, peer: PeerHandle)
     }
 
     private var listener: Listener? = null
@@ -59,18 +60,26 @@ class NanMessenger private constructor(
             onFailed(-1)
             return
         }
-        manager.attach(object : AttachCallback() {
-            override fun onAttached(session: WifiAwareSession?) {
-                sessionRef.set(session)
-                Log.i(tag, "Aware attached")
-                onAttached()
-            }
+        try {
+            manager.attach(object : AttachCallback() {
+                override fun onAttached(session: WifiAwareSession?) {
+                    sessionRef.set(session)
+                    Log.i(tag, "Aware attached")
+                    onAttached()
+                }
 
-            override fun onAttachFailed() {
-                Log.e(tag, "Aware attach failed")
-                onFailed(-2)
-            }
-        }, handler)
+                override fun onAttachFailed() {
+                    Log.e(tag, "Aware attach failed")
+                    onFailed(-2)
+                }
+            }, handler)
+        } catch (se: SecurityException) {
+            Log.w(tag, "Aware attach denied — NEARBY_WIFI_DEVICES? ${se.message}")
+            onFailed(-3)
+        } catch (t: Throwable) {
+            Log.w(tag, "Aware attach unavailable: ${t.message}")
+            onFailed(-4)
+        }
     }
 
     /**
@@ -101,16 +110,22 @@ class NanMessenger private constructor(
             return
         }
 
-        session.publish(config, object : DiscoverySessionCallback() {
-            override fun onPublishStarted(session: PublishDiscoverySession) {
-                publishRef.set(session)
-                Log.i(tag, "publish started")
-            }
+        try {
+            session.publish(config, object : DiscoverySessionCallback() {
+                override fun onPublishStarted(session: PublishDiscoverySession) {
+                    publishRef.set(session)
+                    Log.i(tag, "publish started")
+                }
 
-            override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
-                Log.d(tag, "msg from peer=${peerHandle.hashCode()} size=${message.size}")
-            }
-        }, handler)
+                override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
+                    Log.d(tag, "msg from peer=${peerHandle.hashCode()} size=${message.size}")
+                }
+            }, handler)
+        } catch (se: SecurityException) {
+            Log.w(tag, "publish denied — NEARBY_WIFI_DEVICES? ${se.message}")
+        } catch (t: Throwable) {
+            Log.w(tag, "publish failed: ${t.message}")
+        }
     }
 
     fun stopPublish() {
@@ -129,28 +144,35 @@ class NanMessenger private constructor(
         val config = SubscribeConfig.Builder()
             .setServiceName(AwareConfig.SERVICE_NAME)
             .build()
-        session.subscribe(config, object : DiscoverySessionCallback() {
-            override fun onSubscribeStarted(session: SubscribeDiscoverySession) {
-                subscribeRef.set(session)
-                Log.i(tag, "subscribe started")
-            }
-
-            override fun onServiceDiscovered(
-                peerHandle: PeerHandle,
-                serviceSpecificInfo: ByteArray,
-                matchFilter: MutableList<ByteArray>,
-            ) {
-                val ssi = serviceSpecificInfo
-                if (ssi.size != AwareConfig.SSI_SIZE) {
-                    Log.w(tag, "discovered but malformed ssi size=${ssi.size}")
-                    return
+        try {
+            session.subscribe(config, object : DiscoverySessionCallback() {
+                override fun onSubscribeStarted(session: SubscribeDiscoverySession) {
+                    subscribeRef.set(session)
+                    Log.i(tag, "subscribe started")
                 }
-                val p22 = ssi.copyOfRange(0, 22)
-                val pub32 = ssi.copyOfRange(22, 22 + 32)
-                val sig64 = ssi.copyOfRange(22 + 32, 22 + 32 + 64)
-                listener?.onFrame(p22, pub32, sig64, peerHandle)
-            }
-        }, handler)
+
+                override fun onServiceDiscovered(
+                    peerHandle: PeerHandle,
+                    serviceSpecificInfo: ByteArray,
+                    matchFilter: MutableList<ByteArray>,
+                ) {
+                    val ssi = serviceSpecificInfo
+                    if (ssi.size != AwareConfig.SSI_SIZE) {
+                        Log.w(tag, "discovered but malformed ssi size=${ssi.size}")
+                        return
+                    }
+                    val ttl = ssi[BleConfig.TTL_OFFSET].toInt() and 0xFF
+                    val p22 = ssi.copyOfRange(BleConfig.PAYLOAD_OFFSET, BleConfig.PUBKEY_OFFSET)
+                    val pub32 = ssi.copyOfRange(BleConfig.PUBKEY_OFFSET, BleConfig.SIG_OFFSET)
+                    val sig64 = ssi.copyOfRange(BleConfig.SIG_OFFSET, AwareConfig.SSI_SIZE)
+                    listener?.onFrame(p22, pub32, sig64, ttl, peerHandle)
+                }
+            }, handler)
+        } catch (se: SecurityException) {
+            Log.w(tag, "subscribe denied — NEARBY_WIFI_DEVICES? ${se.message}")
+        } catch (t: Throwable) {
+            Log.w(tag, "subscribe failed: ${t.message}")
+        }
     }
 
     fun stopSubscribe() {

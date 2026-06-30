@@ -21,20 +21,17 @@ object BleMeshRuntime {
     private var router: FloodRouter? = null
 
     fun ensureObserving(ctx: Context): Boolean {
+        ensureRouter(ctx.applicationContext)
         val app = ctx.applicationContext
-        if (observer == null || router == null) {
+        if (observer == null) {
             val obs = Observer.create(app) ?: run {
                 Log.i(PROBE, "observe fail Observer.create=null")
                 return false
             }
-            val dao = GuacamayaDatabase.get(app).messageDao()
-            val bcast = Broadcaster.create(app)
-            val r = FloodRouter(dao = dao, broadcaster = bcast, scope = scope)
             obs.setListener { p22, pub32, sig64, ttl, rssi ->
-                r.onFrame(p22, pub32, sig64, ttl, rssi)
+                router?.onFrame(p22, pub32, sig64, ttl, rssi)
             }
             observer = obs
-            router = r
         }
         val obs = observer ?: return false
         if (obs.isScanning) {
@@ -44,6 +41,20 @@ object BleMeshRuntime {
         obs.start()
         Log.i(PROBE, "BleMeshRuntime scanning=${obs.isScanning} device=${Build.DEVICE}")
         return obs.isScanning
+    }
+
+    fun routeFrame(ctx: Context, payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int, rssi: Int) {
+        ensureRouter(ctx.applicationContext)
+        router?.onFrame(payload22, pub32, sig64, ttl, rssi)
+    }
+
+    private fun ensureRouter(ctx: Context) {
+        val app = ctx.applicationContext
+        if (router == null) {
+            val dao = GuacamayaDatabase.get(app).messageDao()
+            val bcast = Broadcaster.create(app)
+            router = FloodRouter(dao = dao, broadcaster = bcast, scope = scope)
+        }
     }
 
     fun stopObserving() {

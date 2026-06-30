@@ -86,6 +86,7 @@ import com.google.android.gms.location.LocationServices
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.mesh.NodeCatalog
 import net.guacamaya.backend.OfficialAlert
+import net.guacamaya.location.LocationProvider
 import net.guacamaya.service.GuacamayaForegroundService
 import org.json.JSONObject
 import android.util.Log
@@ -1007,23 +1008,51 @@ private fun rememberLiveLocation(ctx: Context, highAccuracy: Boolean): Location?
         if (!fine && !coarse) {
             onDispose { }
         } else {
-            val client = LocationServices.getFusedLocationProviderClient(ctx)
             var current = location
-            val callback = LocationTracker.listen(
-                client,
+            val platform = LocationProvider.listenPlatform(
+                ctx,
                 highAccuracy,
                 ctx.mainLooper,
+                "guacamaya.location",
             ) { raw ->
                 current = LocationTracker.smoothFix(current, raw)
                 location = current
             }
-            client.lastLocation.addOnSuccessListener { fix ->
+            LocationProvider.platformLastKnown(ctx, "guacamaya.location")?.let { fix ->
+                current = LocationTracker.smoothFix(current, fix)
+                location = current
+            }
+            val client = try {
+                LocationServices.getFusedLocationProviderClient(ctx)
+            } catch (_: Throwable) {
+                null
+            }
+            val callback = client?.let {
+                try {
+                    LocationTracker.listen(
+                        it,
+                        highAccuracy,
+                        ctx.mainLooper,
+                    ) { raw ->
+                        current = LocationTracker.smoothFix(current, raw)
+                        location = current
+                    }
+                } catch (_: Throwable) {
+                    null
+                }
+            }
+            client?.lastLocation?.addOnSuccessListener { fix ->
                 if (fix != null) {
                     current = LocationTracker.smoothFix(current, fix)
                     location = current
                 }
+            }?.addOnFailureListener {
+                Log.w("guacamaya.location", "fused lastLocation failed: ${it.message}")
             }
-            onDispose { client.removeLocationUpdates(callback) }
+            onDispose {
+                if (callback != null) client?.removeLocationUpdates(callback)
+                platform?.close()
+            }
         }
     }
     return location

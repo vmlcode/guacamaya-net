@@ -1,7 +1,5 @@
 package net.guacamaya.service
 
-import android.Manifest
-import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -9,27 +7,25 @@ import android.app.Service
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.location.Location
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.LocationServices
-import kotlin.coroutines.resume
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import net.guacamaya.R
+import net.guacamaya.aware.AwareConfig
+import net.guacamaya.aware.NanMessenger
 import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.ble.Broadcaster
 import net.guacamaya.crypto.Identity
 import net.guacamaya.ingest.IngestUploadWorker
 import kotlinx.coroutines.flow.first
+import net.guacamaya.location.LocationProvider
 import net.guacamaya.mesh.GuacamayaDatabase
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.proto.Flags
@@ -64,6 +60,7 @@ class GuacamayaForegroundService : Service() {
     private var observeHealthJob: Job? = null
 
     private var broadcaster: Broadcaster? = null
+    private var nanMessenger: NanMessenger? = null
     private var identity: Identity? = null
     private var broadcastJob: Job? = null
 
@@ -137,6 +134,25 @@ class GuacamayaForegroundService : Service() {
         if (broadcaster == null) broadcaster = Broadcaster.create(this)
     }
 
+    private fun ensureNanMessenger(): NanMessenger? {
+        val existing = nanMessenger
+        if (existing != null) return existing
+        return NanMessenger.create(this)?.also { nan ->
+            nan.setListener { p22, pub32, sig64, ttl, peer ->
+                Log.d(tag, "aware frame peer=${peer.hashCode()} ttl=$ttl")
+                BleMeshRuntime.routeFrame(
+                    this@GuacamayaForegroundService,
+                    p22,
+                    pub32,
+                    sig64,
+                    ttl,
+                    AWARE_RSSI_SENTINEL,
+                )
+            }
+            nanMessenger = nan
+        }
+    }
+
     private fun startObserving() {
         restoreWantObserving()
         if (!wantObserving) {
@@ -152,6 +168,14 @@ class GuacamayaForegroundService : Service() {
         ensureObserverAndRouter()
         if (!BleMeshRuntime.ensureObserving(this)) scheduleObserveRetry()
         else ensureObserveHealthLoop()
+        startAwareSubscribe()
+    }
+
+    private fun startAwareSubscribe() {
+        ensureNanMessenger()?.attach(
+            onAttached = { nanMessenger?.subscribe() },
+            onFailed = { code -> Log.w(tag, "aware subscribe unavailable code=$code") },
+        )
     }
 
     private fun ensureObserveHealthLoop() {
@@ -202,13 +226,14 @@ class GuacamayaForegroundService : Service() {
         broadcastJob = scope.launch {
             val id = identity ?: Identity.loadOrCreate(this@GuacamayaForegroundService).also { identity = it }
             val bcast = broadcaster ?: Broadcaster.create(this@GuacamayaForegroundService)?.also { broadcaster = it }
-            if (bcast == null) {
-                Log.e(tag, "Broadcaster.create failed — extended BLE ADV not supported")
+            val nan = ensureNanMessenger()
+            if (bcast == null && nan == null) {
+                Log.e(tag, "no radio TX available — BLE extended ADV and Wi-Fi Aware unavailable")
                 // Toast needs a Looper thread; this coroutine runs on Dispatchers.Default.
                 withContext(Dispatchers.Main) {
                     android.widget.Toast.makeText(
                         this@GuacamayaForegroundService,
-                        "Este equipo no puede transmitir SOS por BLE",
+                        "Este equipo no puede transmitir SOS por BLE/NAN",
                         android.widget.Toast.LENGTH_LONG,
                     ).show()
                 }
@@ -218,7 +243,9 @@ class GuacamayaForegroundService : Service() {
 
             // Bootstrap own ADV via start() so the compat→coded PHY negotiation runs once.
             signedPayload(id, ownType, ownCritical, ownTtl).let { p ->
-                bcast.start(p, id.publicKey, id.sign(p))
+                val sig = id.sign(p)
+                bcast?.start(p, id.publicKey, sig)
+                publishAware(p, id.publicKey, sig, ownTtl)
             }
 
             var held: List<MessageEntity> = emptyList()
@@ -228,7 +255,9 @@ class GuacamayaForegroundService : Service() {
                 delay(FORWARD_DWELL_MS)
                 if (ownTurn) {
                     val p = signedPayload(id, ownType, ownCritical, ownTtl)
-                    bcast.swap(p, id.publicKey, id.sign(p), ownTtl)
+                    val sig = id.sign(p)
+                    bcast?.swap(p, id.publicKey, sig, ownTtl)
+                    publishAware(p, id.publicKey, sig, ownTtl)
                     // Refresh the held set each time we return to our own frame.
                     held = dao.latestHelpFramesPerNode(REBROADCAST_NODES)
                         .filterNot { it.nodeId.contentEquals(id.nodeId) }
@@ -236,22 +265,31 @@ class GuacamayaForegroundService : Service() {
                 } else if (held.isNotEmpty()) {
                     val e = held[idx % held.size]
                     idx++
-                    bcast.swap(e.payloadRaw, e.pubkey, e.sig, REBROADCAST_TTL)
+                    bcast?.swap(e.payloadRaw, e.pubkey, e.sig, REBROADCAST_TTL)
+                    publishAware(e.payloadRaw, e.pubkey, e.sig, REBROADCAST_TTL)
                 }
                 ownTurn = !ownTurn
             }
         }
     }
 
+    private fun publishAware(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int) {
+        val nan = nanMessenger ?: return
+        val ssi = AwareConfig.packFrame(ttl, payload22, pub32, sig64)
+        nan.publish(ssi)
+    }
+
     private fun stopBroadcasting() {
         broadcastJob?.cancel()
         broadcastJob = null
         broadcaster?.stop()
+        nanMessenger?.stopPublish()
     }
 
     private fun stopPresenceHeartbeat() {
         broadcastJob?.cancel()
         broadcastJob = null
+        nanMessenger?.stopPublish()
     }
 
     private suspend fun signedPayload(
@@ -274,38 +312,18 @@ class GuacamayaForegroundService : Service() {
 
     /**
      * Fetch the device's current position as (latE7, lonE7), or null if location is
-     * unavailable (permission denied, services off, or no Google Play Services).
+     * unavailable (permission denied or services off).
      *
-     * Uses FusedLocationProviderClient.lastLocation — a cached one-shot read, which is
-     * cheap on battery (no continuous updates) and fine for stamping an SOS. On devices
-     * without Google Play Services this resolves to null and the caller falls back.
+     * Uses fused lastLocation when Google Play Services exists, then falls back to
+     * Android platform LocationManager on low-end / de-Googled devices.
      */
-    @SuppressLint("MissingPermission")
     private suspend fun currentLatLonE7(): Pair<Int, Int>? {
-        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            Log.w(tag, "location permission not granted; broadcasting without coordinates")
-            return null
-        }
-        val client = LocationServices.getFusedLocationProviderClient(this)
-        val loc: Location? = suspendCancellableCoroutine { cont ->
-            client.lastLocation
-                .addOnSuccessListener { cont.resume(it) }
-                .addOnFailureListener {
-                    Log.w(tag, "lastLocation failed: ${it.message}")
-                    cont.resume(null)
-                }
-        }
+        val loc = LocationProvider.lastKnown(this, tag)
         if (loc == null) {
             Log.w(tag, "no last known location available")
             return null
         }
-        val latE7 = (loc.latitude * 1e7).toInt().coerceIn(-900_000_000, 900_000_000)
-        val lonE7 = (loc.longitude * 1e7).toInt().coerceIn(-1_800_000_000, 1_800_000_000)
-        return latE7 to lonE7
+        return LocationProvider.toE7(loc)
     }
 
     private fun scheduleObserveRetry() {
@@ -322,6 +340,7 @@ class GuacamayaForegroundService : Service() {
         observeHealthJob?.cancel()
         observeHealthJob = null
         BleMeshRuntime.stopObserving()
+        nanMessenger?.stopSubscribe()
     }
 
     override fun onDestroy() {
@@ -329,6 +348,7 @@ class GuacamayaForegroundService : Service() {
         if (instance === this) instance = null
         BleMeshRuntime.stopObserving()
         broadcaster?.stop()
+        nanMessenger?.detach()
         stopPresenceHeartbeat()
         scope.cancel()
     }
@@ -380,6 +400,7 @@ class GuacamayaForegroundService : Service() {
         private const val PREFS = "guacamaya_service"
         private const val KEY_WANT_OBSERVE = "want_observe"
         private const val OBSERVE_HEALTH_MS = 8_000L
+        private const val AWARE_RSSI_SENTINEL = -127
     }
 
     private fun probeLog(msg: String) = Log.i(probeTag, msg)
