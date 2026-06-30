@@ -53,6 +53,13 @@ data class MessageEntity(
     @ColumnInfo(name = "received_at") val receivedAt: Long,
     /** Set once the frame has been accepted by the backend's POST /ingest. */
     @ColumnInfo(name = "uploaded", defaultValue = "0") val uploaded: Boolean = false,
+    /**
+     * True for THIS device's *own* SOS frames, persisted so the data-mule uploader
+     * delivers them to the backend when this phone has connectivity. Excluded from
+     * the radar / "devices heard" queries below, which mean frames received from
+     * *other* nodes — but still eligible for [selectUploadable].
+     */
+    @ColumnInfo(name = "own", defaultValue = "0") val own: Boolean = false,
 ) {
     // Room needs equals/hashCode for ByteArray fields.
     override fun equals(other: Any?): Boolean = this === other
@@ -65,16 +72,16 @@ interface MessageDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entity: MessageEntity): Long
 
-    @Query("SELECT * FROM messages ORDER BY received_at DESC LIMIT :limit")
+    @Query("SELECT * FROM messages WHERE own = 0 ORDER BY received_at DESC LIMIT :limit")
     fun observeRecent(limit: Int = DEFAULT_RECENT_LIMIT): Flow<List<MessageEntity>>
 
     @Query("SELECT COUNT(*) FROM messages")
     suspend fun count(): Int
 
-    @Query("SELECT COUNT(*) FROM messages")
+    @Query("SELECT COUNT(*) FROM messages WHERE own = 0")
     fun observeCount(): Flow<Int>
 
-    @Query("SELECT COUNT(DISTINCT node_id) FROM messages")
+    @Query("SELECT COUNT(DISTINCT node_id) FROM messages WHERE own = 0")
     fun observeNodeCount(): Flow<Int>
 
     /** Latest row per node_id (for map/radar — one device = one entry). */
@@ -83,8 +90,9 @@ interface MessageDao {
         SELECT m.* FROM messages m
         INNER JOIN (
             SELECT node_id, MAX(received_at) AS max_received
-            FROM messages GROUP BY node_id
+            FROM messages WHERE own = 0 GROUP BY node_id
         ) g ON m.node_id = g.node_id AND m.received_at = g.max_received
+        WHERE m.own = 0
         ORDER BY m.received_at DESC
         LIMIT :limit
         """
@@ -102,9 +110,9 @@ interface MessageDao {
         SELECT m.* FROM messages m
         INNER JOIN (
             SELECT node_id, MAX(received_at) AS max_received
-            FROM messages GROUP BY node_id
+            FROM messages WHERE own = 0 GROUP BY node_id
         ) g ON m.node_id = g.node_id AND m.received_at = g.max_received
-        WHERE m.critical = 1 OR m.sos_type != 7
+        WHERE m.own = 0 AND (m.critical = 1 OR m.sos_type != 7)
         ORDER BY m.received_at DESC
         LIMIT :limit
         """
@@ -155,7 +163,18 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
-@Database(entities = [MessageEntity::class], version = 3, exportSchema = false)
+/**
+ * v3 → v4: add the `own` flag that marks this device's own SOS frames (persisted
+ * for data-mule upload but excluded from the radar / "devices heard" queries).
+ * Non-destructive — existing rows default to own = 0 (received from other nodes).
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE messages ADD COLUMN own INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+@Database(entities = [MessageEntity::class], version = 4, exportSchema = false)
 abstract class GuacamayaDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
 
@@ -169,7 +188,7 @@ abstract class GuacamayaDatabase : RoomDatabase() {
                     GuacamayaDatabase::class.java,
                     "guacamaya.db"
                 )
-                    .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                     .fallbackToDestructiveMigration() // safety net for any unhandled jump
                     .build().also { instance = it }
             }
