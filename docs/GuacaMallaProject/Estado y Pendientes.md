@@ -29,7 +29,9 @@ Foto del estado de [[GuacaMallaProject]] al **2026-06-28** (rama `develop`, mono
 ## Parcial / stub
 
 - 🟡 **Brújula MIUI ("sweet")**: reporta `magnet=bad`, bloqueada en calibración manual (figura-8). Realme calibra bien. Principal pendiente de **campo**.
-- 🟡 **Wi-Fi Aware no integrado**: `NanMessenger` escrito pero el `GuacamayaForegroundService` no lo arranca. Hoy solo corre BLE.
+- 🟡 **Wi-Fi Aware integrado al servicio, pendiente campo**: `GuacamayaForegroundService` ya arranca
+  publish/subscribe de `NanMessenger` y enruta el SSI al mismo `FloodRouter`; falta validar en dos
+  equipos con hardware Wi-Fi Aware real.
 - 🔴 **NAN Data Path** (`NanDataPath`): stub, payloads pesados devuelven error.
 - 🟡 **Resolve sin clientes**: backend listo, pero faltan la app del buscador y la consola del coordinador (todo el flujo de campo). Ver [[Resolve y Confirmacion de Rescate]].
 
@@ -48,9 +50,10 @@ están en código y verificados *headless*. Lo que falta, en orden:
 
 ## Trabajo abierto (backlog)
 
-- [ ] **Fallback de ubicación sin Google Play Services**: el fix GPS aún usa `FusedLocationProviderClient` (GMS). Alternativa robusta para gama baja sin GMS: `LocationManager` de plataforma.
+- [x] **Fallback de ubicación sin Google Play Services**: `LocationProvider` usa Fused si existe y
+  cae a `LocationManager` de plataforma para last-known/live fixes.
 - [ ] **Calibrar/robustecer brújula MIUI** en campo (`functional-compass` con Δheading ≈ 0° en paralelo).
-- [ ] **Integrar Wi-Fi Aware** al servicio (publish/subscribe del `NanMessenger`).
+- [x] **Integrar Wi-Fi Aware** al servicio (publish/subscribe del `NanMessenger`) — falta prueba de campo.
 - [ ] **Clientes de Resolve**: app del buscador + consola del coordinador (ver nota dedicada).
 - [ ] **Endurecer `/ingest`**: rate-limit por origen además del global; moderación de reportes de comunidad.
 - [ ] **UUID de servicio BLE** en `BleConfig` sigue siendo placeholder — cambiar antes de uso productivo.

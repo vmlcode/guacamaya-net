@@ -14,10 +14,11 @@ formato binario está en [[Protocolo y Frame]].
 | Plano | Radio | Carga | Estado |
 |---|---|---|---|
 | Control / descubrimiento | BLE 5 Extended Advertising (`Broadcaster` / `Observer`) | el frame de 119 B como service data | ✅ funcionando end-to-end, **verificado en dos teléfonos físicos** |
-| Datos ligeros (≤255 B) | Wi-Fi Aware NAN (service discovery, `NanMessenger`) | mismo frame como SSI | 🟡 escrito, no integrado al servicio |
+| Datos ligeros (≤255 B) | Wi-Fi Aware NAN (service discovery, `NanMessenger`) | mismo frame 119 B como SSI | 🟡 integrado al servicio; falta prueba en hardware real |
 | Datos pesados (>255 B) | Wi-Fi Aware NAN Data Path (`NanDataPath`) | payloads grandes | 🔴 stub |
 
-> En runtime hoy solo corre el plano BLE; el `GuacamayaForegroundService` aún no arranca Wi-Fi Aware.
+> En runtime el `GuacamayaForegroundService` arranca BLE y, si el hardware lo expone, Wi-Fi Aware.
+> El emulador no tiene `WifiAwareManager`; la validación real requiere dos teléfonos compatibles.
 
 ## Mapa de módulos (`app/src/main/kotlin/net/guacamaya/`)
 
@@ -48,7 +49,8 @@ decisión en [[Arquitectura y Decisiones]] §7.
 - `ui/GeoProximity.kt` — distancia entre nodos con suavizado EMA del GPS + posición por nodo; dentro
   de la incertidumbre del fix muestra **«junto»** en vez de saltar 1–4 m; sub-10 m en cm. Cuando el
   GPS dice «junto», usa el RSSI BLE suavizado como hint (`tocando`, `~1 m`, …).
-- `ui/LocationTracker.kt` — fix de GPS (hoy vía `FusedLocationProviderClient`).
+- `location/LocationProvider.kt` + `ui/LocationTracker.kt` — fix de GPS: Fused/GMS cuando existe,
+  fallback nativo con `LocationManager` para equipos sin Google Play Services.
 - `ui/FunctionalProbe.kt` — sonda de diagnóstico que se vuelca por logcat (`nodes`, `frames`,
   `bearing`, `rel=`, `co_loc`, `magnet=…`) para las pruebas adb dual-device.
 - `ui/MapViewModel.kt`, `ui/MainActivity.kt` (~934 líneas), `ui/Theme.kt` — UI Compose.
