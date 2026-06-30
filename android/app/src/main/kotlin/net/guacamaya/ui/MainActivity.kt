@@ -112,6 +112,8 @@ class MainActivity : ComponentActivity() {
 
     private val adbHandler = Handler(Looper.getMainLooper())
 
+    private var showOnboarding by mutableStateOf(false)
+
     private val permsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted ->
@@ -124,11 +126,25 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        ensurePermissions()
+        val adbLaunch = isDirectAdbLaunch(intent)
+        showOnboarding = !adbLaunch && shouldShowOnboarding()
+        if (adbLaunch) ensurePermissions()
         routeAdbIntent(intent)
         setContent {
             GuacamayaTheme {
-                Surface(Modifier.fillMaxSize(), color = GuacamayaPalette.Canvas) { Screen() }
+                Surface(Modifier.fillMaxSize(), color = GuacamayaPalette.Canvas) {
+                    if (showOnboarding) {
+                        OnboardingScreen(
+                            onContinue = {
+                                markOnboardingSeen()
+                                showOnboarding = false
+                                ensurePermissions()
+                            },
+                        )
+                    } else {
+                        Screen()
+                    }
+                }
             }
         }
     }
@@ -201,33 +217,135 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun ensurePermissions() {
-        val required = buildList {
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
-            add(Manifest.permission.ACCESS_COARSE_LOCATION)
-            if (Build.VERSION.SDK_INT >= 31) {
-                add(Manifest.permission.BLUETOOTH_ADVERTISE)
-                add(Manifest.permission.BLUETOOTH_SCAN)
-                add(Manifest.permission.BLUETOOTH_CONNECT)
-            }
-            if (Build.VERSION.SDK_INT >= 32) {
-                add(Manifest.permission.NEARBY_WIFI_DEVICES)
-            }
-        }
-        val missing = required.filter {
+        val missing = requiredRuntimePermissions().filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) permsLauncher.launch(missing.toTypedArray())
-        // No auto-popup: MIUI abre PowerDetailActivity y rompe adb/UI. Banner in-app opcional.
+        // No auto-popup before onboarding: MIUI abre PowerDetailActivity y rompe adb/UI. Banner in-app opcional.
+    }
+
+    private fun requiredRuntimePermissions(): List<String> = buildList {
+        add(Manifest.permission.ACCESS_FINE_LOCATION)
+        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (Build.VERSION.SDK_INT >= 31) {
+            add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            add(Manifest.permission.BLUETOOTH_SCAN)
+            add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (Build.VERSION.SDK_INT >= 32) {
+            add(Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
+    }
+
+    private fun shouldShowOnboarding(): Boolean =
+        !getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_ONBOARDING_SEEN, false)
+
+    private fun markOnboardingSeen() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ONBOARDING_SEEN, true).apply()
+    }
+
+    private fun isDirectAdbLaunch(source: Intent?): Boolean {
+        val extra = source?.getStringExtra(EXTRA_ADB_ACTION)
+        val action = source?.action
+        return extra?.startsWith("net.guacamaya.action.") == true ||
+            action?.startsWith("net.guacamaya.action.") == true
     }
 
     companion object {
         const val EXTRA_ADB_ACTION = "guacamaya_adb_action"
         private const val PREFS = "guacamaya_adb"
         private const val KEY_ADB_ACTION = "last_action"
+        private const val KEY_ONBOARDING_SEEN = "onboarding_seen"
     }
 }
 
 // ── Design tokens (aliases over GuacamayaPalette — see ui/Theme.kt & docs/design/DESIGN.md) ──
+@Composable
+private fun OnboardingScreen(onContinue: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Canvas0)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(horizontal = Space.lg, vertical = Space.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(0.7f))
+
+        Box(
+            Modifier
+                .size(112.dp)
+                .clip(CircleShape)
+                .background(Brand),
+            contentAlignment = Alignment.Center,
+        ) {
+            SosAsteriskGlyph(color = OnBrand)
+        }
+
+        Spacer(Modifier.height(Space.lg))
+
+        Text(
+            "Bienvenido a GuacaMalla",
+            color = TextHi,
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            "Para crear una red SOS sin internet, la app necesita algunos permisos antes de activar la malla.",
+            color = TextLo,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
+
+        Spacer(Modifier.height(Space.lg))
+
+        PermissionExplainerCard(
+            title = "Ubicación",
+            body = "Permite enviar coordenadas en un SOS y apuntar el radar hacia personas cercanas.",
+        )
+        Spacer(Modifier.height(Space.sm))
+        PermissionExplainerCard(
+            title = "Dispositivos cercanos",
+            body = "Permite usar Bluetooth y Wi‑Fi Aware para descubrir teléfonos alrededor, aun sin internet.",
+        )
+
+        Spacer(Modifier.weight(1f))
+
+        Button(
+            onClick = onContinue,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = OnBrand),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text("Entendido, activar permisos", style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            "Android te pedirá confirmar cada permiso. Puedes cambiarlo después en Ajustes.",
+            color = TextLo,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun PermissionExplainerCard(title: String, body: String) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(CardBg)
+            .border(1.dp, CardLine, MaterialTheme.shapes.large)
+            .padding(Space.md),
+    ) {
+        Text(title, color = TextHi, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(Space.xxs))
+        Text(body, color = TextLo, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 private val Canvas0 = GuacamayaPalette.Canvas
 private val CardBg = GuacamayaPalette.SurfaceCard
 private val CardElevated = GuacamayaPalette.SurfaceElevated
