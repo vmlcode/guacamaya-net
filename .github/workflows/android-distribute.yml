@@ -11,11 +11,16 @@ on:
 jobs:
   distribute:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      # SHA-pinned to defend against tag-rewrite supply-chain attacks. Update via Dependabot.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: 17
@@ -34,3 +39,7 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
         run: ./gradlew assembleDebug appDistributionUploadDebug
+
+      - name: Scrub service account
+        if: always()
+        run: rm -f /tmp/sa.json

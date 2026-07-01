@@ -103,19 +103,38 @@ class Identity private constructor(
         private fun ensureMasterKey(): SecretKey {
             val ks = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
             ks.getKey(KEYSERVICE_ALIAS, null)?.let { return it as SecretKey }
-            val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-            gen.init(
-                KeyGenParameterSpec.Builder(
-                    KEYSERVICE_ALIAS,
-                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            // Try StrongBox (hardware-isolated HSM on devices that have one) and
+            // fall back to the TEE-backed Keymaster otherwise. StrongBox raises
+            // the bar for seed extraction on rooted devices without breaking
+            // background signing (no biometric gate). See SECURITY-AUDIT.md [H8].
+            return generateMasterKey(strongBox = true) ?: generateMasterKey(strongBox = false)!!
+        }
+
+        private fun generateMasterKey(strongBox: Boolean): SecretKey? {
+            return try {
+                val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+                gen.init(
+                    KeyGenParameterSpec.Builder(
+                        KEYSERVICE_ALIAS,
+                        KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+                    )
+                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .setKeySize(256)
+                        .setRandomizedEncryptionRequired(true)
+                        .apply {
+                            if (strongBox) {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                                    setIsStrongBoxBacked(true)
+                                }
+                            }
+                        }
+                        .build()
                 )
-                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(256)
-                    .setRandomizedEncryptionRequired(true)
-                    .build()
-            )
-            return gen.generateKey()
+                gen.generateKey()
+            } catch (_: Throwable) {
+                null
+            }
         }
     }
 }

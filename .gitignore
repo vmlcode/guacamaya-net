@@ -19,3 +19,12 @@ backend/keys/
 
 # Resolve flow — dev-only evidence image storage
 backend/.evidence/
+
+# Android Firebase config — team policy TBD (see SECURITY-AUDIT.md H3).
+# Tracked historically; the .gitignore entry guards future drift / accidental re-add.
+android/app/google-services.json
+android/app/google-services.debug.json
+android/app/firebase-adminsdk-*.json
+android/key.properties
+android/*.jks
+android/*.keystore

@@ -68,16 +68,14 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- adb demo: am start -a net.guacamaya.action.OBSERVE_ON -n net.guacamaya/.ui.MainActivity -->
-            <intent-filter>
-                <action android:name="net.guacamaya.action.OBSERVE_ON" />
-                <action android:name="net.guacamaya.action.OBSERVE_OFF" />
-                <action android:name="net.guacamaya.action.START" />
-                <action android:name="net.guacamaya.action.STOP" />
-                <action android:name="net.guacamaya.action.HEARTBEAT_ON" />
-                <action android:name="net.guacamaya.action.HEARTBEAT_OFF" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
+            <!--
+                The custom action intent-filter (`net.guacamaya.action.*`) used to
+                live here, exported to any local app. Removed in release builds —
+                the same actions are reachable in debug via AdbCommandReceiver
+                (see src/debug/AndroidManifest.xml), and adb can still target the
+                activity directly with `-n net.guacamaya/.ui.MainActivity`.
+                See SECURITY-AUDIT.md [H6].
+            -->
         </activity>
 
         <service

@@ -21,8 +21,11 @@ RUN bun install --frozen-lockfile
 
 # 2) Copy the source. node_modules is excluded via .dockerignore so this does
 #    not clobber the installed deps from the layer above.
-COPY packages/ ./packages/
-COPY backend/ ./backend/
+COPY --chown=bun:bun packages/ ./packages/
+COPY --chown=bun:bun backend/ ./backend/
+
+# Drop privileges — the `bun` user (uid 1000) ships with the base image.
+USER bun
 
 # Production by design: the server refuses to boot without GUACAMAYA_ADMIN_KEY
 # (set it, and the rest, as Railway Variables — see backend/.env.example).

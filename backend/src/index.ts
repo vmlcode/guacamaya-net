@@ -12,6 +12,8 @@ import { securityConfig } from "./security/config.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const SWEEP_INTERVAL_MS = 60_000;
+const RECEIPT_RETENTION_MS = Number(process.env.RECEIPT_RETENTION_DAYS ?? 90) * 24 * 60 * 60 * 1000;
+const CLEANUP_EVERY_N_SWEEPS = Number(process.env.RECEIPT_CLEANUP_EVERY_N_SWEEPS ?? 60);
 
 const app = Fastify({ logger: true });
 
@@ -37,6 +39,7 @@ app.get("/health", async () => ({ ok: true }));
 app.get("/", async () => ({ message: "Welcome to GuacaMalla Net!" }));
 
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
+let sweepCount = 0;
 
 const shutdown = async (signal: string) => {
   app.log.info(`Received ${signal}. Shutting down gracefully...`);
@@ -62,10 +65,18 @@ try {
   // expired (and which were not disputed) to cleared. Emits a `resuelto`
   // record per promotion so subscribers see the final state.
   sweepTimer = setInterval(async () => {
+    sweepCount += 1;
     try {
       const promoted = await resolvesRepo.getExpiredPendingClears(Date.now());
       for (const receipt of promoted) {
         app.log.info({ receiptId: receipt.id, targetSosId: receipt.targetSosId }, "resolve receipt cleared by cooldown");
+      }
+      // Periodically prune terminal receipts past their retention window (M10).
+      if (sweepCount % CLEANUP_EVERY_N_SWEEPS === 0) {
+        const deleted = await resolvesRepo.deleteTerminalReceiptsOlderThan(RECEIPT_RETENTION_MS);
+        if (deleted > 0) {
+          app.log.info({ deleted, retentionDays: RECEIPT_RETENTION_MS / (24 * 60 * 60 * 1000) }, "pruned terminal resolve receipts");
+        }
       }
     } catch (err) {
       app.log.error(err, "cooldown sweep failed");

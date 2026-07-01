@@ -175,6 +175,24 @@ export const resolvesRepo = {
     }
     return out;
   },
+
+  /**
+   * Hard-delete receipts past their retention window in terminal states.
+   * Witnesses cascade via the FK `on delete cascade` in schema.sql.
+   * Keeps the table bounded — see SECURITY-AUDIT.md [M10].
+   * Returns the count deleted (best-effort, 0 when Supabase is not configured).
+   */
+  async deleteTerminalReceiptsOlderThan(olderThanMs: number, statuses: string[] = ["cleared", "rejected"]): Promise<number> {
+    if (!isSupabaseConfigured || !supabase) return 0;
+    const cutoffIso = new Date(Date.now() - olderThanMs).toISOString();
+    const { count, error } = await supabase
+      .from(RECEIPTS_TABLE)
+      .delete({ count: "exact" })
+      .in("status", statuses)
+      .lt("created_at", cutoffIso);
+    if (error) throw error;
+    return count ?? 0;
+  },
 };
 
 function fromRow(r: any): ResolveReceipt {

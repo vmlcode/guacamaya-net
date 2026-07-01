@@ -18,9 +18,15 @@ const isProduction = process.env.NODE_ENV === "production";
 function devFallback(label: string): string | undefined {
   if (isProduction) return undefined;
   const key = randomBytes(32).toString("hex");
-  console.warn(
-    `[guacamaya-net] ${label} not set — using ephemeral dev key (set ${label} in production):\n  ${key}`,
-  );
+  // Gate the secret-printing warning by interactive TTY (or absence of CI) so
+  // ephemeral keys don't leak into centralized CI logs.
+  if (process.stdout.isTTY === true && process.env.CI === undefined) {
+    console.warn(
+      `[guacamaya-net] ${label} not set — using ephemeral dev key (set ${label} in production):\n  ${key}`,
+    );
+  } else {
+    console.warn(`[guacamaya-net] ${label} not set — using ephemeral dev key (not logged; set ${label} in production)`);
+  }
   return key;
 }
 
@@ -43,6 +49,9 @@ export const securityConfig = {
 
   /** WebSocket upgrade token (query `?token=` or header). Falls back to read key. */
   wsApiKey: resolveKey("GUACAMAYA_WS_KEY"),
+
+  /** Cap per-client WS subscriptions to bound memory growth (M5 H4 fix). */
+  wsMaxSubscriptionsPerClient: Math.max(1, Number(process.env.WS_MAX_SUBSCRIPTIONS_PER_CLIENT ?? 16)),
 
   maxIngestBatch: Math.min(Number(process.env.MAX_INGEST_BATCH ?? 200), 1000),
   maxFrameB64Length: Number(process.env.MAX_FRAME_B64_LENGTH ?? 256),
@@ -80,4 +89,10 @@ export function effectiveWsKey(): string | undefined {
 
 if (isProduction && !securityConfig.adminApiKey) {
   throw new Error("GUACAMAYA_ADMIN_KEY is required when NODE_ENV=production");
+}
+
+if (isProduction && securityConfig.corsOrigins === true) {
+  throw new Error(
+    "CORS_ORIGINS must be set to an explicit comma-separated allowlist when NODE_ENV=production (refuses to start with wildcard `*`)",
+  );
 }

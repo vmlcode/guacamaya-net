@@ -68,9 +68,11 @@ class GuacamayaForegroundService : Service() {
 
     // PARTIAL_WAKE_LOCK: keep CPU awake while observing so the FloodRouter + 8s health loop
     // don't stall in Doze. Not held for the broadcast — BLE advertising runs in the controller.
-    // No timeout: released explicitly in stopObserving()/onDestroy(). If the process dies first,
-    // the OS reclaims the lock automatically — no leak risk.
+    // A 4-hour safety timeout bounds the window if the service crashes between acquire/release
+    // without going through onDestroy() — the OS reclaims on process death regardless, this
+    // just tightens the edge case. See SECURITY-AUDIT.md [M6].
     private var wakeLock: PowerManager.WakeLock? = null
+    private val wakeLockTimeoutMs = 4 * 60 * 60 * 1000L
 
     private var broadcaster: Broadcaster? = null
     private var identity: Identity? = null
@@ -158,10 +160,10 @@ class GuacamayaForegroundService : Service() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         val lock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_TAG).apply {
             setReferenceCounted(false)
-            acquire()
+            acquire(wakeLockTimeoutMs)
         }
         wakeLock = lock
-        Log.i(tag, "wake lock acquired")
+        Log.i(tag, "wake lock acquired (timeout=${wakeLockTimeoutMs}ms)")
     }
 
     private fun releaseWakeLock() {

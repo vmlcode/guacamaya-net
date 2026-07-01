@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { Server, IncomingMessage } from "http";
 import { ChannelRecord, LocationPoint, ResolveReceipt } from "@guacamaya/shared";
 import { verifyWsToken } from "../security/auth.js";
-import { effectiveWsKey } from "../security/config.js";
+import { securityConfig, effectiveWsKey } from "../security/config.js";
 import { sanitizeRecordForPublic } from "../channels/sanitize.js";
 
 interface Client {
@@ -21,6 +21,12 @@ const SENSITIVE_CHANNELS = new Set([
   "resolves",
 ]);
 
+/**
+ * Cap per-client subscriptions to bound memory growth. A legitimate dashboard
+ * subscribes to a handful of channels; anything bigger is abuse or a bug.
+ */
+const MAX_SUBSCRIPTIONS_PER_CLIENT = securityConfig.wsMaxSubscriptionsPerClient;
+
 function extractWsToken(request: IncomingMessage): string | null {
   const url = new URL(request.url || "", `http://${request.headers.host || "localhost"}`);
   const q = url.searchParams.get("token");
@@ -37,6 +43,19 @@ function requiresAuth(channel: string): boolean {
   return SENSITIVE_CHANNELS.has(channel);
 }
 
+/**
+ * Origin check — rejects cross-site WebSocket hijacking attempts from browsers.
+ * Non-browser clients (curl, app, server-to-server) typically omit the header
+ * and are allowed. When present, the Origin must be in the configured allowlist.
+ */
+function originAllowed(request: IncomingMessage): boolean {
+  const origin = request.headers.origin;
+  if (!origin) return true; // non-browser client
+  const allow = securityConfig.corsOrigins;
+  if (allow === true) return true; // dev: allow all
+  return allow.includes(origin);
+}
+
 export function initWebSocketServer(server: Server) {
   const wss = new WebSocketServer({ noServer: true });
   const wsKey = effectiveWsKey();
@@ -44,6 +63,13 @@ export function initWebSocketServer(server: Server) {
   server.on("upgrade", (request, socket, head) => {
     const url = new URL(request.url || "", `http://${request.headers.host || "localhost"}`);
     if (url.pathname !== "/ws" && url.pathname !== "/ws/") return;
+
+    // Block CSWSH from browser origins not in the allowlist. Non-browser
+    // clients (no Origin header) pass through.
+    if (!originAllowed(request)) {
+      socket.destroy();
+      return;
+    }
 
     // Auth is enforced per channel at subscribe time, NOT at the upgrade. The
     // upgrade stays open so public community channels (solicito-ayuda, estoy-bien)
@@ -70,6 +96,10 @@ export function initWebSocketServer(server: Server) {
         if (data.type === "subscribe" && typeof data.channel === "string") {
           if (requiresAuth(data.channel) && !client.authenticated) {
             ws.send(JSON.stringify({ error: "Authentication required for this channel" }));
+            return;
+          }
+          if (client.channels.size >= MAX_SUBSCRIPTIONS_PER_CLIENT && !client.channels.has(data.channel)) {
+            ws.send(JSON.stringify({ error: `Subscription cap reached (${MAX_SUBSCRIPTIONS_PER_CLIENT})` }));
             return;
           }
           client.channels.add(data.channel);

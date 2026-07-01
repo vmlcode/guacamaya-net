@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { supabase, isSupabaseConfigured } from "../db/supabase.js";
@@ -53,13 +53,12 @@ export function verifyUploadToken(token: string, imageHash: string, now: number 
   if (!Number.isFinite(expiresAt)) return false;
   if (expiresAt <= now) return false;
   const expected = makeUploadToken(imageHash, expiresAt);
-  // Constant-time-ish compare via length-prefixed buffer equality.
-  if (expected.length !== token.length) return false;
-  let diff = 0;
-  for (let i = 0; i < token.length; i++) {
-    diff |= token.charCodeAt(i) ^ expected.charCodeAt(i);
-  }
-  return diff === 0;
+  // Constant-time compare — V8's optimizer can break hand-rolled XOR loops.
+  // Use crypto.timingSafeEqual for parity with auth.ts API-key compare.
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 export interface StoredEvidence {

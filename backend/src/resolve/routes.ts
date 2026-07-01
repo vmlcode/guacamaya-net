@@ -118,6 +118,8 @@ export async function resolveRoutes(fastify: FastifyInstance) {
   fastify.post<{ Body: Buffer }>(
     "/resolve/evidence",
     {
+      // Default Fastify bodyLimit is 1 MB — too small for the 8 MB evidence cap.
+      bodyLimit: securityConfig.resolve.maxImageBytes + 1024,
       config: { rateLimit: securityConfig.ingestRateLimit },
       preHandler: securityConfig.resolve.evidenceRequireAuth
         ? requireApiKey(effectiveReadKey(), "resolve evidence")
