@@ -7,12 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # From the repo root
 bun run dev:backend          # start backend with hot-reload (bun --watch)
+bun run build                # typecheck shared + backend (no build artifacts)
+bun run typecheck            # alias for build
 bun test                     # run all tests (packages/shared)
 bun test packages/shared/src/locations.test.ts  # run a single test file
 
 # From backend/
 bun run dev                  # same as above, local
 bun run start                # production start (no watch)
+bun run build                # backend typecheck only
 bun run --cwd backend tsc --noEmit  # type-check only
 ```
 
