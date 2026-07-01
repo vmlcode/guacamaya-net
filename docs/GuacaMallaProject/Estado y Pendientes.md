@@ -48,6 +48,27 @@ están en código y verificados *headless*. Lo que falta, en orden:
 2. [ ] **WebSocket en vivo** — cliente Android **hecho** (`net.guacamaya.backend.ws`: `WsFrame` testeado + `LiveSosClient` + `LiveSosIndicator` UI), pero **bloqueado por el backend**: el server **no hace upgrade WS bajo Bun** 🔴 (1006, sin log; verificado con curl crudo y `WebSocket` de Bun). Arreglar el WS del backend (Bun.serve nativo / Node / plugin compatible) — afecta también al dashboard si usa `/ws`. Ver [[Downlink Alertas Oficiales]].
 3. [ ] **Reconciliar `backend_final.md`** (doc del equipo, desactualizado): dice que el `IngestClient` no existe y usa `org.sosnet`/`BACKEND_BASE_URL`. Alinear con la realidad.
 
+## Próximos pasos Android (reunión 2026-06-29)
+
+De la [[meeting-notes|reunión del 29 jun]] (decisión en [[Arquitectura y Decisiones]] §13). Foco MVP, área de David:
+
+1. [ ] **Colapsar el modelo de modos a SOS-only**: quitar `FIND`/`ModeSelector` de la UI; dejar la
+   escucha como **servicio siempre-on en segundo plano** (repetidor pasivo) + **swipe al radar**.
+   Ya está *default = SOS* y *SOS también observa*; falta el resto. ⚠️ Coordinar el wire/relay para
+   que "siempre escucha" no dependa de un modo seleccionado.
+2. [ ] **Radar funcional + UX swipe**: el equipo lo vio como "pura animación" en un build viejo; ya usa
+   acelerómetro (`CompassHeading`). Pendiente real = brújula MIUI + acceso por swipe desde el SOS.
+3. [ ] **Onboarding de permisos** — ⚠️ **solapamiento**: la tarea quedó asignada a David, pero **PR #15
+   (Eli) ya lo implementa**. Coordinar antes de duplicar (es justo el "solapamiento" que las reglas de
+   contribución buscan evitar). Ver review en PR #15.
+4. [ ] **SOS multi-categoría por swipe** (roadmap, no MVP): `sosType` ya tiene 8 valores en el wire.
+
+> Contexto de equipo (no-Android): refactor del backend + **limpieza de código muerto** (incluye el
+> stub `backend/src/sms/`, ver más abajo) y evaluación **Fastify vs Spring Boot** para servir el
+> dashboard (Victor). CI ya con **Firebase App Distribution + Crashlytics** (Eli); builds por **tags**;
+> APKs por GitHub Releases. Licencia tentativa **BSL / source-available** (restringe uso comercial).
+> Demo objetivo = **A (offline) → B (relay offline) → C (online, sube)** — es el store-and-forward + IngestClient ya hechos.
+
 ## Trabajo abierto (backlog)
 
 - ✅ **Fallback de ubicación sin Google Play Services**: hecho — `loc/PlatformLocation` (LocationManager de plataforma) cubre servicio (estampado de frame) y radar cuando no hay GMS. Pendiente: validar en un dispositivo realmente de-Googled.
