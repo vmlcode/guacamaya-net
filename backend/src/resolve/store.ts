@@ -64,6 +64,11 @@ export const resolveStore = {
   upsertReceipt(receipt: ResolveReceipt): void {
     receiptsByTarget.set(receipt.targetSosId, receipt);
     receiptsById.set(receipt.id, receipt);
+    if (receipt.status === "pending" && typeof receipt.cooldownEndsAt === "number") {
+      this.markPendingClear(receipt.targetSosId, receipt.id, receipt.cooldownEndsAt);
+    } else {
+      pendingClears.delete(receipt.targetSosId);
+    }
   },
 
   getReceiptById(id: string): ResolveReceipt | undefined {

@@ -28,12 +28,11 @@ export const resolvesRepo = {
     return Boolean(data);
   },
 
-  async addWitness(targetSosId: string, witness: ResolveWitness, receiptId: string): Promise<boolean> {
+  async addWitness(targetSosId: string, witness: ResolveWitness): Promise<boolean> {
     if (!isSupabaseConfigured || !supabase) {
       return resolveStore.recordWitness(targetSosId, witness);
     }
     const row = {
-      receipt_id: receiptId,
       target_sos_id: targetSosId,
       device_id: witness.deviceId,
       pubkey: witness.pubkey,
@@ -92,7 +91,7 @@ export const resolvesRepo = {
     };
     const { error } = await supabase
       .from(RECEIPTS_TABLE)
-      .upsert(row, { onConflict: "id", ignoreDuplicates: false });
+      .upsert(row, { onConflict: "target_sos_id", ignoreDuplicates: false });
     if (error) throw error;
   },
 
@@ -121,6 +120,7 @@ export const resolvesRepo = {
       .select("target_sos_id")
       .eq("target_sos_author", authorDeviceId)
       .eq("status", "pending")
+      .not("cooldown_ends_at", "is", null)
       .neq("target_sos_id", excludeTargetId)
       .order("created_at", { ascending: false })
       .limit(1)

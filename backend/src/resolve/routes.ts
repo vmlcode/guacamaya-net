@@ -249,9 +249,8 @@ export async function resolveRoutes(fastify: FastifyInstance) {
       }
 
       // Persist each new witness.
-      const provisionalId = getResolveId(envelope);
       for (const w of newAccepted) {
-        await resolvesRepo.addWitness(envelope.targetSosId, w, provisionalId);
+        await resolvesRepo.addWitness(envelope.targetSosId, w);
       }
 
       const allWitnesses = await resolvesRepo.getWitnesses(envelope.targetSosId);

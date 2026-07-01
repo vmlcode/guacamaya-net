@@ -58,7 +58,7 @@ alter table public.location_points enable row level security;
 
 create table if not exists public.resolve_receipts (
   id                text        primary key,           -- sha256(canonical + sorted witness deviceIds)
-  target_sos_id     text        not null,              -- channel_records.id of the original SOS
+  target_sos_id     text        not null unique,       -- channel_records.id of the original SOS (one receipt per target)
   target_sos_author text        not null,              -- "device-<pubkey-hex>" of the originator
   status            text        not null,              -- "pending" | "cleared" | "disputed" | "rejected"
   quorum_needed     integer     not null,
@@ -83,8 +83,7 @@ create index if not exists resolve_receipts_author_pending_idx
 alter table public.resolve_receipts enable row level security;
 
 create table if not exists public.resolve_witnesses (
-  receipt_id   text             not null references public.resolve_receipts(id) on delete cascade,
-  target_sos_id text            not null,              -- denormalized for the unique constraint + lookup
+  target_sos_id text            not null,              -- lookup key
   device_id    text             not null,              -- "device-<pubkey-hex>"
   pubkey       text             not null,              -- 32-byte Ed25519 hex
   lat          double precision not null,
