@@ -12,7 +12,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -78,6 +80,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -91,7 +94,6 @@ import net.guacamaya.mesh.NodeCatalog
 import net.guacamaya.backend.OfficialAlert
 import net.guacamaya.service.GuacamayaForegroundService
 import org.json.JSONObject
-import android.util.Log
 import net.guacamaya.util.BatteryHelper
 import kotlin.math.PI
 import kotlin.math.cos
@@ -114,11 +116,17 @@ class MainActivity : ComponentActivity() {
 
     private var showOnboarding by mutableStateOf(false)
     private var hasPermissions by mutableStateOf(false)
+    private var isAdbLaunchSession by mutableStateOf(false)
+    private var pendingOnboardingPermissionRequest by mutableStateOf(false)
 
     private val permsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted ->
         hasPermissions = hasRequiredPermissions()
+        if (pendingOnboardingPermissionRequest) {
+            pendingOnboardingPermissionRequest = false
+            showOnboarding = false
+        }
         if (granted.values.any { it }) {
             routeAdbIntent(getIntent())
         }
@@ -128,9 +136,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val adbLaunch = isDirectAdbLaunch(intent)
-        showOnboarding = !adbLaunch && shouldShowOnboarding()
-        if (adbLaunch) ensurePermissions()
+        isAdbLaunchSession = isDirectAdbLaunch(intent)
+        showOnboarding = !isAdbLaunchSession && shouldShowOnboarding()
         hasPermissions = hasRequiredPermissions()
         routeAdbIntent(intent)
         setContent {
@@ -140,11 +147,15 @@ class MainActivity : ComponentActivity() {
                         OnboardingScreen(
                             onContinue = {
                                 markOnboardingSeen()
-                                showOnboarding = false
-                                ensurePermissions()
+                                pendingOnboardingPermissionRequest = true
+                                val launchedPermissionDialog = ensurePermissions()
+                                if (!launchedPermissionDialog || hasRequiredPermissions()) {
+                                    pendingOnboardingPermissionRequest = false
+                                    showOnboarding = false
+                                }
                             },
                         )
-                    } else if (!hasPermissions) {
+                    } else if (!isAdbLaunchSession && !hasPermissions) {
                         PermissionsDeniedScreen(
                             onRequestPermissions = {
                                 ensurePermissions()
@@ -208,6 +219,10 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (isDirectAdbLaunch(intent)) {
+            isAdbLaunchSession = true
+            showOnboarding = false
+        }
         routeAdbIntent(intent)
     }
 
@@ -231,16 +246,16 @@ class MainActivity : ComponentActivity() {
 
     private fun openAppSettings() {
         try {
-            val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = android.net.Uri.fromParts("package", packageName, null)
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
             }
             startActivity(intent)
         } catch (e: Exception) {
-            Log.e("guacamaya", "Failed to open settings", e)
+            Log.e("guacamaya.permissions", "Failed to open settings", e)
         }
     }
 
-    private fun ensurePermissions() {
+    private fun ensurePermissions(): Boolean {
         val missing = requiredRuntimePermissions().filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
@@ -251,22 +266,24 @@ class MainActivity : ComponentActivity() {
             // On Android, if a permission was requested before and shouldShowRequestPermissionRationale is false,
             // it means the user denied it with "Don't ask again" (permanently denied).
             val permanentlyDenied = requestedBefore && missing.any { permission ->
-                !androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
+                !ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
             }
 
             if (permanentlyDenied) {
-                android.widget.Toast.makeText(
+                Toast.makeText(
                     this,
                     "Permisos desactivados. Actívalos manualmente en Ajustes.",
-                    android.widget.Toast.LENGTH_LONG
+                    Toast.LENGTH_LONG
                 ).show()
-                openAppSettings()
+                return false
             } else {
                 prefs.edit().putBoolean(KEY_PERMISSIONS_REQUESTED, true).apply()
                 permsLauncher.launch(missing.toTypedArray())
+                return true
             }
         }
         // No auto-popup before onboarding: MIUI abre PowerDetailActivity y rompe adb/UI. Banner in-app opcional.
+        return false
     }
 
     private fun hasRequiredPermissions(): Boolean =
