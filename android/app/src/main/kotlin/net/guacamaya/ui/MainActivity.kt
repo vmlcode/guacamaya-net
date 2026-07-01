@@ -204,6 +204,12 @@ class MainActivity : ComponentActivity() {
         val required = buildList {
             add(Manifest.permission.ACCESS_FINE_LOCATION)
             add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            if (Build.VERSION.SDK_INT >= 29) {
+                // Defensive: some OEMs gate background BLE scan behind this. AOSP doesn't require
+                // it, so we request it but don't block the flow if the user denies — the in-app
+                // banner covers the rationale.
+                add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            }
             if (Build.VERSION.SDK_INT >= 31) {
                 add(Manifest.permission.BLUETOOTH_ADVERTISE)
                 add(Manifest.permission.BLUETOOTH_SCAN)

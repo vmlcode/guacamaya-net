@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
@@ -62,7 +63,14 @@ class GuacamayaForegroundService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var observeRetryPosted = false
     @Volatile private var wantObserving = false
+    @Volatile private var lastMode: String = MODE_OFF
     private var observeHealthJob: Job? = null
+
+    // PARTIAL_WAKE_LOCK: keep CPU awake while observing so the FloodRouter + 8s health loop
+    // don't stall in Doze. Not held for the broadcast — BLE advertising runs in the controller.
+    // No timeout: released explicitly in stopObserving()/onDestroy(). If the process dies first,
+    // the OS reclaims the lock automatically — no leak risk.
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private var broadcaster: Broadcaster? = null
     private var identity: Identity? = null
@@ -73,22 +81,51 @@ class GuacamayaForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Sync lastMode field from prefs so subsequent action handlers can read it
+        // before any persist call. wantObserving is restored lazily in startObserving().
+        lastMode = restoreMode()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         probeLog("onStartCommand action=${intent?.action} startId=$startId")
         ensureForeground()
         Log.i(tag, "onStartCommand action=${intent?.action}")
-        when (intent?.action) {
-            ACTION_START -> {
-                setWantObserving(true)
-                startDistressBroadcast()
+        if (intent == null) {
+            // System restarted us via START_STICKY after a process kill — restore last mode.
+            restoreWantObserving()
+            lastMode = restoreMode()
+            Log.i(tag, "system restart restored mode=$lastMode wantObserving=$wantObserving")
+        } else {
+            when (intent.action) {
+                ACTION_START -> {
+                    setWantObserving(true)
+                    persistMode(MODE_SOS)
+                    startDistressBroadcast()
+                }
+                ACTION_STOP -> {
+                    // Stop broadcasting but keep observing → FIND mode.
+                    if (lastMode == MODE_SOS) persistMode(MODE_OBSERVE)
+                    stopBroadcasting()
+                }
+                ACTION_OBSERVE_ON -> {
+                    setWantObserving(true)
+                    if (lastMode != MODE_SOS && lastMode != MODE_BOTH) persistMode(MODE_OBSERVE)
+                }
+                ACTION_OBSERVE_OFF -> {
+                    setWantObserving(false)
+                    persistMode(MODE_OFF)
+                }
+                ACTION_HEARTBEAT_ON -> {
+                    setWantObserving(true)
+                    persistMode(MODE_BOTH)
+                    startPresenceHeartbeat()
+                }
+                ACTION_HEARTBEAT_OFF -> {
+                    // Heartbeat off but observe continues → FIND mode.
+                    if (lastMode == MODE_BOTH) persistMode(MODE_OBSERVE)
+                    stopPresenceHeartbeat()
+                }
             }
-            ACTION_STOP -> stopBroadcasting()
-            ACTION_OBSERVE_ON -> setWantObserving(true)
-            ACTION_OBSERVE_OFF -> setWantObserving(false)
-            ACTION_HEARTBEAT_ON -> startPresenceHeartbeat()
-            ACTION_HEARTBEAT_OFF -> stopPresenceHeartbeat()
         }
         if (wantObserving) startObserving() else stopObserving()
         // Best-effort data-mule flush: WorkManager waits for connectivity, so this is
@@ -106,6 +143,30 @@ class GuacamayaForegroundService : Service() {
         if (!wantObserving) {
             wantObserving = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_WANT_OBSERVE, false)
         }
+    }
+
+    private fun persistMode(mode: String) {
+        lastMode = mode
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_LAST_MODE, mode).apply()
+    }
+
+    private fun restoreMode(): String =
+        getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_LAST_MODE, MODE_OFF) ?: MODE_OFF
+
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        val lock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_TAG).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+        wakeLock = lock
+        Log.i(tag, "wake lock acquired")
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
     }
 
     private fun ensureForeground() {
@@ -152,7 +213,10 @@ class GuacamayaForegroundService : Service() {
         }
         ensureObserverAndRouter()
         if (!BleMeshRuntime.ensureObserving(this)) scheduleObserveRetry()
-        else ensureObserveHealthLoop()
+        else {
+            ensureObserveHealthLoop()
+            acquireWakeLock()
+        }
     }
 
     private fun ensureObserveHealthLoop() {
@@ -329,6 +393,26 @@ class GuacamayaForegroundService : Service() {
         observeHealthJob?.cancel()
         observeHealthJob = null
         BleMeshRuntime.stopObserving()
+        releaseWakeLock()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // START_STICKY should keep us alive after swipe-away, but some OEMs (MIUI/EMUI) kill the
+        // FGS anyway. Re-launching explicitly here closes that window when the user actually wants
+        // to keep observing.
+        if (wantObserving) {
+            Log.i(tag, "task removed — scheduling FGS restart mode=$lastMode")
+            val restart = Intent(applicationContext, GuacamayaForegroundService::class.java).apply {
+                action = when (lastMode) {
+                    MODE_SOS -> ACTION_START
+                    MODE_BOTH -> ACTION_HEARTBEAT_ON
+                    else -> ACTION_OBSERVE_ON
+                }
+                setPackage(packageName)
+            }
+            ContextCompat.startForegroundService(applicationContext, restart)
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
@@ -337,6 +421,7 @@ class GuacamayaForegroundService : Service() {
         BleMeshRuntime.stopObserving()
         broadcaster?.stop()
         stopPresenceHeartbeat()
+        releaseWakeLock()
         scope.cancel()
     }
 
@@ -386,7 +471,15 @@ class GuacamayaForegroundService : Service() {
 
         private const val PREFS = "guacamaya_service"
         private const val KEY_WANT_OBSERVE = "want_observe"
+        private const val KEY_LAST_MODE = "last_mode"
         private const val OBSERVE_HEALTH_MS = 8_000L
+
+        const val MODE_OFF = "OFF"
+        const val MODE_OBSERVE = "OBSERVE"
+        const val MODE_SOS = "SOS"
+        const val MODE_BOTH = "BOTH"
+
+        private const val WAKE_TAG = "guacamaya:wake:observe"
     }
 
     private fun probeLog(msg: String) = Log.i(probeTag, msg)
