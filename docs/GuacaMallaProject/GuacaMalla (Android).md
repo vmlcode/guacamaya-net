@@ -37,9 +37,11 @@ Reescrito en el sprint de campo de junio 2026 (`/loop` ~21 ticks sobre dos telé
 eliminó osmdroid** y se quitó la dependencia de Google Play Services para el render del mapa —
 decisión en [[Arquitectura y Decisiones]] §7.
 
-- `ui/GridMap.kt` + `ui/GeoGrid.kt` — **cuadrícula offline en metros** (plano ENU este/norte), usuario
-  al centro, una posición por nodo. Indicador de norte sincronizado con la brújula. Reemplaza el mapa
-  de tiles de osmdroid (menos RAM, sin WebView, funciona sin descargar tiles).
+- `ui/GeoGrid.kt` + `GeoProximity.gridPoints` — modelo de **cuadrícula offline en metros** (plano ENU
+  este/norte), usuario al centro, una posición por nodo. Reemplazó al mapa de tiles de osmdroid (menos
+  RAM, sin WebView, sin descargar tiles). **Nota:** la UI multi-punto (`GridMap.kt`) se eliminó; el
+  radar actual es de **objetivo único** (flecha al nodo más cercano, `RadarScreen`/`RadarCompass` en
+  `MainActivity`). El modelo `gridPoints` sigue disponible si se reintroduce el plano multi-blip.
 - `ui/CompassHeading.kt` — heading geográfico: remapeo por rotación de pantalla
   (`remapCoordinateSystem`), filtro exponencial, `GEOMAGNETIC_ROTATION_VECTOR`, y **fallback
   acelerómetro+magnetómetro** para MTK/Xiaomi. Botón **«Calibrar norte»** con offset persistido por
@@ -48,7 +50,9 @@ decisión en [[Arquitectura y Decisiones]] §7.
 - `ui/GeoProximity.kt` — distancia entre nodos con suavizado EMA del GPS + posición por nodo; dentro
   de la incertidumbre del fix muestra **«junto»** en vez de saltar 1–4 m; sub-10 m en cm. Cuando el
   GPS dice «junto», usa el RSSI BLE suavizado como hint (`tocando`, `~1 m`, …).
-- `ui/LocationTracker.kt` — fix de GPS (hoy vía `FusedLocationProviderClient`).
+- `ui/LocationTracker.kt` — fix de GPS vía `FusedLocationProviderClient` (con rechazo de outliers y
+  suavizado). **Fallback offline:** `loc/PlatformLocation.kt` usa el `LocationManager` de AOSP
+  (GPS/NETWORK/PASSIVE) cuando no hay Google Play Services — ver «Radar offline» abajo.
 - `ui/FunctionalProbe.kt` — sonda de diagnóstico que se vuelca por logcat (`nodes`, `frames`,
   `bearing`, `rel=`, `co_loc`, `magnet=…`) para las pruebas adb dual-device.
 - `ui/MapViewModel.kt`, `ui/MainActivity.kt` (~934 líneas), `ui/Theme.kt` — UI Compose.
@@ -56,6 +60,32 @@ decisión en [[Arquitectura y Decisiones]] §7.
 > **Brújula — estado de campo:** Realme calibra bien (`magnet=high`, ~87–109°). El teléfono MIUI
 > ("sweet") reporta `magnet=bad` y queda **bloqueado en calibración manual** (figura-8,
 > `./scripts/demo.sh compass-miui sweet`). Es el principal pendiente de campo — ver [[Estado y Pendientes]].
+
+### Radar funcional / offline (sprint jun 2026)
+
+Síntoma reportado: «no se ven los puntos en el radar». Causa = tres compuertas, cualquiera vacía el radar:
+
+1. **El modo SOS apagaba el escaneo** (`applyMode(SOS)` mandaba `OBSERVE_OFF`): un equipo emitiendo
+   SOS no oía a nadie → `latestNodes` vacío. **Arreglado:** SOS ahora **emite distress Y escucha**
+   (`OBSERVE_ON` + `ACTION_START`), así el radar se puebla mientras pides ayuda.
+2. **El GPS propio solo venía de Google Play Services** (`FusedLocationProviderClient` en servicio +
+   radar). Sin GMS (teléfono de gama baja / de-Googled) el fix era `null` → radar en blanco.
+   **Arreglado:** `loc/PlatformLocation.kt` (LocationManager AOSP) como fallback en el servicio
+   (estampado del frame) y en el radar (`rememberLiveLocation` siembra last-known al instante y usa
+   updates de plataforma cuando `GoogleApiAvailability != SUCCESS`).
+3. **Nodos sin fix propio viajan con lat/lon 0,0** y se descartan (`GeoProximity:59`). Inherente:
+   un nodo solo es ploteable si su propio frame trae GPS — por eso (2) importa en ambos extremos.
+
+**El radar es de objetivo único** (flecha al más cercano), por decisión de este sprint — no se
+reintrodujo el plano multi-blip (el modelo `gridPoints` existe si se quiere después). La estrategia
+de **recolección de puntos geográficos es frame-derived**: cada frame firmado trae la lat/lon del
+emisor (igual que el ingest zero-trust del backend); offline-nativo, sin servidor ni tiles.
+
+### Modo por defecto = SOS
+
+`MapViewModel._mode` arranca en `MeshMode.SOS` (antes `BOTH`): es una app de emergencia, el botón de
+power debe **pedir ayuda primero**. Como SOS ahora también escucha, el radar sigue poblándose. `FIND`
+= solo escucha (ahorro de batería); `AMBOS` = presencia (no-crítico) + escucha.
 
 ## Identidad
 

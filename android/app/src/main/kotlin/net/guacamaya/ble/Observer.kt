@@ -73,14 +73,13 @@ class Observer private constructor(
 
     private fun handle(result: ScanResult) {
         val rec = result.scanRecord ?: return
-        val sawUuid = rec.serviceUuids?.contains(BleConfig.SERVICE_PARCEL_UUID) == true
+        val sawUuid = rec.serviceUuids?.any { it in BleConfig.MATCH_PARCEL_UUIDS } == true
         if (sawUuid) {
             Log.i(tag, "saw UUID rssi=${result.rssi} legacy=${result.isLegacy} len=${rec.bytes?.size ?: 0}")
             Log.i("guacamaya.probe", "saw_uuid rssi=${result.rssi} legacy=${result.isLegacy}")
         }
         val blob = extractServiceData(rec)
         if (blob == null || blob.size != BleConfig.SERVICE_DATA_SIZE) {
-            val sawUuid = rec.serviceUuids?.contains(BleConfig.SERVICE_PARCEL_UUID) == true
             if (sawUuid || blob != null) {
                 Log.w(
                     tag,
@@ -105,8 +104,13 @@ class Observer private constructor(
      * extended ADV secondary payloads.
      */
     private fun extractServiceData(rec: ScanRecord): ByteArray? {
-        rec.serviceData?.get(BleConfig.SERVICE_PARCEL_UUID)?.let { return it }
-        return parseServiceData128(rec.bytes, BleConfig.SERVICE_UUID)
+        for (parcel in BleConfig.MATCH_PARCEL_UUIDS) {
+            rec.serviceData?.get(parcel)?.let { return it }
+        }
+        for (uuid in BleConfig.MATCH_UUIDS) {
+            parseServiceData128(rec.bytes, uuid)?.let { return it }
+        }
+        return null
     }
 
     /** Begin scanning. Idempotent. */

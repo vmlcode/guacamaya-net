@@ -7,6 +7,7 @@ import { signRecord } from "../crypto/signer.js";
 import { broadcastRecord, broadcastLocation, broadcastResolve } from "../ws/server.js";
 import { publicKeyHex } from "../crypto/keys.js";
 import { decodeAndVerifyFrame } from "../mesh/frame.js";
+import { sanitizeRecordsForPublic } from "./sanitize.js";
 import { requireApiKey } from "../security/auth.js";
 import { securityConfig } from "../security/config.js";
 import {
@@ -38,7 +39,8 @@ export async function channelRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ error: "Unknown channel" });
       }
       const since = parseSinceParam(request.query.since);
-      return channelsRepo.getRecords(channelId as ChannelId, since);
+      const records = await channelsRepo.getRecords(channelId as ChannelId, since);
+      return sanitizeRecordsForPublic(records);
     },
   );
 

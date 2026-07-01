@@ -11,7 +11,9 @@ Foto del estado de [[GuacaMallaProject]] al **2026-06-28** (rama `develop`, mono
 - ✅ Ubicación GPS real en el payload + sonda ENU (lat/lon/acc/bearing/`rel=`/`co_loc`).
 - ✅ TTL de salto que decrementa por relay y para en 0 (byte sin firmar al frente). Ver [[Protocolo y Frame]].
 - ✅ **Store-and-forward**: rotación de re-emisión en el servicio (frame propio ↔ últimos help-requests por nodo) + ventana de edad selectiva (`AgePolicy`: 24 h para help-requests, fresh-only para presence). Un SOS sobrevive al apagado de su origen y llega a equipos que entran después. Tests JVM de `AgePolicy`/`isHelpRequest` verdes; **⚠️ cambia la cadencia de broadcast — requiere validación de campo en 2-3 teléfonos (MIUI)**. Ver [[Protocolo y Frame]].
-- ✅ **Radar + brújula + mapa de cuadrícula offline** nuevos (`CompassHeading`, `GeoProximity`, `GridMap`); **osmdroid eliminado** y quitada la dependencia de GMS para el render. Ver [[GuacaMalla (Android)]].
+- ✅ **Radar + brújula offline** (`CompassHeading`, `GeoProximity`); **osmdroid eliminado** y quitada la dependencia de GMS para el render. Ver [[GuacaMalla (Android)]].
+- ✅ **Radar funcional / offline** (sprint jun 2026): SOS ahora **también escucha** (el radar se puebla mientras emites), **GPS propio con fallback `LocationManager`** (`loc/PlatformLocation`) cuando no hay Google Play Services, y **modo por defecto = SOS**. Build + tests verdes; **⚠️ falta validar en campo** (puntos visibles, GPS sin GMS). Ver [[GuacaMalla (Android)]].
+- ✅ **UUID de servicio BLE de producción** (`a613421e-…` v4 real) con **dual-scan** del legacy para rollout sin partir el parque. Ver [[Protocolo y Frame]].
 - ✅ Pruning de la DB Room (conserva 25 000 filas, batcheado cada 128 inserts).
 - ✅ **`IngestClient` (data-mule uploader)** implementado: persiste la firma (migración Room v3), arma el frame de 118 B y hace `POST /ingest` vía WorkManager al recuperar red. Build + tests JVM verdes. **Pata de aceptación del backend verificada** contra server real (ingesta/dedup/rechazo/locations); falta el smoke en dispositivo. Ver [[IngestClient (Data-Mule Uploader)]].
 - ✅ **Downlink de alertas oficiales** + alcanzabilidad: `BackendClient` descarga `/channels/:id/records` y **verifica la firma** (esquema oficial, `OfficialRecordVerifier`); banner en la UI; `BACKEND_BASE_URL` configurable (debug LAN override + cleartext de debug). Tests JVM verdes; falta smoke en dispositivo. Ver [[Downlink Alertas Oficiales]].
@@ -48,12 +50,12 @@ están en código y verificados *headless*. Lo que falta, en orden:
 
 ## Trabajo abierto (backlog)
 
-- [ ] **Fallback de ubicación sin Google Play Services**: el fix GPS aún usa `FusedLocationProviderClient` (GMS). Alternativa robusta para gama baja sin GMS: `LocationManager` de plataforma.
+- ✅ **Fallback de ubicación sin Google Play Services**: hecho — `loc/PlatformLocation` (LocationManager de plataforma) cubre servicio (estampado de frame) y radar cuando no hay GMS. Pendiente: validar en un dispositivo realmente de-Googled.
 - [ ] **Calibrar/robustecer brújula MIUI** en campo (`functional-compass` con Δheading ≈ 0° en paralelo).
 - [ ] **Integrar Wi-Fi Aware** al servicio (publish/subscribe del `NanMessenger`).
 - [ ] **Clientes de Resolve**: app del buscador + consola del coordinador (ver nota dedicada).
 - [ ] **Endurecer `/ingest`**: rate-limit por origen además del global; moderación de reportes de comunidad.
-- [ ] **UUID de servicio BLE** en `BleConfig` sigue siendo placeholder — cambiar antes de uso productivo.
+- ❌ **Sync por SMS** (`backend/src/sms/.gitkeep`, EPIC-3 en los docs de planning) — **fuera de alcance**: GuacaMalla se enfoca estrictamente en reportar eventos críticos por Bluetooth. No se implementará.
 
 ## Riesgos conocidos
 

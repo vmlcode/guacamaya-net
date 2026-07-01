@@ -3,6 +3,7 @@ import { Server, IncomingMessage } from "http";
 import { ChannelRecord, LocationPoint, ResolveReceipt } from "@guacamaya/shared";
 import { verifyWsToken } from "../security/auth.js";
 import { effectiveWsKey } from "../security/config.js";
+import { sanitizeRecordForPublic } from "../channels/sanitize.js";
 
 interface Client {
   ws: WebSocket;
@@ -44,22 +45,22 @@ export function initWebSocketServer(server: Server) {
     const url = new URL(request.url || "", `http://${request.headers.host || "localhost"}`);
     if (url.pathname !== "/ws" && url.pathname !== "/ws/") return;
 
-    if (wsKey) {
-      const token = extractWsToken(request);
-      if (!verifyWsToken(token, wsKey)) {
-        socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-        socket.destroy();
-        return;
-      }
-    }
+    // Auth is enforced per channel at subscribe time, NOT at the upgrade. The
+    // upgrade stays open so public community channels (solicito-ayuda, estoy-bien)
+    // are reachable by phones that intentionally carry no key (LiveSosClient).
+    // A valid token still unlocks SENSITIVE_CHANNELS (locations, official, …).
+    // When no ws key is configured at all there is nothing to check → treat as
+    // authenticated so a keyless dev dashboard still works.
+    const token = extractWsToken(request);
+    const authenticated = wsKey ? verifyWsToken(token, wsKey) : true;
 
     wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit("connection", ws, request);
+      wss.emit("connection", ws, request, authenticated);
     });
   });
 
-  wss.on("connection", (ws: WebSocket) => {
-    const client: Client = { ws, channels: new Set(), authenticated: Boolean(wsKey) };
+  wss.on("connection", (ws: WebSocket, _request: IncomingMessage, authenticated: boolean) => {
+    const client: Client = { ws, channels: new Set(), authenticated };
     clients.add(client);
 
     ws.on("message", (message) => {
@@ -88,7 +89,12 @@ export function initWebSocketServer(server: Server) {
 }
 
 export function broadcastRecord(record: ChannelRecord) {
-  const payload = JSON.stringify({ type: "record", data: record });
+  // Community SOS records carry victim GPS; coarsen them on the wire the same way
+  // the public HTTP read does (sanitizeRecordForPublic is a no-op for official
+  // channels). Exact positions reach the dashboard only via the auth-gated
+  // "locations" channel / GET /locations, never this public record stream.
+  const publicView = sanitizeRecordForPublic(record);
+  const payload = JSON.stringify({ type: "record", data: publicView });
   for (const client of clients) {
     if (client.channels.has(record.channel) && client.ws.readyState === WebSocket.OPEN) {
       client.ws.send(payload);
