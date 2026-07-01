@@ -32,8 +32,8 @@ const PAGE = `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>GuacaMalla Net — Mapa de Alertas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>GuacaMalla — Mapa de Alertas</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   /* ── Design tokens — espejo de GuacamayaPalette (android/.../ui/Theme.kt) ── */
@@ -49,19 +49,30 @@ const PAGE = `<!doctype html>
   }
   * { box-sizing: border-box; }
   html, body {
-    margin: 0; height: 100%; background: var(--canvas); color: var(--body);
+    margin: 0; height: 100%; height: 100dvh; background: var(--canvas); color: var(--body);
     font-family: system-ui, -apple-system, Roboto, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   #map { position: absolute; inset: 0; background: var(--canvas); }
 
-  /* Panel = SurfaceCard con hairline, radios y spacing del design system */
+  /* Panel = SurfaceCard con hairline, radios y spacing del design system.
+     Mobile-first: base = barra superior a todo lo ancho (pulgar-friendly,
+     respeta el notch/isla dinámica). Desde 640px pasa a tarjeta flotante. */
   #panel {
-    position: absolute; z-index: 1000; top: 16px; left: 16px; width: 280px; max-width: calc(100vw - 32px);
-    background: var(--surface-card); border: 1px solid var(--hairline); border-radius: var(--r-lg);
+    position: fixed; z-index: 1000; top: 0; left: 0; right: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    background: var(--surface-card); border-bottom: 1px solid var(--hairline);
+    border-radius: 0 0 var(--r-lg) var(--r-lg);
     box-shadow: 0 8px 32px rgba(0,0,0,.55); overflow: hidden;
   }
-  .pad { padding: 16px 20px; }
+  @media (min-width: 640px) {
+    #panel {
+      top: 16px; left: 16px; right: auto; width: 280px;
+      padding-top: 0; border: 1px solid var(--hairline); border-radius: var(--r-lg);
+    }
+  }
+  .pad { padding: 14px 16px; }
+  @media (min-width: 640px) { .pad { padding: 16px 20px; } }
   .head { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--hairline); }
   .mark {
     width: 34px; height: 34px; flex: none; border-radius: var(--r-md);
@@ -119,18 +130,22 @@ const PAGE = `<!doctype html>
   .pop-coord { color: var(--body); } .pop-approx { color: var(--warning); font-size: 11px; }
   .pop-meta { color: var(--muted); font-size: 11px; }
 
-  /* Modal de bienvenida — se muestra al cargar, difumina el mapa detrás */
+  /* Modal de bienvenida — se muestra al cargar, difumina el mapa detrás.
+     Mobile-first: ocupa el ancho disponible; desde 640px se centra a 420px. */
   #intro-backdrop {
     position: fixed; inset: 0; z-index: 2000;
     background: rgba(10,10,10,.72);
     backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-    display: flex; align-items: center; justify-content: center; padding: 20px;
+    display: flex; align-items: center; justify-content: center;
+    padding: max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px))
+              max(20px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
   }
   #intro-modal {
-    width: 420px; max-width: 100%;
+    width: 100%; max-width: 420px;
     background: var(--surface-card); border: 1px solid var(--hairline); border-radius: var(--r-lg);
-    box-shadow: 0 8px 32px rgba(0,0,0,.6); padding: 24px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.6); padding: 20px;
   }
+  @media (min-width: 640px) { #intro-modal { padding: 24px; } }
   #intro-modal .eyebrow {
     margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
     text-transform: uppercase; color: var(--brand);
