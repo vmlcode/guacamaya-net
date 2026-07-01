@@ -29,9 +29,11 @@ import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.ble.Broadcaster
 import net.guacamaya.crypto.Identity
 import net.guacamaya.ingest.IngestUploadWorker
+import net.guacamaya.ingest.OwnUploadPolicy
 import net.guacamaya.loc.PlatformLocation
 import kotlinx.coroutines.flow.first
 import net.guacamaya.mesh.GuacamayaDatabase
+import net.guacamaya.mesh.MessageDao
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.proto.Flags
 import net.guacamaya.proto.Payload
@@ -67,6 +69,11 @@ class GuacamayaForegroundService : Service() {
     private var broadcaster: Broadcaster? = null
     private var identity: Identity? = null
     private var broadcastJob: Job? = null
+
+    // Last position whose own-SOS frame we persisted for backend upload, in 1e7
+    // fixed-point. Reset per broadcast session so the first frame always uploads.
+    private var lastOwnUploadLatE7: Int? = null
+    private var lastOwnUploadLonE7: Int? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -200,6 +207,9 @@ class GuacamayaForegroundService : Service() {
      */
     private fun startBroadcast(ownType: SosType, ownCritical: Boolean, ownTtl: Int) {
         broadcastJob?.cancel()
+        // New session — re-seed so the first own frame is always persisted for upload.
+        lastOwnUploadLatE7 = null
+        lastOwnUploadLonE7 = null
         broadcastJob = scope.launch {
             val id = identity ?: Identity.loadOrCreate(this@GuacamayaForegroundService).also { identity = it }
             val bcast = broadcaster ?: Broadcaster.create(this@GuacamayaForegroundService)?.also { broadcaster = it }
@@ -219,7 +229,9 @@ class GuacamayaForegroundService : Service() {
 
             // Bootstrap own ADV via start() so the compat→coded PHY negotiation runs once.
             signedPayload(id, ownType, ownCritical, ownTtl).let { p ->
-                bcast.start(p, id.publicKey, id.sign(p))
+                val sig = id.sign(p)
+                bcast.start(p, id.publicKey, sig)
+                persistOwnFrameForUpload(dao, id, p, sig)
             }
 
             var held: List<MessageEntity> = emptyList()
@@ -229,7 +241,9 @@ class GuacamayaForegroundService : Service() {
                 delay(FORWARD_DWELL_MS)
                 if (ownTurn) {
                     val p = signedPayload(id, ownType, ownCritical, ownTtl)
-                    bcast.swap(p, id.publicKey, id.sign(p), ownTtl)
+                    val sig = id.sign(p)
+                    bcast.swap(p, id.publicKey, sig, ownTtl)
+                    persistOwnFrameForUpload(dao, id, p, sig)
                     // Refresh the held set each time we return to our own frame.
                     held = dao.latestHelpFramesPerNode(REBROADCAST_NODES)
                         .filterNot { it.nodeId.contentEquals(id.nodeId) }
@@ -241,6 +255,54 @@ class GuacamayaForegroundService : Service() {
                 }
                 ownTurn = !ownTurn
             }
+        }
+    }
+
+    /**
+     * Persist THIS device's own SOS frame so the data-mule uploader (`POST /ingest`)
+     * delivers it to the backend whenever the phone has connectivity — the "I have
+     * internet, push my own SOS to the backend so it shows on the map" path. The
+     * frame keeps flowing on the BLE mesh regardless; if this phone never gets online,
+     * another mule relays and uploads it.
+     *
+     * Throttled by [OwnUploadPolicy]: the first frame of a session always persists
+     * (a stationary victim still gets one pin), then only on real movement — so the
+     * uploaded points trace a trajectory instead of flooding duplicates. Rows are
+     * flagged `own = true` so they stay out of the radar / "devices heard" counts.
+     */
+    private suspend fun persistOwnFrameForUpload(
+        dao: MessageDao,
+        id: Identity,
+        payload22: ByteArray,
+        sig64: ByteArray,
+    ) {
+        val p = try { Payload.decode(payload22) } catch (_: Exception) { return }
+        if (!p.isHelpRequest) return                  // presence beacons are not SOS
+        if (p.latE7 == 0 && p.lonE7 == 0) return       // no GPS fix → nothing to map
+        if (!OwnUploadPolicy.shouldUpload(lastOwnUploadLatE7, lastOwnUploadLonE7, p.latE7, p.lonE7)) return
+
+        val entity = MessageEntity(
+            nodeId = p.nodeId,
+            msgId = p.msgId,
+            tsUnix = p.tsUnix,
+            latE7 = p.latE7,
+            lonE7 = p.lonE7,
+            sosType = p.sosType.code,
+            critical = p.flags.critical,
+            hasHeavy = p.flags.hasHeavy,
+            hopTtl = p.flags.hopTtl,
+            batteryBucket = p.flags.batteryBucket,
+            pubkey = id.publicKey,
+            payloadRaw = payload22,
+            sig = sig64,
+            rssi = 0,
+            receivedAt = System.currentTimeMillis(),
+            own = true,
+        )
+        if (dao.insert(entity) != -1L) {
+            lastOwnUploadLatE7 = p.latE7
+            lastOwnUploadLonE7 = p.lonE7
+            IngestUploadWorker.enqueue(this@GuacamayaForegroundService)
         }
     }
 
