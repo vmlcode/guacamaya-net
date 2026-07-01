@@ -123,36 +123,37 @@ La app requiere **Android 8.0 o superior (API 26)**. Wi-Fi Aware no está dispon
 - [Seguridad Backend](./docs/GuacamayaProject/Seguridad%20Backend.md)
 - [`backend_final.md`](backend_final.md) — referencia completa de endpoints para integración Android ↔ backend
 
-## Enlace
+## Enlaces
 
 - [https://guacamalla.org](https://guacamalla.org)
+- [Mapa en tiempo real](https://guacamayabackend-production.up.railway.app/dashboard)
+- [Repositorio en GitHub](https://github.com/vmlcode/guacamaya-net)
 
 ## Equipo
 
-- Rodrigo Rivas — Product + UI/UX + Frontend · [LinkedIn](https://www.linkedin.com/in/rodrigorivasco)
+- Rodrigo Rivas — Product + UI/UX + Frontend + PM · [LinkedIn](https://www.linkedin.com/in/rodrigorivasco)
+- Carlos Ramirez — Fullstack + QA + Plataforma · [LinkedIn](https://www.linkedin.com/in/carlosjramirez/)
 - Victor Maldonado (Pipo) — Fullstack + Mobile Native · [LinkedIn](https://www.linkedin.com/in/vmlcode/)
 - David Gonzalez — Backend + Mobile Native + QA · [LinkedIn](https://www.linkedin.com/in/david-gonzalez-dev2012/)
-- Jaime Stalislav — Backend + Mobile Native + QA
-- Gustavo Chacon — Frontend · [LinkedIn](https://www.linkedin.com/in/gustavoachaconm)
-- Carlos Ramirez — PM + Plataforma · [LinkedIn](https://www.linkedin.com/in/carlosjramirez/)
-- Jose Gutierrez — Frontend · [LinkedIn](https://www.linkedin.com/in/jjgutierrezr/)
+- Jaime Stalislav — Backend + Mobile Native + QA · [LinkedIn](https://www.linkedin.com/in/jaime-stalislav-71135316b/)
 - Cristopher Avila — Frontend · [LinkedIn](www.linkedin.com/in/cristopher-adrián-ávila-lópez-937994402)
+- Eli Jose Carrasquero — Mobile Native · [LinkedIn](https://www.linkedin.com/in/ielijose)
 
 ## Países participantes
 
 - Venezuela
 - España
-- Mexico
 - Colombia
+- Mexico
 
 ## Video demo
 
-*(próximamente)*
+- [Demo video](https://www.youtube.com/watch?v=d21xoFurccc)
 
 ## Licencia
 
-[GuacaMalla](https://guacamalla.org) es software de código abierto bajo la licencia **MIT**. Ver [LICENSE](LICENSE) para más detalles.
+[GuacaMalla](https://guacamalla.org) es software de código abierto bajo la licencia **PolyForm Noncommercial**. Ver [LICENSE](LICENSE) para más detalles.
 
 ## Créditos
 
-Desarrollado y mantenido por el Equipo GuacaMalla. Para contribuir visita [GuacaMalla en GitHub](https://github.com/vmlcode/guacamaya-net).
+Desarrollado y mantenido por el [Equipo GuacaMalla](#equipo). Para contribuir visita [GuacaMalla en GitHub](https://github.com/vmlcode/guacamaya-net).

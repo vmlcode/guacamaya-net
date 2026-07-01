@@ -1,4 +1,12 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { FastifyInstance } from "fastify";
+
+const LOGO_SVG = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../../public/guacamalla_vector.svg"),
+  "utf-8",
+);
 
 /**
  * Mapa de alertas — dashboard mínimo servido por el backend.
@@ -24,8 +32,8 @@ const PAGE = `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>GuacaMalla Net — Mapa de Alertas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>GuacaMalla — Mapa de Alertas</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   /* ── Design tokens — espejo de GuacamayaPalette (android/.../ui/Theme.kt) ── */
@@ -41,27 +49,55 @@ const PAGE = `<!doctype html>
   }
   * { box-sizing: border-box; }
   html, body {
-    margin: 0; height: 100%; background: var(--canvas); color: var(--body);
+    margin: 0; height: 100%; height: 100dvh; background: var(--canvas); color: var(--body);
     font-family: system-ui, -apple-system, Roboto, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   #map { position: absolute; inset: 0; background: var(--canvas); }
 
-  /* Panel = SurfaceCard con hairline, radios y spacing del design system */
+  /* Panel = SurfaceCard con hairline, radios y spacing del design system.
+     Mobile-first: base = barra superior a todo lo ancho (pulgar-friendly,
+     respeta el notch/isla dinámica). Desde 640px pasa a tarjeta flotante. */
   #panel {
-    position: absolute; z-index: 1000; top: 16px; left: 16px; width: 280px; max-width: calc(100vw - 32px);
-    background: var(--surface-card); border: 1px solid var(--hairline); border-radius: var(--r-lg);
+    position: fixed; z-index: 1000; top: 0; left: 0; right: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    background: var(--surface-card); border-bottom: 1px solid var(--hairline);
+    border-radius: 0 0 var(--r-lg) var(--r-lg);
     box-shadow: 0 8px 32px rgba(0,0,0,.55); overflow: hidden;
   }
-  .pad { padding: 16px 20px; }
-  .head { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--hairline); }
+  @media (min-width: 640px) {
+    #panel {
+      top: 16px; left: 16px; right: auto; width: 280px;
+      padding-top: 0; border: 1px solid var(--hairline); border-radius: var(--r-lg);
+    }
+  }
+  .pad { padding: 14px 16px; }
+  @media (min-width: 640px) { .pad { padding: 16px 20px; } }
+  .head {
+    display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--hairline);
+  }
+  /* El header es el botón que colapsa/expande el panel — reset de estilos nativos de <button> */
+  #panel-toggle {
+    width: 100%; background: none; border: none; margin: 0; font: inherit; color: inherit;
+    text-align: left; cursor: pointer;
+  }
+  #panel.collapsed .head { border-bottom: none; }
   .mark {
     width: 34px; height: 34px; flex: none; border-radius: var(--r-md);
     background: var(--brand); color: var(--on-brand);
     display: grid; place-items: center; font-size: 19px; line-height: 1;
   }
+  .mark img { width: 36px; height: 36px; display: block; }
+  .head-text { flex: 1 1 auto; min-width: 0; }
   h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.3px; color: var(--ink); }
   .sub { margin: 1px 0 0; font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+  .count-badge {
+    flex: none; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px;
+    background: var(--brand); color: var(--on-brand); font-size: 13px; font-weight: 700;
+    display: grid; place-items: center; line-height: 1;
+  }
+  .chevron { flex: none; font-size: 13px; color: var(--muted); transition: transform .2s ease; }
+  #panel-toggle[aria-expanded="false"] .chevron { transform: rotate(180deg); }
 
   .stat { display: flex; align-items: baseline; gap: 8px; }
   #count { font-size: 34px; font-weight: 700; letter-spacing: -1px; color: var(--brand); line-height: 1; }
@@ -109,35 +145,126 @@ const PAGE = `<!doctype html>
   .pop-crit { color: var(--danger); font-weight: 700; }
   .pop-coord { color: var(--body); } .pop-approx { color: var(--warning); font-size: 11px; }
   .pop-meta { color: var(--muted); font-size: 11px; }
+
+  /* Modal de bienvenida — se muestra al cargar, difumina el mapa detrás.
+     Mobile-first: ocupa el ancho disponible; desde 640px se centra a 420px. */
+  #intro-backdrop {
+    position: fixed; inset: 0; z-index: 2000;
+    background: rgba(10,10,10,.72);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    padding: max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px))
+              max(20px, env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+  }
+  #intro-modal {
+    width: 100%; max-width: 420px;
+    background: var(--surface-card); border: 1px solid var(--hairline); border-radius: var(--r-lg);
+    box-shadow: 0 8px 32px rgba(0,0,0,.6); padding: 20px;
+  }
+  @media (min-width: 640px) { #intro-modal { padding: 24px; } }
+  #intro-modal .eyebrow {
+    margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: var(--brand);
+  }
+  #intro-modal h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.3px; color: var(--ink); }
+  #intro-modal p { font-size: 14px; line-height: 1.55; color: var(--body); margin: 12px 0; }
+  #intro-modal p b { color: var(--body-strong); font-weight: 600; }
+  #intro-modal .soon {
+    margin-top: 14px; display: flex; gap: 10px; padding: 12px;
+    background: var(--warning-soft); border: 1px solid var(--hairline); border-left: 3px solid var(--warning);
+    border-radius: var(--r-md);
+  }
+  #intro-modal .soon .ico { flex: none; font-size: 15px; line-height: 1.3; }
+  #intro-modal .soon .txt { font-size: 12px; line-height: 1.5; color: var(--body); }
+  #intro-modal .soon .txt b { color: var(--body-strong); font-weight: 600; }
+  #intro-close {
+    margin-top: 18px; width: 100%; min-height: 48px; border: none; border-radius: var(--r-md);
+    background: var(--brand); color: var(--on-brand); font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  #intro-close:active { background: #E6EB52; }
 </style>
 </head>
 <body>
 <div id="map"></div>
-<div id="panel">
-  <div class="pad head">
-    <div class="mark">🦜</div>
-    <div>
-      <h1>Mapa de Alertas</h1>
-      <p class="sub">GuacaMalla Net</p>
+<div id="intro-backdrop">
+  <div id="intro-modal" role="dialog" aria-modal="true" aria-labelledby="intro-title">
+    <p class="eyebrow">GuacaMalla</p>
+    <h2 id="intro-title">Mapa público de alertas</h2>
+    <p>Este mapa muestra los reportes de auxilio (SOS) transmitidos por la red malla GuacaMalla, que
+    funciona sin depender de internet ni de infraestructura de telecomunicaciones. Es de
+    <b>acceso abierto</b>: cualquier persona, organización comunitaria o medio de prensa puede
+    consultarlo.</p>
+    <p>Por privacidad, las ubicaciones que ves aquí están <b>degradadas a ~1&nbsp;km</b> — nunca la
+    posición exacta de quien pide ayuda.</p>
+    <div class="soon">
+      <span class="ico">🚑</span>
+      <span class="txt"><b>Próximamente:</b> un acceso dedicado para organismos de emergencia y
+      rescate autorizados, con ubicación exacta y sin el resguardo de ~1&nbsp;km, para poder
+      responder con precisión.</span>
     </div>
+    <button id="intro-close" type="button">Entendido</button>
   </div>
-  <div class="pad">
-    <div class="stat">
-      <span id="count">0</span>
-      <span class="label">SOS activos en <code>solicito-ayuda</code></span>
-    </div>
-    <div class="legend">
-      <span class="item"><span class="dot crit"></span>Crítico</span>
-      <span class="item"><span class="dot norm"></span>Normal</span>
-    </div>
-    <div class="note">
-      <span class="ico">🔒</span>
-      <span class="txt">Ubicaciones <b>aproximadas (~1 km)</b>. La posición exacta de una alerta SOS
-      solo es visible para <b>organismos regulados o de rescate</b> autorizados.</span>
-    </div>
-  </div>
-  <div id="status">cargando…</div>
 </div>
+<script>
+  (function () {
+    var backdrop = document.getElementById("intro-backdrop");
+    function closeIntro() { backdrop.style.display = "none"; }
+    document.getElementById("intro-close").addEventListener("click", closeIntro);
+    backdrop.addEventListener("click", function (e) { if (e.target === backdrop) closeIntro(); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeIntro(); });
+  })();
+</script>
+<div id="panel">
+  <button id="panel-toggle" class="pad head" type="button" aria-expanded="true" aria-controls="panel-body">
+    <div class="mark"><img src="/dashboard/logo.svg" alt="GuacaMalla" /></div>
+    <div class="head-text">
+      <h1>Mapa de Alertas</h1>
+      <p class="sub">GuacaMalla</p>
+    </div>
+    <span id="count-badge" class="count-badge">0</span>
+    <span class="chevron" aria-hidden="true">▲</span>
+  </button>
+  <div id="panel-body">
+    <div class="pad">
+      <div class="stat">
+        <span id="count">0</span>
+        <span class="label">SOS activos en <code>solicito-ayuda</code></span>
+      </div>
+      <div class="legend">
+        <span class="item"><span class="dot crit"></span>Crítico</span>
+        <span class="item"><span class="dot norm"></span>Normal</span>
+      </div>
+      <div class="note">
+        <span class="ico">🔒</span>
+        <span class="txt">Ubicaciones <b>aproximadas (~1 km)</b>. La posición exacta de una alerta SOS
+        solo es visible para <b>organismos regulados o de rescate</b> autorizados.</span>
+      </div>
+    </div>
+    <div id="status">cargando…</div>
+  </div>
+</div>
+<script>
+  (function () {
+    var panel = document.getElementById("panel");
+    var toggle = document.getElementById("panel-toggle");
+    var body = document.getElementById("panel-body");
+    var KEY = "guacamalla-panel-collapsed";
+    function apply(collapsed) {
+      body.style.display = collapsed ? "none" : "";
+      toggle.setAttribute("aria-expanded", String(!collapsed));
+      panel.classList.toggle("collapsed", collapsed);
+    }
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    var collapsed = saved !== null ? saved === "1" : window.matchMedia("(max-width: 639px)").matches;
+    apply(collapsed);
+    toggle.addEventListener("click", function () {
+      collapsed = !collapsed;
+      apply(collapsed);
+      try { localStorage.setItem(KEY, collapsed ? "1" : "0"); } catch (e) {}
+    });
+  })();
+</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   var MAP_DEFAULT = [10.4806, -66.9036]; // Caracas
@@ -181,6 +308,7 @@ const PAGE = `<!doctype html>
       .then(function (data) {
         if (Array.isArray(data)) data.forEach(addMarker);
         document.getElementById("count").textContent = count;
+        document.getElementById("count-badge").textContent = count;
         var s = document.getElementById("status");
         s.classList.remove("err");
         s.textContent = "actualizado " + new Date().toLocaleTimeString();
@@ -206,5 +334,9 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
   // Mapa de alertas. Público (lee solo el canal comunitario público).
   fastify.get("/dashboard", async (_request, reply) => {
     reply.type("text/html").send(PAGE);
+  });
+
+  fastify.get("/dashboard/logo.svg", async (_request, reply) => {
+    reply.type("image/svg+xml").send(LOGO_SVG);
   });
 }
