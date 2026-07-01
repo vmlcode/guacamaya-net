@@ -1,7 +1,7 @@
 # Política de Privacidad — GuacaMalla
 
 **Responsable:** Equipo GuacaMalla  
-**Contacto:** carlosrd@gmail.com  
+**Contacto:** support@guacamalla.org  
 **Fecha de entrada en vigor:** 1 de julio de 2026
 
 ---
@@ -127,7 +127,7 @@ No vendemos ni cedemos datos personales a terceros con fines comerciales o publi
 Aunque la app no crea cuentas de usuario, tienes los siguientes derechos respecto a los datos almacenados en nuestro servidor:
 
 - **Derecho a saber:** puedes preguntarnos qué datos asociados a tu clave pública tenemos almacenados.
-- **Derecho a eliminar:** puedes solicitar la eliminación de los registros del servidor asociados a tu identificador seudónimo (clave pública). Para ello escríbenos a **carlosrd@gmail.com** indicando tu clave pública (se muestra en la pantalla "Acerca de" de la app).
+- **Derecho a eliminar:** puedes solicitar la eliminación de los registros del servidor asociados a tu identificador seudónimo (clave pública). Para ello escríbenos a **support@guacamalla.org** indicando tu clave pública (se muestra en la pantalla "Acerca de" de la app).
 - **Limitación:** los datos ya propagados por la malla BLE de otros usuarios no pueden ser recuperados ni eliminados por nosotros.
 
 Para desinstalar la app y eliminar todos los datos locales, basta con desinstalarla desde el sistema operativo.
@@ -136,7 +136,7 @@ Para desinstalar la app y eliminar todos los datos locales, basta con desinstala
 
 ## 9. Menores de edad
 
-GuacaMalla no está dirigida a personas menores de 13 años. No recopilamos intencionalmente datos de menores de esa edad. Si crees que un menor nos ha proporcionado datos sin el consentimiento de un tutor, contáctanos en **carlosrd@gmail.com** para eliminarlos.
+GuacaMalla no está dirigida a personas menores de 13 años. No recopilamos intencionalmente datos de menores de esa edad. Si crees que un menor nos ha proporcionado datos sin el consentimiento de un tutor, contáctanos en **support@guacamalla.org** para eliminarlos.
 
 ---
 
@@ -151,6 +151,6 @@ Podemos actualizar esta política en cualquier momento. Cuando lo hagamos, actua
 Si tienes preguntas, solicitudes de eliminación de datos o cualquier inquietud sobre privacidad, escríbenos a:
 
 **Equipo GuacaMalla**  
-📧 carlosrd@gmail.com
+📧 support@guacamalla.org
 
 Respondemos en un plazo de 30 días hábiles.
