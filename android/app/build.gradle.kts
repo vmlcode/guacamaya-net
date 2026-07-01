@@ -12,16 +12,14 @@ plugins {
 // debug   → emulator host loopback by default; override for a LAN backend (physical
 //           phones) with `-PBACKEND_BASE_URL=http://192.168.x.y:3000`. The debug
 //           network-security-config permits cleartext to any host.
-// release → deployed HTTPS backend. No host exists yet, so it defaults to a
-//           non-resolvable placeholder (a release build just fails the best-effort
-//           call rather than hitting a wrong host). Override via
+// release → deployed HTTPS backend on Railway. Override via
 //           `-PBACKEND_RELEASE_URL=https://…` or a BACKEND_RELEASE_URL env var.
 //           Must be HTTPS — the release network-security-config is HTTPS-only.
 fun prop(name: String, fallback: String): String =
     (project.findProperty(name) as String?) ?: System.getenv(name) ?: fallback
 
 val backendDebugUrl: String = prop("BACKEND_BASE_URL", "http://10.0.2.2:3000")
-val backendReleaseUrl: String = prop("BACKEND_RELEASE_URL", "https://guacamaya.invalid")
+val backendReleaseUrl: String = prop("BACKEND_RELEASE_URL", "https://guacamayabackend-production.up.railway.app")
 
 android {
     namespace = "net.guacamaya"
