@@ -12,7 +12,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -78,6 +80,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -91,7 +94,6 @@ import net.guacamaya.mesh.NodeCatalog
 import net.guacamaya.backend.OfficialAlert
 import net.guacamaya.service.GuacamayaForegroundService
 import org.json.JSONObject
-import android.util.Log
 import net.guacamaya.util.BatteryHelper
 import kotlin.math.PI
 import kotlin.math.cos
@@ -112,9 +114,19 @@ class MainActivity : ComponentActivity() {
 
     private val adbHandler = Handler(Looper.getMainLooper())
 
+    private var showOnboarding by mutableStateOf(false)
+    private var hasPermissions by mutableStateOf(false)
+    private var isAdbLaunchSession by mutableStateOf(false)
+    private var pendingOnboardingPermissionRequest by mutableStateOf(false)
+
     private val permsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted ->
+        hasPermissions = hasRequiredPermissions()
+        if (pendingOnboardingPermissionRequest) {
+            pendingOnboardingPermissionRequest = false
+            showOnboarding = false
+        }
         if (granted.values.any { it }) {
             routeAdbIntent(getIntent())
         }
@@ -124,17 +136,45 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        ensurePermissions()
+        isAdbLaunchSession = isDirectAdbLaunch(intent)
+        showOnboarding = !isAdbLaunchSession && shouldShowOnboarding()
+        hasPermissions = hasRequiredPermissions()
         routeAdbIntent(intent)
         setContent {
             GuacamayaTheme {
-                Surface(Modifier.fillMaxSize(), color = GuacamayaPalette.Canvas) { Screen() }
+                Surface(Modifier.fillMaxSize(), color = GuacamayaPalette.Canvas) {
+                    if (showOnboarding) {
+                        OnboardingScreen(
+                            onContinue = {
+                                markOnboardingSeen()
+                                pendingOnboardingPermissionRequest = true
+                                val launchedPermissionDialog = ensurePermissions()
+                                if (!launchedPermissionDialog || hasRequiredPermissions()) {
+                                    pendingOnboardingPermissionRequest = false
+                                    showOnboarding = false
+                                }
+                            },
+                        )
+                    } else if (!isAdbLaunchSession && !hasPermissions) {
+                        PermissionsDeniedScreen(
+                            onRequestPermissions = {
+                                ensurePermissions()
+                            },
+                            onOpenSettings = {
+                                openAppSettings()
+                            }
+                        )
+                    } else {
+                        Screen()
+                    }
+                }
             }
         }
     }
 
     override fun onResume() {
         super.onResume()
+        hasPermissions = hasRequiredPermissions()
         routeAdbIntent(intent)
     }
 
@@ -179,6 +219,10 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (isDirectAdbLaunch(intent)) {
+            isAdbLaunchSession = true
+            showOnboarding = false
+        }
         routeAdbIntent(intent)
     }
 
@@ -200,34 +244,259 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun ensurePermissions() {
-        val required = buildList {
-            add(Manifest.permission.ACCESS_FINE_LOCATION)
-            add(Manifest.permission.ACCESS_COARSE_LOCATION)
-            if (Build.VERSION.SDK_INT >= 31) {
-                add(Manifest.permission.BLUETOOTH_ADVERTISE)
-                add(Manifest.permission.BLUETOOTH_SCAN)
-                add(Manifest.permission.BLUETOOTH_CONNECT)
+    private fun openAppSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
             }
-            if (Build.VERSION.SDK_INT >= 32) {
-                add(Manifest.permission.NEARBY_WIFI_DEVICES)
-            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e("guacamaya.permissions", "Failed to open settings", e)
         }
-        val missing = required.filter {
+    }
+
+    private fun ensurePermissions(): Boolean {
+        val missing = requiredRuntimePermissions().filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (missing.isNotEmpty()) permsLauncher.launch(missing.toTypedArray())
-        // No auto-popup: MIUI abre PowerDetailActivity y rompe adb/UI. Banner in-app opcional.
+        if (missing.isNotEmpty()) {
+            val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+            val requestedBefore = prefs.getBoolean(KEY_PERMISSIONS_REQUESTED, false)
+
+            // On Android, if a permission was requested before and shouldShowRequestPermissionRationale is false,
+            // it means the user denied it with "Don't ask again" (permanently denied).
+            val permanentlyDenied = requestedBefore && missing.any { permission ->
+                !ActivityCompat.shouldShowRequestPermissionRationale(this, permission)
+            }
+
+            if (permanentlyDenied) {
+                Toast.makeText(
+                    this,
+                    "Permisos desactivados. Actívalos manualmente en Ajustes.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return false
+            } else {
+                prefs.edit().putBoolean(KEY_PERMISSIONS_REQUESTED, true).apply()
+                permsLauncher.launch(missing.toTypedArray())
+                return true
+            }
+        }
+        // No auto-popup before onboarding: MIUI abre PowerDetailActivity y rompe adb/UI. Banner in-app opcional.
+        return false
+    }
+
+    private fun hasRequiredPermissions(): Boolean =
+        requiredRuntimePermissions().all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+        }
+
+    private fun requiredRuntimePermissions(): List<String> = buildList {
+        add(Manifest.permission.ACCESS_FINE_LOCATION)
+        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (Build.VERSION.SDK_INT >= 31) {
+            add(Manifest.permission.BLUETOOTH_ADVERTISE)
+            add(Manifest.permission.BLUETOOTH_SCAN)
+            add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (Build.VERSION.SDK_INT >= 32) {
+            add(Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
+    }
+
+    private fun shouldShowOnboarding(): Boolean =
+        !getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_ONBOARDING_SEEN, false)
+
+    private fun markOnboardingSeen() {
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(KEY_ONBOARDING_SEEN, true).apply()
+    }
+
+    private fun isDirectAdbLaunch(source: Intent?): Boolean {
+        val extra = source?.getStringExtra(EXTRA_ADB_ACTION)
+        val action = source?.action
+        return extra?.startsWith("net.guacamaya.action.") == true ||
+            action?.startsWith("net.guacamaya.action.") == true
     }
 
     companion object {
         const val EXTRA_ADB_ACTION = "guacamaya_adb_action"
         private const val PREFS = "guacamaya_adb"
         private const val KEY_ADB_ACTION = "last_action"
+        private const val KEY_ONBOARDING_SEEN = "onboarding_seen"
+        private const val KEY_PERMISSIONS_REQUESTED = "permissions_requested"
     }
 }
 
 // ── Design tokens (aliases over GuacamayaPalette — see ui/Theme.kt & docs/design/DESIGN.md) ──
+@Composable
+private fun OnboardingScreen(onContinue: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Canvas0)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(horizontal = Space.lg, vertical = Space.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(0.7f))
+
+        Box(
+            Modifier
+                .size(112.dp)
+                .clip(CircleShape)
+                .background(Brand),
+            contentAlignment = Alignment.Center,
+        ) {
+            SosAsteriskGlyph(color = OnBrand)
+        }
+
+        Spacer(Modifier.height(Space.lg))
+
+        Text(
+            "Bienvenido a GuacaMalla",
+            color = TextHi,
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            "Para crear una red SOS sin internet, la app necesita algunos permisos antes de activar la malla.",
+            color = TextLo,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
+
+        Spacer(Modifier.height(Space.lg))
+
+        PermissionExplainerCard(
+            title = "Ubicación",
+            body = "Permite enviar coordenadas en un SOS y apuntar el radar hacia personas cercanas.",
+        )
+        Spacer(Modifier.height(Space.sm))
+        PermissionExplainerCard(
+            title = "Dispositivos cercanos",
+            body = "Permite usar Bluetooth y Wi‑Fi Aware para descubrir teléfonos alrededor, aun sin internet.",
+        )
+
+        Spacer(Modifier.weight(1f))
+
+        Button(
+            onClick = onContinue,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = OnBrand),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text("Entendido, activar permisos", style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            "Android te pedirá confirmar cada permiso. Puedes cambiarlo después en Ajustes.",
+            color = TextLo,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun PermissionsDeniedScreen(
+    onRequestPermissions: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Canvas0)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(horizontal = Space.lg, vertical = Space.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(0.7f))
+
+        Box(
+            Modifier
+                .size(112.dp)
+                .clip(CircleShape)
+                .background(DangerC.copy(alpha = 0.15f))
+                .border(2.dp, DangerC, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            SosAsteriskGlyph(color = DangerC)
+        }
+
+        Spacer(Modifier.height(Space.lg))
+
+        Text(
+            "Permisos requeridos",
+            color = TextHi,
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            "No podemos activar la red SOS ni buscar dispositivos porque faltan permisos necesarios.",
+            color = TextLo,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
+
+        Spacer(Modifier.height(Space.lg))
+
+        PermissionExplainerCard(
+            title = "Ubicación e Instrumentación",
+            body = "Permite a la red SOS incluir tus coordenadas geográficas y habilitar la brújula/radar.",
+        )
+        Spacer(Modifier.height(Space.sm))
+        PermissionExplainerCard(
+            title = "Hardware de Radio (Bluetooth y Wi-Fi)",
+            body = "Permite enviar balizas y escuchar señales de otros teléfonos de forma 100% desconectada.",
+        )
+
+        Spacer(Modifier.weight(1f))
+
+        Button(
+            onClick = onRequestPermissions,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Brand, contentColor = OnBrand),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text("Reintentar permisos", style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(Modifier.height(Space.xs))
+        TextButton(
+            onClick = onOpenSettings,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.textButtonColors(contentColor = TextHi),
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Text("Ir a Ajustes del Sistema", style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(Modifier.height(Space.xs))
+        Text(
+            "Si ya has rechazado los permisos, deberás habilitarlos desde Ajustes.",
+            color = TextLo,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun PermissionExplainerCard(title: String, body: String) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(CardBg)
+            .border(1.dp, CardLine, MaterialTheme.shapes.large)
+            .padding(Space.md),
+    ) {
+        Text(title, color = TextHi, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(Space.xxs))
+        Text(body, color = TextLo, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
 private val Canvas0 = GuacamayaPalette.Canvas
 private val CardBg = GuacamayaPalette.SurfaceCard
 private val CardElevated = GuacamayaPalette.SurfaceElevated
