@@ -152,7 +152,7 @@ La app requiere **Android 8.0 o superior (API 26)**. Wi-Fi Aware no está dispon
 
 ## Licencia
 
-[GuacaMalla](https://guacamalla.org) es software de código abierto bajo la licencia **PolyForm Noncommercial**. Ver [LICENSE](LICENSE) para más detalles.
+[GuacaMalla](https://guacamalla.org) es software de **código disponible** (*source-available*) bajo la licencia **PolyForm Noncommercial 1.0.0**: el código es público y libre para uso no comercial, pero **no es _open source_** en el sentido de la OSI (la licencia restringe el uso comercial). Ver [LICENSE](LICENSE) para más detalles.
 
 ## Créditos
 
