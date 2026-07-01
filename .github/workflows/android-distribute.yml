@@ -33,4 +33,6 @@ jobs:
         working-directory: android
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
-        run: ./gradlew assembleDebug appDistributionUploadDebug
+        run: >
+          ./gradlew assembleDebug appDistributionUploadDebug
+          -PBACKEND_BASE_URL=https://guacamayabackend-production.up.railway.app
