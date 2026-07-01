@@ -73,15 +73,31 @@ const PAGE = `<!doctype html>
   }
   .pad { padding: 14px 16px; }
   @media (min-width: 640px) { .pad { padding: 16px 20px; } }
-  .head { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--hairline); }
+  .head {
+    display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--hairline);
+  }
+  /* El header es el botón que colapsa/expande el panel — reset de estilos nativos de <button> */
+  #panel-toggle {
+    width: 100%; background: none; border: none; margin: 0; font: inherit; color: inherit;
+    text-align: left; cursor: pointer;
+  }
+  #panel.collapsed .head { border-bottom: none; }
   .mark {
     width: 34px; height: 34px; flex: none; border-radius: var(--r-md);
     background: var(--brand); color: var(--on-brand);
     display: grid; place-items: center; font-size: 19px; line-height: 1;
   }
   .mark img { width: 36px; height: 36px; display: block; }
+  .head-text { flex: 1 1 auto; min-width: 0; }
   h1 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -.3px; color: var(--ink); }
   .sub { margin: 1px 0 0; font-size: 11px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+  .count-badge {
+    flex: none; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px;
+    background: var(--brand); color: var(--on-brand); font-size: 13px; font-weight: 700;
+    display: grid; place-items: center; line-height: 1;
+  }
+  .chevron { flex: none; font-size: 13px; color: var(--muted); transition: transform .2s ease; }
+  #panel-toggle[aria-expanded="false"] .chevron { transform: rotate(180deg); }
 
   .stat { display: flex; align-items: baseline; gap: 8px; }
   #count { font-size: 34px; font-weight: 700; letter-spacing: -1px; color: var(--brand); line-height: 1; }
@@ -199,30 +215,56 @@ const PAGE = `<!doctype html>
   })();
 </script>
 <div id="panel">
-  <div class="pad head">
+  <button id="panel-toggle" class="pad head" type="button" aria-expanded="true" aria-controls="panel-body">
     <div class="mark"><img src="/dashboard/logo.svg" alt="GuacaMalla" /></div>
-    <div>
+    <div class="head-text">
       <h1>Mapa de Alertas</h1>
       <p class="sub">GuacaMalla</p>
     </div>
+    <span id="count-badge" class="count-badge">0</span>
+    <span class="chevron" aria-hidden="true">▲</span>
+  </button>
+  <div id="panel-body">
+    <div class="pad">
+      <div class="stat">
+        <span id="count">0</span>
+        <span class="label">SOS activos en <code>solicito-ayuda</code></span>
+      </div>
+      <div class="legend">
+        <span class="item"><span class="dot crit"></span>Crítico</span>
+        <span class="item"><span class="dot norm"></span>Normal</span>
+      </div>
+      <div class="note">
+        <span class="ico">🔒</span>
+        <span class="txt">Ubicaciones <b>aproximadas (~1 km)</b>. La posición exacta de una alerta SOS
+        solo es visible para <b>organismos regulados o de rescate</b> autorizados.</span>
+      </div>
+    </div>
+    <div id="status">cargando…</div>
   </div>
-  <div class="pad">
-    <div class="stat">
-      <span id="count">0</span>
-      <span class="label">SOS activos en <code>solicito-ayuda</code></span>
-    </div>
-    <div class="legend">
-      <span class="item"><span class="dot crit"></span>Crítico</span>
-      <span class="item"><span class="dot norm"></span>Normal</span>
-    </div>
-    <div class="note">
-      <span class="ico">🔒</span>
-      <span class="txt">Ubicaciones <b>aproximadas (~1 km)</b>. La posición exacta de una alerta SOS
-      solo es visible para <b>organismos regulados o de rescate</b> autorizados.</span>
-    </div>
-  </div>
-  <div id="status">cargando…</div>
 </div>
+<script>
+  (function () {
+    var panel = document.getElementById("panel");
+    var toggle = document.getElementById("panel-toggle");
+    var body = document.getElementById("panel-body");
+    var KEY = "guacamalla-panel-collapsed";
+    function apply(collapsed) {
+      body.style.display = collapsed ? "none" : "";
+      toggle.setAttribute("aria-expanded", String(!collapsed));
+      panel.classList.toggle("collapsed", collapsed);
+    }
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    var collapsed = saved !== null ? saved === "1" : window.matchMedia("(max-width: 639px)").matches;
+    apply(collapsed);
+    toggle.addEventListener("click", function () {
+      collapsed = !collapsed;
+      apply(collapsed);
+      try { localStorage.setItem(KEY, collapsed ? "1" : "0"); } catch (e) {}
+    });
+  })();
+</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
   var MAP_DEFAULT = [10.4806, -66.9036]; // Caracas
@@ -266,6 +308,7 @@ const PAGE = `<!doctype html>
       .then(function (data) {
         if (Array.isArray(data)) data.forEach(addMarker);
         document.getElementById("count").textContent = count;
+        document.getElementById("count-badge").textContent = count;
         var s = document.getElementById("status");
         s.classList.remove("err");
         s.textContent = "actualizado " + new Date().toLocaleTimeString();
