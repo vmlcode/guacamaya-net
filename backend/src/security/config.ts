@@ -51,6 +51,7 @@ export const securityConfig = {
   globalRateLimit: { max: 100, timeWindow: "1 minute" as const },
   ingestRateLimit: { max: 30, timeWindow: "1 minute" as const },
   officialWriteRateLimit: { max: 20, timeWindow: "1 minute" as const },
+  waitlistRateLimit: { max: 10, timeWindow: "1 minute" as const },
 
   /** Resolve flow — finder co-signed disarm of an active SOS. */
   resolve: {
