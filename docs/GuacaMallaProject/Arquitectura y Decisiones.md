@@ -97,3 +97,24 @@ filtro por hardware.
 
 La verificación Ed25519 es cara; va de última en la cascada, tras los chequeos baratos (binding de
 pubkey, CRC, ventana de tiempo). Nunca persistir ni retransmitir antes de pasar toda la cascada.
+
+## 13. UI colapsada a SOS-only + escucha siempre activa (reunión 2026-06-29)
+
+Decisión de equipo en la [[meeting-notes|reunión del 29 jun 2026]]: **eliminar el modo manual
+"Buscar/Find" de la interfaz**. El teléfono **siempre escucha en segundo plano** (repetidor pasivo
+por BLE, bajo consumo), así que no hace falta un modo que el usuario active: ante un SOS, el equipo
+ya está relayando/subiendo sin intervención. La UI se reduce a **un único botón SOS** (ya por
+defecto, ver [[Estado y Pendientes]]) y el **radar pasa a ser una pantalla a la que se hace *swipe***,
+no un modo seleccionable.
+
+> Estado en código: hecho a medias. Ya está *default = SOS* y *SOS también observa* (escucha mientras
+> emite). **Falta** colapsar el modelo `MeshMode {SOS, FIND, BOTH}` → quitar `FIND`/`ModeSelector` de
+> la UI y dejar la escucha como servicio siempre-on + swipe-al-radar. Es el siguiente paso de Android.
+
+> El **radar** se mantiene (no se elimina): el equipo lo percibió como "pura animación" en un build
+> viejo; ya usa acelerómetro+magnetómetro (`CompassHeading`). Pendiente real = calibración MIUI +
+> la UX de swipe. Ver [[GuacaMalla (Android)]].
+
+> Idea relacionada (David, roadmap, no MVP): **SOS multi-categoría** por *swipe* (sismo, deforestación,
+> robo, violencia…). El wire ya lo soporta — `sosType` tiene 8 valores (ver [[Protocolo y Frame]]); es
+> solo una afordancia de UI, no un cambio de protocolo.

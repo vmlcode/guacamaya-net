@@ -87,6 +87,11 @@ emisor (igual que el ingest zero-trust del backend); offline-nativo, sin servido
 power debe **pedir ayuda primero**. Como SOS ahora también escucha, el radar sigue poblándose. `FIND`
 = solo escucha (ahorro de batería); `AMBOS` = presencia (no-crítico) + escucha.
 
+> **Pendiente (decisión de equipo 2026-06-29, [[Arquitectura y Decisiones]] §13):** colapsar
+> `MeshMode {SOS, FIND, BOTH}` a **SOS-only**: quitar `FIND`/`ModeSelector`, dejar la escucha como
+> **servicio siempre-on en segundo plano** y el **radar accesible por swipe** desde el SOS. Esto es un
+> paso más allá de lo ya hecho (default SOS + SOS-observa). Ver [[Estado y Pendientes]].
+
 ## Identidad
 
 Un par de llaves Ed25519 por instalación, generado de forma perezosa. La semilla privada (32 B) se
