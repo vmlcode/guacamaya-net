@@ -101,3 +101,16 @@ create index if not exists resolve_witnesses_target_ts_idx
   on public.resolve_witnesses (target_sos_id, ts);
 
 alter table public.resolve_witnesses enable row level security;
+
+-- ─── Waitlist ─────────────────────────────────────────────────────────────────
+-- Pre-launch email signups from the marketing landing page. Not part of the
+-- mesh protocol, so dedup is by the normalized email itself (a natural unique
+-- key), not a content hash like channel_records/location_points.
+
+create table if not exists public.waitlist_entries (
+  email      text        primary key,
+  country    text        not null default '',
+  created_at timestamptz not null default now()
+);
+
+alter table public.waitlist_entries enable row level security;

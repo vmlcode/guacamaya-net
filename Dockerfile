@@ -1,4 +1,6 @@
-# GuacaMalla Net — backend image (Railway / Docker).
+# GuacaMalla Net — backend image (Railway / Docker). Also builds and bundles
+# the marketing/waitlist page (web/landing), which the backend serves as
+# static files at GET / (see backend/src/index.ts) — one image, one service.
 #
 # IMPORTANT: build context is the REPO ROOT, not backend/. The backend imports
 # @guacamaya/shared (a Bun `workspace:*` package) and backend/tsconfig.json
@@ -12,17 +14,23 @@ FROM oven/bun:1
 WORKDIR /app
 
 # 1) Install deps in a cached layer: copy only the manifests + lockfile first.
-#    The two workspace package.json files must be present for Bun to wire the
+#    Every workspace's package.json must be present for Bun to wire the
 #    workspace symlinks during install.
 COPY package.json bun.lock ./
 COPY backend/package.json ./backend/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
+COPY web/landing/package.json ./web/landing/package.json
 RUN bun install --frozen-lockfile
 
 # 2) Copy the source. node_modules is excluded via .dockerignore so this does
 #    not clobber the installed deps from the layer above.
 COPY packages/ ./packages/
 COPY backend/ ./backend/
+COPY web/landing/ ./web/landing/
+
+# 3) Build the landing page to static files (web/landing/dist) — no SSR, no
+#    server needed at runtime, the backend just serves the compiled output.
+RUN bun run --cwd web/landing build
 
 # Production by design: the server refuses to boot without GUACAMAYA_ADMIN_KEY
 # (set it, and the rest, as Railway Variables — see backend/.env.example).

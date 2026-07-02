@@ -1,11 +1,16 @@
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import fs from "node:fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import fastifyStatic from "@fastify/static";
 import { channelRoutes } from "./channels/routes.js";
 import { locationRoutes } from "./locations/routes.js";
 import { resolveRoutes } from "./resolve/routes.js";
 import { dashboardRoutes } from "./dashboard/routes.js";
+import { waitlistRoutes } from "./waitlist/routes.js";
 import { resolvesRepo } from "./db/resolvesRepo.js";
 import { initWebSocketServer } from "./ws/server.js";
 import { securityConfig } from "./security/config.js";
@@ -32,9 +37,24 @@ await app.register(channelRoutes);
 await app.register(locationRoutes);
 await app.register(resolveRoutes);
 await app.register(dashboardRoutes);
+await app.register(waitlistRoutes);
 
 app.get("/health", async () => ({ ok: true }));
-app.get("/", async () => ({ message: "Welcome to GuacaMalla Net!" }));
+
+// Serves the compiled marketing/waitlist page (web/landing) at GET / and its
+// asset paths — same origin as the API, so the waitlist form needs no CORS
+// config. Falls back to a JSON message if the frontend hasn't been built
+// (e.g. a fresh checkout that only ran `bun run dev:backend`).
+const LANDING_DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/landing/dist");
+if (fs.existsSync(path.join(LANDING_DIST, "index.html"))) {
+  await app.register(fastifyStatic, { root: LANDING_DIST });
+} else {
+  app.log.warn(
+    `Landing page build not found at ${LANDING_DIST} — GET / falls back to a JSON message. ` +
+      "Run 'bun run --cwd web/landing build' to serve the real page.",
+  );
+  app.get("/", async () => ({ message: "Welcome to GuacaMalla Net!" }));
+}
 
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 

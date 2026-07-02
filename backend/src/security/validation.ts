@@ -47,6 +47,26 @@ export function isValidDeviceIdFilter(id: string | undefined): id is string | un
   return DEVICE_ID_RE.test(id);
 }
 
+// ─── Waitlist validators ──────────────────────────────────────────────────────
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const MAX_WAITLIST_COUNTRY_LENGTH = 60;
+
+export function isValidEmail(email: string): boolean {
+  return email.length > 0 && email.length <= 254 && EMAIL_RE.test(email);
+}
+
+export function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+// The landing page's country field is free text (not a fixed <select>), so
+// this only bounds length — any typed country name is accepted.
+export function isValidWaitlistCountry(country: unknown): country is string {
+  return typeof country === "string" && country.length <= MAX_WAITLIST_COUNTRY_LENGTH;
+}
+
 // ─── Resolve flow validators ──────────────────────────────────────────────────
 
 const HEX64_RE = /^[0-9a-f]{64}$/;
