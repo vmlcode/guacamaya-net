@@ -146,4 +146,20 @@
 }
 .relay-ripple { animation: relay-ripple 2.4s ease-out infinite; }
 
+/* mesh illustration — connecting links */
+.mesh-base { fill: none; stroke: var(--hairline); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.mesh-dim  { stroke: var(--hairline); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.mesh-flow {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.5;
+  opacity: 0.7;
+  stroke-dasharray: 4 6;
+  vector-effect: non-scaling-stroke;
+  animation: mesh-dash 0.9s linear infinite;
+}
+@keyframes mesh-dash {
+  to { stroke-dashoffset: -10; }
+}
+
 html { scroll-behavior: smooth; }

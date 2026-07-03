@@ -36,11 +36,11 @@ export const dict = {
         { t: "Llega a quien puede ayudar", d: "El auxilio aparece en el radar de cada persona en la cadena. Cuando alguien recupera internet, puede subirlo a las autoridades." },
       ],
       proof: "Cada salto re-verifica la firma Ed25519 antes de retransmitir. Lo falsificado o alterado se descarta en silencio.",
-      relay: {
-        origin: "origen · TTL 8",
-        hop1: "salto 1 · TTL 7",
-        hop2: "salto 2 · TTL 6",
-        received: "recibido",
+      mesh: {
+        origin: "tú · origen",
+        hop1: "salto 1",
+        hop2: "salto 2",
+        reached: "ayuda alcanzada",
       },
     },
     arch: {
@@ -119,11 +119,11 @@ export const dict = {
         { t: "It reaches someone who can help", d: "The call shows up on the radar of everyone in the chain. When someone regains internet, they can pass it to the authorities." },
       ],
       proof: "Every hop re-verifies the Ed25519 signature before relaying. Anything forged or altered is dropped silently.",
-      relay: {
-        origin: "origin · TTL 8",
-        hop1: "hop 1 · TTL 7",
-        hop2: "hop 2 · TTL 6",
-        received: "received",
+      mesh: {
+        origin: "you · origin",
+        hop1: "hop 1",
+        hop2: "hop 2",
+        reached: "help reached",
       },
     },
     arch: {

@@ -18,7 +18,7 @@ export function HowItWorks() {
           </div>
         </div>
 
-        <RelayStrip />
+        <MeshViz />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-hairline border border-hairline">
           {t.how.steps.map((s, i) => (
@@ -49,109 +49,149 @@ export function HowItWorks() {
   );
 }
 
-type NodeKind = "origin" | "hop" | "received";
+type MeshKind = "origin" | "hop" | "reached" | "idle";
+type MeshNodeDef = {
+  id: string;
+  kind: MeshKind;
+  x: number; // 0–100, node centre
+  y: number;
+  label?: string;
+  labelPos?: "above" | "below" | "right";
+  order?: number; // relay position → animation stagger
+};
 
-function RelayStrip() {
+function MeshViz() {
   const { t } = useLanguage();
-  const nodes: { kind: NodeKind; label: string }[] = [
-    { kind: "origin", label: t.how.relay.origin },
-    { kind: "hop", label: t.how.relay.hop1 },
-    { kind: "hop", label: t.how.relay.hop2 },
-    { kind: "received", label: t.how.relay.received },
+  // Signal travels top → bottom: SOS origin up top, "help reached" at the bottom.
+  const nodes: MeshNodeDef[] = [
+    { id: "origin", kind: "origin", x: 24, y: 23, label: t.how.mesh.origin, labelPos: "above", order: 0 },
+    { id: "hop1", kind: "hop", x: 49, y: 40, label: t.how.mesh.hop1, labelPos: "right", order: 1 },
+    { id: "hop2", kind: "hop", x: 69, y: 53, label: t.how.mesh.hop2, labelPos: "right", order: 2 },
+    { id: "reached", kind: "reached", x: 62, y: 78, label: t.how.mesh.reached, labelPos: "below", order: 3 },
+    { id: "idle1", kind: "idle", x: 35, y: 65 },
+    { id: "idle2", kind: "idle", x: 77, y: 22 },
   ];
   return (
-    <div className="reveal relative mt-4 mb-24 md:mb-28 px-1 md:px-2">
-      {/* one continuous line running through every node, aligned to circle center */}
-      <div className="pointer-events-none absolute inset-x-0 top-[22px] md:top-[28px] -translate-y-1/2 h-px">
-        <div className="absolute inset-0" style={{ background: "var(--hairline)" }} />
-        <div className="absolute inset-0 relay-line" />
-      </div>
-      <div className="relative flex items-start justify-between">
-        {nodes.map((n, i) => (
-          <RelayNode key={i} kind={n.kind} label={n.label} index={i} />
-        ))}
-      </div>
+    <div className="reveal relative mx-auto w-full max-w-[520px] aspect-square mt-4 mb-20 md:mb-24">
+      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" aria-hidden>
+        {/* dim links out to the idle phones */}
+        <line x1="49" y1="40" x2="35" y2="65" className="mesh-dim" />
+        <line x1="69" y1="53" x2="77" y2="22" className="mesh-dim" />
+        {/* the active relay path — faint base + dash flowing origin → reached (top → bottom) */}
+        <polyline points="24,23 49,40 69,53 62,78" className="mesh-base" />
+        <polyline points="24,23 49,40 69,53 62,78" className="mesh-flow" />
+      </svg>
+      {nodes.map((n) => (
+        <div
+          key={n.id}
+          className="absolute"
+          style={{ left: `${n.x}%`, top: `${n.y}%`, transform: "translate(-50%, -50%)" }}
+        >
+          <MeshNode {...n} />
+        </div>
+      ))}
     </div>
   );
 }
 
-function RelayNode({ kind, label, index }: { kind: NodeKind; label: string; index: number }) {
+function MeshNode({ kind, label, labelPos = "below", order = 0 }: MeshNodeDef) {
   const isOrigin = kind === "origin";
-  const isReceived = kind === "received";
-  const ringColor = isOrigin ? "var(--accent)" : "var(--primary)";
+  const isReached = kind === "reached";
+  const isIdle = kind === "idle";
+  const isHop = kind === "hop";
+  const delay = order * 0.55;
+  const rippleColor = isOrigin ? "var(--accent)" : "var(--primary)";
+  const breatheClass = isOrigin ? "relay-node-origin" : isIdle ? "" : "relay-node-recv";
+
+  const circleClass = isOrigin
+    ? "w-16 h-16 bg-accent"
+    : isReached
+      ? "w-14 h-14 bg-primary"
+      : isHop
+        ? "w-12 h-12 border-2 border-primary/80 bg-transparent"
+        : "w-11 h-11 border border-hairline bg-background/70 opacity-60";
+
   const labelColor = isOrigin
     ? "var(--accent)"
-    : isReceived
+    : isReached
       ? "var(--primary)"
       : "var(--muted-foreground)";
-  // stagger so the pulse propagates origin → received in step with the line
-  const delay = index * 0.55;
-  const breatheClass = isOrigin
-    ? "relay-node-origin"
-    : isReceived
-      ? "relay-node-recv"
-      : "relay-node";
+  const labelPosClass =
+    labelPos === "above"
+      ? "bottom-full mb-2 left-1/2 -translate-x-1/2"
+      : labelPos === "right"
+        ? "left-full ml-3 top-1/2 -translate-y-1/2"
+        : "top-full mt-2 left-1/2 -translate-x-1/2";
 
   return (
-    <div className="relative flex-none">
-      {/* two offset ripple rings → continuous outward ripple */}
-      <span
-        className="pointer-events-none absolute inset-0 rounded-full border-2 relay-ripple"
-        style={{ borderColor: ringColor, animationDelay: `${delay}s` }}
-      />
-      <span
-        className="pointer-events-none absolute inset-0 rounded-full border-2 relay-ripple"
-        style={{ borderColor: ringColor, animationDelay: `${delay + 1.2}s` }}
-      />
+    <div className="relative flex items-center justify-center">
+      {!isIdle && (
+        <>
+          <span
+            className="pointer-events-none absolute inset-0 rounded-full border-2 relay-ripple"
+            style={{ borderColor: rippleColor, animationDelay: `${delay}s` }}
+          />
+          <span
+            className="pointer-events-none absolute inset-0 rounded-full border-2 relay-ripple"
+            style={{ borderColor: rippleColor, animationDelay: `${delay + 1.2}s` }}
+          />
+        </>
+      )}
       <div
-        className={`relative flex items-center justify-center rounded-full w-11 h-11 md:w-14 md:h-14 ${breatheClass} ${
-          isOrigin
-            ? "bg-accent"
-            : isReceived
-              ? "bg-primary"
-              : "border-2 border-primary/70 bg-transparent"
-        }`}
-        style={{ animationDelay: `${delay}s` }}
+        className={`relative flex items-center justify-center rounded-full ${circleClass} ${breatheClass}`}
+        style={!isIdle ? { animationDelay: `${delay}s` } : undefined}
       >
-        {isOrigin && <Asterisk className="text-white" size={18} />}
-        {isReceived && (
-          <svg
-            viewBox="0 0 24 24"
-            className="w-4 h-4 md:w-5 md:h-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.4}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ color: "var(--primary-foreground)" }}
-            aria-hidden
-          >
-            <path d="M5 12.5l4.2 4.2L19 7" />
-          </svg>
-        )}
-        {!isOrigin && !isReceived && (
-          <svg
-            viewBox="0 0 24 24"
-            className="w-3.5 h-3.5 md:w-4 md:h-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ color: "var(--primary)" }}
-            aria-hidden
-          >
-            <rect x="7" y="3" width="10" height="18" rx="2.5" />
-            <line x1="11" y1="17.5" x2="13" y2="17.5" />
-          </svg>
+        {isOrigin && <Asterisk className="text-white" size={22} />}
+        {isReached && <CheckIcon />}
+        {(isHop || isIdle) && (
+          <PhoneIcon color={isIdle ? "var(--muted-foreground)" : "var(--primary)"} />
         )}
       </div>
-      <div
-        className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-[72px] md:w-28 text-center mono text-[10px] md:text-[11px] leading-tight tracking-wide text-balance"
-        style={{ color: labelColor }}
-      >
-        {label}
-      </div>
+      {label && (
+        <div
+          className={`absolute ${labelPosClass} whitespace-nowrap mono text-[10px] md:text-[11px] tracking-wide`}
+          style={{ color: labelColor }}
+        >
+          {label}
+        </div>
+      )}
     </div>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="w-5 h-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.4}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ color: "var(--primary-foreground)" }}
+      aria-hidden
+    >
+      <path d="M5 12.5l4.2 4.2L19 7" />
+    </svg>
+  );
+}
+
+function PhoneIcon({ color }: { color: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="w-4 h-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ color }}
+      aria-hidden
+    >
+      <rect x="7" y="3" width="10" height="18" rx="2.5" />
+      <line x1="11" y1="17.5" x2="13" y2="17.5" />
+    </svg>
   );
 }
