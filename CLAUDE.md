@@ -39,11 +39,25 @@ Working language of comments/docs is Spanish in places; code identifiers are Eng
 > ingestion), read `guacamalla-api/CLAUDE.md` first — it has the three-layer stack pattern, the dedup
 > invariant, environment setup, and per-domain commands.
 
-> **Mobile integration:** `backend_final.md` (repo root) is the authoritative per-endpoint reference
+> **Mobile integration:** `docs/guacamalla-api.md` is the authoritative per-endpoint reference
 > for wiring the Android app to the backend — auth model (which keys the app must/must not hold), the
 > 118-byte upload-frame layout for the `IngestClient`, every endpoint's request/response, the resolve
 > witness-signing format, and the recommended mule-upload flow. Read it before touching the
 > mesh↔backend HTTP/WS contract or building the Android `IngestClient`.
+
+## Documentation map (keep it this way)
+
+All repo-level documentation is centralized in **four files** — do not create new scattered
+planning/progress `.md` files; fold updates into these:
+
+- `CLAUDE.md` (root, this file) — monorepo guidance for Claude Code.
+- `docs/guacamalla-api.md` — the backend: architecture, environment, security, full endpoint reference.
+- `docs/guacamalla-mobile.md` — the mesh app: thesis, radio planes, frame layout, crypto, build/demo.
+- `docs/DESIGN.md` — the design system (tokens, emergency-semantic color layer). Single copy; do not duplicate.
+
+The `guacamalla-mobile/` Gradle project stays self-contained: it keeps its own `README.md`,
+`CLAUDE.md`, and deep specs under `guacamalla-mobile/docs/` (protocol flows, byte layout, crypto,
+demo runbook). `docs/guacamalla-mobile.md` is the repo-level summary that links into them.
 
 ## Run / test (Bun-first — never npm/node)
 

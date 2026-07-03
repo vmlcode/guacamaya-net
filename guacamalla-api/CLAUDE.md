@@ -2,6 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Full reference (architecture, environment, security, every endpoint): `../docs/guacamalla-api.md`.
+If you change an HTTP/WS contract, update that doc.
+
 ## Commands
 
 ```bash

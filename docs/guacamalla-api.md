@@ -1,11 +1,57 @@
-# GuacaMalla Net — Backend API (integración móvil)
+# GuacaMalla API (`guacamalla-api/`)
 
-Documento de referencia de **cada endpoint del backend** orientado a la integración con el
-**app Android** (`guacamalla-mobile/`). El backend es un **sink opcional de "data-mule"**: el mesh funciona
+Referencia central del **backend de GuacaMalla Net** (Bun + Fastify + TypeScript): arquitectura,
+entorno, seguridad y **cada endpoint HTTP/WS**, orientado a la integración con el app Android
+(`guacamalla-mobile/`). El backend es un **sink opcional de "data-mule"**: el mesh funciona
 sin él, nunca es dependencia dura. El app sube lo que recolecta cuando recupera conectividad.
 
 > Fuente de verdad del código: `guacamalla-api/src/`. Si cambias contratos, actualiza este doc.
 > Contrato compartido de tipos/cripto: `packages/shared/src/` (`@guacamaya/shared`).
+> Instrucciones para Claude Code: `CLAUDE.md` (raíz) y `guacamalla-api/CLAUDE.md`.
+
+---
+
+## 0. Ejecutar y arquitectura
+
+```bash
+bun install
+bun run dev:api         # bun --watch guacamalla-api/src/index.ts (HTTP + WS en :3000)
+bun test                # tests de packages/shared (bun:test)
+bun run build           # typecheck shared + api + landing
+bun run keygen          # genera llaves para guacamalla-api/.env
+```
+
+Corre **sin base de datos**: si `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` no están definidas, la
+capa de datos cae a stores en memoria. Configura `guacamalla-api/.env` desde `.env.example`; define
+`BACKEND_PRIVATE_KEY_HEX` para que la identidad Ed25519 del servidor sea estable entre reinicios.
+En producción (`NODE_ENV=production`) el servidor **se niega a arrancar** sin `GUACAMAYA_ADMIN_KEY`.
+
+### Dominios y patrón de capas
+
+Cada dominio (`channels/`, `locations/`) sigue el mismo stack de tres capas:
+
+```
+routes.ts   (plugin Fastify)
+    ↓
+*Repo.ts    (Supabase si está configurado; fallback en memoria)
+    ↓
+store.ts    (Map append-only, dedupe por `id`)
+```
+
+- `src/index.ts` — bootstrap Fastify (CORS, helmet, rate-limit 100/min), sirve `web/landing/dist` en `GET /`.
+- `src/mesh/frame.ts` — decodifica y verifica (zero-trust) los frames binarios del mesh para `/ingest`.
+- `src/crypto/` — identidad del servidor (`keys.ts`) y firma de registros oficiales (`signer.ts`).
+- `src/ws/server.ts` — WebSocket `/ws` (subscribe por canal, `broadcastRecord` / `broadcastLocation`).
+- `supabase/schema.sql` — tablas `channel_records` y `location_points` (`id text primary key`, RLS).
+
+### Invariante de dedupe
+
+Todo `ChannelRecord` / `LocationPoint` tiene `id` = SHA-256 de su contenido canónico
+(`getRecordId` / `getLocationId` en `packages/shared/src/crypto.ts`) — la misma estrategia del log
+de gossip del mesh. Cualquier número de mulas puede subir lotes solapados; el backend ignora
+re-subidas (`upsert onConflict:"id" ignoreDuplicates:true`). **El `id` siempre se recomputa
+server-side** — nunca se confía en el que manda el cliente. Las ubicaciones se derivan
+**exclusivamente** de frames verificados (no existe ingesta de ubicación por JSON confiable).
 
 ---
 
@@ -283,3 +329,13 @@ Pautas:
 
 > Estado actual: el `IngestClient` en Android **aún no existe** (trabajo abierto, ver
 > `guacamalla-mobile/CLAUDE.md`). El lado backend está completo y verificado end-to-end contra Supabase.
+
+---
+
+## 7. Trabajo futuro — suite de rescate
+
+El flujo `POST /resolve` + `/resolve/evidence` (§4.8–4.9) ya está implementado en el backend, pero
+los clientes que lo consumirán son trabajo futuro: app móvil del **buscador** (captura de evidencia
++ co-firma de testigos), consola web del **coordinador** (mapa, disputas, reputación) e integración
+con la app mesh (originador del SOS). El quórum default es `RESOLVE_QUORUM_REQUIRED = 2` testigos
+distintos dentro de `RESOLVE_GEO_RADIUS_KM = 5 km`, con recencia ≤ 72 h.

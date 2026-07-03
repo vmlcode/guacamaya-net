@@ -38,7 +38,9 @@ guacamaya-net/
 ├── packages/
 │   └── shared/       #   Tipos y crypto compartidos (ChannelRecord, Ed25519 helpers)
 └── docs/
-    └── GuacamayaProject/  # Documentación general del proyecto
+    ├── guacamalla-api.md     #   Referencia del backend (arquitectura + endpoints)
+    ├── guacamalla-mobile.md  #   Referencia del app mesh (protocolo + build)
+    └── DESIGN.md             #   Sistema de diseño
 ```
 
 ## Inicio rápido — App Android
@@ -98,30 +100,18 @@ La app requiere **Android 8.0 o superior (API 26)**. Wi-Fi Aware no está dispon
 
 ## Documentación
 
-### Proyecto general
+Toda la documentación del repo está centralizada en `docs/`:
 
-- [Generales del proyecto](./docs/GuacamayaProject/GuacamayaProject.md)
-- [Arquitectura y Decisiones](./docs/GuacamayaProject/Arquitectura%20y%20Decisiones.md)
-- [Estado y Pendientes](./docs/GuacamayaProject/Estado%20y%20Pendientes.md)
+- [`docs/guacamalla-api.md`](docs/guacamalla-api.md) — el backend: arquitectura, entorno, seguridad y referencia completa de endpoints (integración Android ↔ backend)
+- [`docs/guacamalla-mobile.md`](docs/guacamalla-mobile.md) — el app mesh: tesis, planos de radio, frame de 119 B, cripto, build y demo
+- [`docs/DESIGN.md`](docs/DESIGN.md) — sistema de diseño (tokens, capa de color semántico de emergencia)
 
-### Android / Protocolo mesh
+Specs profundos del protocolo mesh (autocontenidos en el proyecto Android):
 
-- [Guacamaya (Android)](./docs/GuacamayaProject/Guacamaya%20(Android).md)
-- [Protocolo y Frame](./docs/GuacamayaProject/Protocolo%20y%20Frame.md)
-- [IngestClient (Data-Mule Uploader)](./docs/GuacamayaProject/IngestClient%20(Data-Mule%20Uploader).md)
 - [`guacamalla-mobile/docs/protocol-flows.md`](guacamalla-mobile/docs/protocol-flows.md) — diagramas de secuencia y FSMs
 - [`guacamalla-mobile/docs/payload-binary-layout.md`](guacamalla-mobile/docs/payload-binary-layout.md) — mapa de bytes del frame de 119 B
 - [`guacamalla-mobile/docs/crypto.md`](guacamalla-mobile/docs/crypto.md) — modelo de firmas Ed25519 y amenazas
 - [`guacamalla-mobile/docs/demo-runbook.md`](guacamalla-mobile/docs/demo-runbook.md) — guión de demo de 90 segundos
-
-### Backend
-
-- [Backend Data-Mule](./docs/GuacamayaProject/Backend%20Data-Mule.md)
-- [Build y entorno](./docs/GuacamayaProject/Build%20y%20Entorno.md)
-- [Downlink Alertas Oficiales](./docs/GuacamayaProject/Downlink%20Alertas%20Oficiales.md)
-- [Resolve y Confirmación de Rescate](./docs/GuacamayaProject/Resolve%20y%20Confirmacion%20de%20Rescate.md)
-- [Seguridad Backend](./docs/GuacamayaProject/Seguridad%20Backend.md)
-- [`backend_final.md`](backend_final.md) — referencia completa de endpoints para integración Android ↔ backend
 
 ## Enlaces
 

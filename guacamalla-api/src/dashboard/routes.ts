@@ -22,7 +22,7 @@ const LOGO_SVG = readFileSync(
  * organismos regulados / de rescate vía GET /locations (read key) — nunca aquí.
  *
  * Estética: portada 1:1 del design system del app móvil (`guacamalla-mobile/.../ui/Theme.kt`
- * → DESIGN.md): "yellow + black brand voltage", dark-only, capa semántica de
+ * → docs/DESIGN.md): "yellow + black brand voltage", dark-only, capa semántica de
  * emergencia (danger/warning/success/info). Tokens espejados como CSS vars abajo.
  *
  * helmet corre con contentSecurityPolicy:false (ver index.ts), así que el script

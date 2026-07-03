@@ -14,6 +14,10 @@ hard dependency.
 
 Package: `net.guacamaya`. Open **`guacamalla-mobile/`** (not the repo root) in Android Studio.
 
+Repo-level reference docs: `../docs/guacamalla-mobile.md` (this app), `../docs/guacamalla-api.md`
+(backend contract for the `IngestClient`), `../docs/DESIGN.md` (design system). Deep protocol specs
+live in `docs/` here.
+
 ## Build / test / run
 
 ```bash

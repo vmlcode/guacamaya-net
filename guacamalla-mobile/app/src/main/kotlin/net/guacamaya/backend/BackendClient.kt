@@ -14,7 +14,7 @@ import java.net.URL
  *   - GET /pubkey                       — backend Ed25519 pubkey (verify official records)
  *   - GET /channels/:id/records?since=  — official alerts (verified server-side)
  *
- * The app must NEVER carry server API keys (admin/read/ws). See backend_final.md §2.
+ * The app must NEVER carry server API keys (admin/read/ws). See docs/guacamalla-api.md §2.
  */
 class BackendClient(
     private val baseUrl: String,
