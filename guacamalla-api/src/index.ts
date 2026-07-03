@@ -44,7 +44,7 @@ app.get("/health", async () => ({ ok: true }));
 // Serves the compiled marketing/waitlist page (web/landing) at GET / and its
 // asset paths — same origin as the API, so the waitlist form needs no CORS
 // config. Falls back to a JSON message if the frontend hasn't been built
-// (e.g. a fresh checkout that only ran `bun run dev:backend`).
+// (e.g. a fresh checkout that only ran `bun run dev:api`).
 const LANDING_DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/landing/dist");
 if (fs.existsSync(path.join(LANDING_DIST, "index.html"))) {
   await app.register(fastifyStatic, { root: LANDING_DIST });

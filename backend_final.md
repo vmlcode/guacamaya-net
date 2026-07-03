@@ -1,10 +1,10 @@
 # GuacaMalla Net — Backend API (integración móvil)
 
 Documento de referencia de **cada endpoint del backend** orientado a la integración con el
-**app Android** (`android/`). El backend es un **sink opcional de "data-mule"**: el mesh funciona
+**app Android** (`guacamalla-mobile/`). El backend es un **sink opcional de "data-mule"**: el mesh funciona
 sin él, nunca es dependencia dura. El app sube lo que recolecta cuando recupera conectividad.
 
-> Fuente de verdad del código: `backend/src/`. Si cambias contratos, actualiza este doc.
+> Fuente de verdad del código: `guacamalla-api/src/`. Si cambias contratos, actualiza este doc.
 > Contrato compartido de tipos/cripto: `packages/shared/src/` (`@guacamaya/shared`).
 
 ---
@@ -27,7 +27,7 @@ un `network_security_config.xml` que permita el host de dev. En prod usa HTTPS y
 ## 2. Modelo de autenticación
 
 Las API keys viajan en header **`X-Api-Key: <key>`** o **`Authorization: Bearer <key>`**
-(comparación *timing-safe*, `backend/src/security/auth.ts`). Hay tres llaves de servidor:
+(comparación *timing-safe*, `guacamalla-api/src/security/auth.ts`). Hay tres llaves de servidor:
 
 | Llave (env) | Protege |
 |---|---|
@@ -136,7 +136,7 @@ y hace `Base64.encodeToString(bytes, Base64.NO_WRAP)`.
 - **Auth:** **no** (el gate es la firma). Rate limit 30/min; batch ≤ `MAX_INGEST_BATCH` (200);
   cada frame base64 ≤ `MAX_FRAME_B64_LENGTH` (256 chars).
 - **Body:** `{ "frames": ["<base64 del frame de 118 B>", ...] }`.
-- **Zero-trust:** cada frame se re-verifica (`backend/src/mesh/frame.ts`), barato primero:
+- **Zero-trust:** cada frame se re-verifica (`guacamalla-api/src/mesh/frame.ts`), barato primero:
   1. CRC16-CCITT sobre payload[0..19]
   2. binding `SHA-256(pubkey)[0..3] == nodeId`
   3. Ed25519 verify sobre los 22 B de payload
@@ -282,4 +282,4 @@ Pautas:
 - **Sin secretos en el APK:** el app no porta llaves de servidor (ver §2).
 
 > Estado actual: el `IngestClient` en Android **aún no existe** (trabajo abierto, ver
-> `android/CLAUDE.md`). El lado backend está completo y verificado end-to-end contra Supabase.
+> `guacamalla-mobile/CLAUDE.md`). El lado backend está completo y verificado end-to-end contra Supabase.

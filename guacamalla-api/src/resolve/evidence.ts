@@ -9,7 +9,7 @@ import { publicKeyHex } from "../crypto/keys.js";
 /**
  * Evidence-image storage abstraction.
  *
- * - Dev (no Supabase): bytes land under EVIDENCE_DIR (default backend/.evidence/),
+ * - Dev (no Supabase): bytes land under EVIDENCE_DIR (default guacamalla-api/.evidence/),
  *   filename `<imageHash>.<ext>`. The dir is created on first write.
  * - Prod: bytes go to the configured Supabase Storage bucket.
  *

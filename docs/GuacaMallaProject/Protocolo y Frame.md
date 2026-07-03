@@ -10,8 +10,8 @@ fuente única de verdad generada**: si cambia un offset, tamaño o el CRC en uno
 **rechazan frames válidos en silencio** (la firma deja de verificar o el CRC falla). Mantener los tres
 sincronizados a mano en cada cambio de wire-format:
 
-1. **`android/app/.../net/guacamaya/proto/Payload.kt`** (+ `Crc16.kt`, `ble/BleConfig.kt`) — la malla.
-2. **`backend/src/mesh/frame.ts`** — el decodificador zero-trust de `POST /ingest`.
+1. **`guacamalla-mobile/app/.../net/guacamaya/proto/Payload.kt`** (+ `Crc16.kt`, `ble/BleConfig.kt`) — la malla.
+2. **`guacamalla-api/src/mesh/frame.ts`** — el decodificador zero-trust de `POST /ingest`.
 3. **`packages/shared/src/mesh/constants.ts`** (+ `crc16.ts`) — las constantes compartidas del backend.
 
 > Antes el riesgo era de 2 vías (Kotlin ↔ `frame.ts`); con el monorepo y `packages/shared/src/mesh/`

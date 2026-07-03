@@ -505,7 +505,7 @@ Como presentador, quiero mostrar cómo la información sigue fluyendo a medida q
 Como equipo, queremos un monorepo con workspaces, para compartir el modelo de datos y agilizar el desarrollo.
 
 **Criterios de aceptación:**
-- [ ] Workspace raíz con `backend/`, `app/`, `packages/shared/`
+- [ ] Workspace raíz con `guacamalla-api/`, `app/`, `packages/shared/`
 - [ ] TypeScript configurado de forma consistente
 - [ ] `packages/shared` consumible desde backend y app
 - [ ] README con instrucciones de arranque

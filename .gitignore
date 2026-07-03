@@ -9,13 +9,8 @@ dist/
 # IDE
 .idea/
 
-# Expo
-app/.expo/
-app/android/
-app/ios/
-
 # Backend keys (never commit)
-backend/keys/
+guacamalla-api/keys/
 
 # Resolve flow — dev-only evidence image storage
-backend/.evidence/
+guacamalla-api/.evidence/

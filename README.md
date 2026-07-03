@@ -28,11 +28,11 @@ El frame de 22 bytes incluye lat/lon (int32 E7), timestamp Unix y tipo de mensaj
 
 ```
 guacamaya-net/
-├── android/          # App nativa Android (Kotlin + Jetpack Compose)
+├── guacamalla-mobile/          # App nativa Android (Kotlin + Jetpack Compose)
 │   ├── app/          #   BLE, Wi-Fi Aware, mesh FloodRouter, UI Compose
 │   ├── docs/         #   spec del protocolo (flujos, layout de bytes, crypto)
 │   └── scripts/      #   helpers build/install/logcat/demo
-├── backend/          # Servidor opcional (Bun + TypeScript + Fastify)
+├── guacamalla-api/          # Servidor opcional (Bun + TypeScript + Fastify)
 │   ├── src/          #   HTTP API + WebSocket + ingest de frames mesh
 │   └── supabase/     #   schema SQL
 ├── packages/
@@ -51,9 +51,9 @@ guacamaya-net/
 
 ```bash
 # Opción A — Android Studio
-# File → Open → carpeta android/ → Build → Build APK(s)
+# File → Open → carpeta guacamalla-mobile/ → Build → Build APK(s)
 
-# Opción B — línea de comandos (desde android/)
+# Opción B — línea de comandos (desde guacamalla-mobile/)
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
@@ -66,7 +66,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ./scripts/demo.sh tamper     # genera frame con bit-flip para demostrar rechazo de firma
 ```
 
-Para la demo completa ver [`android/docs/demo-runbook.md`](android/docs/demo-runbook.md).
+Para la demo completa ver [`guacamalla-mobile/docs/demo-runbook.md`](guacamalla-mobile/docs/demo-runbook.md).
 
 ## Inicio rápido — Backend (opcional)
 
@@ -74,8 +74,8 @@ Para la demo completa ver [`android/docs/demo-runbook.md`](android/docs/demo-run
 
 ```bash
 bun install
-cp backend/.env.example backend/.env   # ajustar variables según necesidad
-bun run dev:backend                    # HTTP + WebSocket en :3000
+cp guacamalla-api/.env.example guacamalla-api/.env   # ajustar variables según necesidad
+bun run dev:api                    # HTTP + WebSocket en :3000
 ```
 
 Funciona sin base de datos (modo in-memory por defecto). Para producción:
@@ -84,7 +84,7 @@ Funciona sin base de datos (modo in-memory por defecto). Para producción:
 bun run keygen    # genera BACKEND_PRIVATE_KEY_HEX y GUACAMAYA_ADMIN_KEY
 ```
 
-Variables clave en `backend/.env`:
+Variables clave en `guacamalla-api/.env`:
 
 | Variable | Descripción |
 |---|---|
@@ -109,10 +109,10 @@ La app requiere **Android 8.0 o superior (API 26)**. Wi-Fi Aware no está dispon
 - [Guacamaya (Android)](./docs/GuacamayaProject/Guacamaya%20(Android).md)
 - [Protocolo y Frame](./docs/GuacamayaProject/Protocolo%20y%20Frame.md)
 - [IngestClient (Data-Mule Uploader)](./docs/GuacamayaProject/IngestClient%20(Data-Mule%20Uploader).md)
-- [`android/docs/protocol-flows.md`](android/docs/protocol-flows.md) — diagramas de secuencia y FSMs
-- [`android/docs/payload-binary-layout.md`](android/docs/payload-binary-layout.md) — mapa de bytes del frame de 119 B
-- [`android/docs/crypto.md`](android/docs/crypto.md) — modelo de firmas Ed25519 y amenazas
-- [`android/docs/demo-runbook.md`](android/docs/demo-runbook.md) — guión de demo de 90 segundos
+- [`guacamalla-mobile/docs/protocol-flows.md`](guacamalla-mobile/docs/protocol-flows.md) — diagramas de secuencia y FSMs
+- [`guacamalla-mobile/docs/payload-binary-layout.md`](guacamalla-mobile/docs/payload-binary-layout.md) — mapa de bytes del frame de 119 B
+- [`guacamalla-mobile/docs/crypto.md`](guacamalla-mobile/docs/crypto.md) — modelo de firmas Ed25519 y amenazas
+- [`guacamalla-mobile/docs/demo-runbook.md`](guacamalla-mobile/docs/demo-runbook.md) — guión de demo de 90 segundos
 
 ### Backend
 

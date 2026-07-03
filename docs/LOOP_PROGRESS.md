@@ -23,10 +23,10 @@ Registro de cada iteración del loop `/loop 10m`. Repo: [guacamaya-net/develop](
 | **TX/RX** | `FloodRouter`: reutiliza instancia `MessageDigest` (un hilo consumidor). |
 
 ### Archivos nuevos
-- `android/app/src/main/kotlin/net/guacamaya/ui/CompassHeading.kt`
-- `android/app/src/main/kotlin/net/guacamaya/ui/GeoGrid.kt`
-- `android/app/src/main/kotlin/net/guacamaya/ui/GridMap.kt`
-- `android/app/src/test/kotlin/net/guacamaya/ui/CompassMathTest.kt`
+- `guacamalla-mobile/app/src/main/kotlin/net/guacamaya/ui/CompassHeading.kt`
+- `guacamalla-mobile/app/src/main/kotlin/net/guacamaya/ui/GeoGrid.kt`
+- `guacamalla-mobile/app/src/main/kotlin/net/guacamaya/ui/GridMap.kt`
+- `guacamalla-mobile/app/src/test/kotlin/net/guacamaya/ui/CompassMathTest.kt`
 
 ### Verificación pendiente (dispositivos)
 ```bash

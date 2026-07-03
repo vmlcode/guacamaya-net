@@ -6,14 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # From the repo root
-bun run dev:backend          # start backend with hot-reload (bun --watch)
+bun run dev:api          # start backend with hot-reload (bun --watch)
 bun test                     # run all tests (packages/shared)
 bun test packages/shared/src/locations.test.ts  # run a single test file
 
-# From backend/
+# From guacamalla-api/
 bun run dev                  # same as above, local
 bun run start                # production start (no watch)
-bun run --cwd backend tsc --noEmit  # type-check only
+bun run --cwd guacamalla-api tsc --noEmit  # type-check only
 ```
 
 Tests live in `packages/shared/src/` (Bun test runner). There are no backend-specific test files yet; integration tests hit the in-memory store path (Supabase not configured in test env).

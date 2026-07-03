@@ -20,7 +20,7 @@ limits en [[Seguridad Backend]].
 | **Víctima / originador** | App mesh [[GuacaMalla (Android)]] | Emite el SOS firmado por BLE. **No requiere estar vivo** para que se resuelva. |
 | **Buscador / testigo** | App móvil del buscador (futuro) | Llega al sitio, captura evidencia, co-firma. Mínimo `RESOLVE_QUORUM_REQUIRED` (default 2) testigos distintos. |
 | **Coordinador** | Consola web (futuro) | Visualiza SOS pendientes, disputas, reputación. Promueve/reabre manual. |
-| **Backend** | `backend/src/resolve/` | Verifica firmas, aplica anti-troll, persiste recibos, emite `ChannelRecord` al canal `resuelto`. **Implementado.** |
+| **Backend** | `guacamalla-api/src/resolve/` | Verifica firmas, aplica anti-troll, persiste recibos, emite `ChannelRecord` al canal `resuelto`. **Implementado.** |
 
 ## Cripto del sobre (`packages/shared/src/resolve.ts`)
 
@@ -50,10 +50,10 @@ deviceIds_ordenados)` → id idempotente (mismo target + mismo set de testigos �
 - **`ResolveReceipt`** — `{ id, targetSosId, targetSosAuthor, status, quorumNeeded, quorumSeen, witnessDeviceIds[], createdAt, cooldownEndsAt?, disputedReason? }`.
 - **`ResolveStatus`** — `pending | cleared | disputed | rejected`.
 
-Esquema persistido en `backend/supabase/schema.sql`: `resolve_receipts` (un recibo por target) +
+Esquema persistido en `guacamalla-api/supabase/schema.sql`: `resolve_receipts` (un recibo por target) +
 `resolve_witnesses` (un row por `(target_sos_id, device_id)`).
 
-## Endpoints (`backend/src/resolve/routes.ts`)
+## Endpoints (`guacamalla-api/src/resolve/routes.ts`)
 
 - **`POST /resolve/evidence`** — sube una imagen (octet-stream) → `{ imageHash, storageKey,
   uploadToken, expiresInMs }`. El `uploadToken` es un **HMAC** que ata la imagen a una ventana corta

@@ -24,7 +24,7 @@ conjunto de clientes y herramientas operativas que lo hacen utilizable en campo:
 | **Víctima / originador** | App mesh Android | Emite la señal SOS firmada por BLE mesh. No se requiere que esté vivo para resolver. |
 | **Buscador / testigo** | App móvil del buscador (futuro) | Llega al sitio, captura imagen de evidencia, co-firma el resolve. Mínimo `RESOLVE_QUORUM_REQUIRED` (default 2) testigos distinctos. |
 | **Coordinador** | Consola web (futuro) | Visualiza SOS pendientes, disputas, reputación de testigos. Aprueba/promueve manualmente cuando hace falta. |
-| **Backend** | Este repo (`backend/`) | Verifica firmas, aplica anti-troll gates, persiste recibos, emite `ChannelRecord` a canal `resuelto`. **Ya implementado.** |
+| **Backend** | Este repo (`guacamalla-api/`) | Verifica firmas, aplica anti-troll gates, persiste recibos, emite `ChannelRecord` a canal `resuelto`. **Ya implementado.** |
 
 ## Arquitectura de clientes
 
@@ -135,7 +135,7 @@ Módulos:
 
 ## Modelo de datos (resumen)
 
-Implementado en `backend/supabase/schema.sql`:
+Implementado en `guacamalla-api/supabase/schema.sql`:
 
 - `resolve_receipts` — un recibo por target, estados `pending | cleared |
   disputed | rejected`, cooldown, witness set acumulado.

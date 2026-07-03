@@ -1,6 +1,6 @@
 # Backend Data-Mule
 
-Monorepo Bun + TypeScript, mitad `backend/` + `packages/` de la rama `develop`. Su rol original es el
+Monorepo Bun + TypeScript, mitad `guacamalla-api/` + `packages/` de la rama `develop`. Su rol original es el
 **punto de ingesta "data-mule"** de la malla [[GuacaMalla (Android)]]: un teléfono que recupera
 conectividad sube los frames firmados que recogió; el backend los **re-verifica** y persiste. Hoy hace
 además: canales oficiales, histórico de ubicación para el mapa móvil, y el flujo de
@@ -23,15 +23,15 @@ endurecimiento (API keys, CORS, rate limits) está en [[Seguridad Backend]].
     `signWitness`, `verifyResolveEnvelope`, `getResolveId`). Ver [[Resolve y Confirmacion de Rescate]].
   - `mesh/` — `constants.ts` + `crc16.ts`: **constantes de wire-format** que deben quedar
     byte-idénticas con `net.guacamaya.proto.*` (riesgo de sync de 3 vías en [[Protocolo y Frame]]).
-- `backend/src/index.ts` — bootstrap Fastify (CORS, helmet, rate-limit global 100/min), rutas, WS, shutdown limpio.
-- `backend/src/channels/routes.ts` — API HTTP de canales + `/ingest`. `store.ts` — fallback en memoria.
-- `backend/src/locations/routes.ts` — API HTTP de ubicación (read-only). `store.ts` — fallback en memoria.
-- `backend/src/resolve/` — `routes.ts`, `evidence.ts`, `store.ts`: el flujo de resolución de rescate.
-- `backend/src/security/` — `config.ts`, `auth.ts`, `rateLimit.ts`, `validation.ts`, `keygen.ts`. Ver [[Seguridad Backend]].
-- `backend/src/crypto/` — `keys.ts` (identidad del servidor), `signer.ts` (firma registros oficiales).
-- `backend/src/mesh/frame.ts` — **decodifica y verifica zero-trust los frames binarios** de la malla.
-- `backend/src/db/` — `channelsRepo.ts`, `locationsRepo.ts`, `resolvesRepo.ts` (Supabase con fallback en memoria), `supabase.ts`. Esquema en `backend/supabase/schema.sql`.
-- `backend/src/ws/server.ts` — WebSocket `/ws`: subscribe/unsubscribe por canal, `broadcastRecord`, `broadcastLocation`, `broadcastResolve`.
+- `guacamalla-api/src/index.ts` — bootstrap Fastify (CORS, helmet, rate-limit global 100/min), rutas, WS, shutdown limpio.
+- `guacamalla-api/src/channels/routes.ts` — API HTTP de canales + `/ingest`. `store.ts` — fallback en memoria.
+- `guacamalla-api/src/locations/routes.ts` — API HTTP de ubicación (read-only). `store.ts` — fallback en memoria.
+- `guacamalla-api/src/resolve/` — `routes.ts`, `evidence.ts`, `store.ts`: el flujo de resolución de rescate.
+- `guacamalla-api/src/security/` — `config.ts`, `auth.ts`, `rateLimit.ts`, `validation.ts`, `keygen.ts`. Ver [[Seguridad Backend]].
+- `guacamalla-api/src/crypto/` — `keys.ts` (identidad del servidor), `signer.ts` (firma registros oficiales).
+- `guacamalla-api/src/mesh/frame.ts` — **decodifica y verifica zero-trust los frames binarios** de la malla.
+- `guacamalla-api/src/db/` — `channelsRepo.ts`, `locationsRepo.ts`, `resolvesRepo.ts` (Supabase con fallback en memoria), `supabase.ts`. Esquema en `guacamalla-api/supabase/schema.sql`.
+- `guacamalla-api/src/ws/server.ts` — WebSocket `/ws`: subscribe/unsubscribe por canal, `broadcastRecord`, `broadcastLocation`, `broadcastResolve`.
 
 ## Modelos de datos
 
@@ -65,7 +65,7 @@ Body: `{ "frames": ["<base64>", ...] }`. Cada frame es el service-data BLE **sin
 Batch tope `MAX_INGEST_BATCH` (default 200) con rate-limit por ruta (30/min).
 
 **Zero-trust: cada frame se re-verifica antes de persistir nada.** `decodeAndVerifyFrame`
-(`backend/src/mesh/frame.ts`) replica la cascada de [[Protocolo y Frame]]: CRC16-CCITT → ata pubkey
+(`guacamalla-api/src/mesh/frame.ts`) replica la cascada de [[Protocolo y Frame]]: CRC16-CCITT → ata pubkey
 (`SHA-256(pubkey)[0..4] == node_id`) → verify Ed25519 sobre los 22 B (con `@noble/ed25519`). **No** se
 aplica el skew de tiempo (un mule sube reportes viejos a propósito). Los frames válidos se guardan
 como reportes de comunidad `verified:false` en el canal `solicito-ayuda`, con `id = SHA-256(payload)`.
@@ -89,7 +89,7 @@ Ed25519 protege records y posiciones (decisión en [[Arquitectura y Decisiones]]
 ## Identidad del servidor
 
 `crypto/keys.ts` lee `BACKEND_PRIVATE_KEY_HEX` (alias legacy `BACKEND_PRIVATE_KEY`). Si no está, genera
-un par **efímero** (advierte al arrancar). Para identidad estable, fijarla en `backend/.env`. Corre sin
+un par **efímero** (advierte al arrancar). Para identidad estable, fijarla en `guacamalla-api/.env`. Corre sin
 base de datos: si Supabase no está configurado, usa el store en memoria.
 
 Cómo correrlo: [[Build y Entorno]]. Pendientes (uploader Kotlin, etc.): [[Estado y Pendientes]].

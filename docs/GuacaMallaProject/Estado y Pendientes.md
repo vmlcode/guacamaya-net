@@ -17,7 +17,7 @@ Foto del estado de [[GuacaMallaProject]] al **2026-06-28** (rama `develop`, mono
 - ✅ Pruning de la DB Room (conserva 25 000 filas, batcheado cada 128 inserts).
 - ✅ **`IngestClient` (data-mule uploader)** implementado: persiste la firma (migración Room v3), arma el frame de 118 B y hace `POST /ingest` vía WorkManager al recuperar red. Build + tests JVM verdes. **Pata de aceptación del backend verificada** contra server real (ingesta/dedup/rechazo/locations); falta el smoke en dispositivo. Ver [[IngestClient (Data-Mule Uploader)]].
 - ✅ **Downlink de alertas oficiales** + alcanzabilidad: `BackendClient` descarga `/channels/:id/records` y **verifica la firma** (esquema oficial, `OfficialRecordVerifier`); banner en la UI; `BACKEND_BASE_URL` configurable (debug LAN override + cleartext de debug). Tests JVM verdes; falta smoke en dispositivo. Ver [[Downlink Alertas Oficiales]].
-- ✅ Tests unitarios verdes (codec, crypto, geo/compass/proximity, ingest, backend/alertas).
+- ✅ Tests unitarios verdes (codec, crypto, geo/compass/proximity, ingest, guacamalla-api/alertas).
 - ✅ **Sync de Gradle portable**: se quitó el `org.gradle.java.home` absoluto del `gradle.properties` (rompía el sync en máquinas sin ese JDK exacto; commit `3756af4`). JDK por dev, 17–21. Ver [[Build y Entorno]].
 
 ### [[Backend Data-Mule]]
@@ -41,7 +41,7 @@ El uplink ([[IngestClient (Data-Mule Uploader)]]) y el downlink ([[Downlink Aler
 están en código y verificados *headless*. Lo que falta, en orden:
 
 1. [ ] **Smoke end-to-end en hardware** (lo único que bloquea declarar el wiring "hecho"):
-   - Levantar el backend en un laptop (`bun run dev:backend`) y obtener su **IP de LAN**.
+   - Levantar el backend en un laptop (`bun run dev:api`) y obtener su **IP de LAN**.
    - Compilar debug apuntando ahí: `./gradlew :app:assembleDebug -PBACKEND_BASE_URL=http://<IP-LAN>:3000` (o emulador con el default `10.0.2.2`).
    - **Uplink**: Observe recoge un frame BLE → al recuperar red el `IngestUploadWorker` hace POST → confirmar `{ ingested }` y `GET /locations`.
    - **Downlink**: crear una alerta oficial (`POST /channels/alertas/records` con admin key) → en la app debe aparecer el **banner de alertas verificadas**.
@@ -64,7 +64,7 @@ De la [[meeting-notes|reunión del 29 jun]] (decisión en [[Arquitectura y Decis
 4. [ ] **SOS multi-categoría por swipe** (roadmap, no MVP): `sosType` ya tiene 8 valores en el wire.
 
 > Contexto de equipo (no-Android): refactor del backend + **limpieza de código muerto** (incluye el
-> stub `backend/src/sms/`, ver más abajo) y evaluación **Fastify vs Spring Boot** para servir el
+> stub `guacamalla-api/src/sms/`, ver más abajo) y evaluación **Fastify vs Spring Boot** para servir el
 > dashboard (Victor). CI ya con **Firebase App Distribution + Crashlytics** (Eli); builds por **tags**;
 > APKs por GitHub Releases. Licencia tentativa **BSL / source-available** (restringe uso comercial).
 > Demo objetivo = **A (offline) → B (relay offline) → C (online, sube)** — es el store-and-forward + IngestClient ya hechos.
@@ -76,11 +76,11 @@ De la [[meeting-notes|reunión del 29 jun]] (decisión en [[Arquitectura y Decis
 - [ ] **Integrar Wi-Fi Aware** al servicio (publish/subscribe del `NanMessenger`).
 - [ ] **Clientes de Resolve**: app del buscador + consola del coordinador (ver nota dedicada).
 - [ ] **Endurecer `/ingest`**: rate-limit por origen además del global; moderación de reportes de comunidad.
-- ❌ **Sync por SMS** (`backend/src/sms/.gitkeep`, EPIC-3 en los docs de planning) — **fuera de alcance**: GuacaMalla se enfoca estrictamente en reportar eventos críticos por Bluetooth. No se implementará.
+- ❌ **Sync por SMS** (`guacamalla-api/src/sms/.gitkeep`, EPIC-3 en los docs de planning) — **fuera de alcance**: GuacaMalla se enfoca estrictamente en reportar eventos críticos por Bluetooth. No se implementará.
 
 ## Riesgos conocidos
 
-- **Sync de wire-format de 3 vías** (`net.guacamaya.proto.*` ↔ `backend/src/mesh/frame.ts` ↔
+- **Sync de wire-format de 3 vías** (`net.guacamaya.proto.*` ↔ `guacamalla-api/src/mesh/frame.ts` ↔
   `packages/shared/src/mesh/constants.ts`): si cambia el formato en uno, los otros rechazan frames
   válidos **en silencio**. Mantener los tres sincronizados y correr los tests de ambos lados. Ver
   [[Protocolo y Frame]].

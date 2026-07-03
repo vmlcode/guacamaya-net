@@ -165,7 +165,7 @@ interface ChannelRecord {
 > Sin esta fase no hay proyecto. Es lo que decide la viabilidad técnica.
 
 ### Fase 1 — Backend + modelo de datos
-- [ ] Monorepo (`backend/`, `app/`, `packages/shared/`)
+- [ ] Monorepo (`guacamalla-api/`, `app/`, `packages/shared/`)
 - [ ] Modelo `ChannelRecord` en `packages/shared/`
 - [ ] Canales en backend, registros firmados con Ed25519
 - [ ] Endpoints HTTP + WebSocket
@@ -204,7 +204,7 @@ interface ChannelRecord {
 
 ```
 guacamalla-red/
-├── backend/                # Node + TS + Fastify + WS + gateway SMS
+├── guacamalla-api/                # Node + TS + Fastify + WS + gateway SMS
 │   ├── src/
 │   │   ├── channels/       # lógica de canales
 │   │   ├── crypto/         # firma Ed25519

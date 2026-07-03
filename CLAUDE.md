@@ -6,15 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The **`develop` branch is the consolidated GuacaMalla monorepo** holding both halves of the product:
 
-- **`backend/` + `packages/`** — the GuacaMalla Red backend (Bun + TypeScript). It is the **data-mule
+- **`guacamalla-api/` + `packages/`** — the GuacaMalla Red backend (Bun + TypeScript). It is the **data-mule
   ingestion point** for the mesh (`POST /ingest`), serves official signed channels, and feeds the
   moving-map location history. The mesh works without it; the backend is never a hard dependency.
-- **`android/`** — the native Kotlin + Compose **GuacaMalla mesh app**, the connectionless
+- **`guacamalla-mobile/`** — the native Kotlin + Compose **GuacaMalla mesh app**, the connectionless
   BLE/Wi-Fi-Aware mesh. A **self-contained Gradle project** (its own `gradlew`, `build.gradle.kts`,
-  `docs/`, `CLAUDE.md`); open `android/` directly in Android Studio. See **`android/CLAUDE.md`** for
+  `docs/`, `CLAUDE.md`); open `guacamalla-mobile/` directly in Android Studio. See **`guacamalla-mobile/CLAUDE.md`** for
   the mesh side.
 
-The abandoned Expo app that used to live in `app/` has been removed. `android/` is **not** a Bun
+The abandoned Expo app that used to live in `app/` has been removed. `guacamalla-mobile/` is **not** a Bun
 workspace — keep it out of the root `package.json` workspaces.
 
 Working language of comments/docs is Spanish in places; code identifiers are English.
@@ -34,9 +34,9 @@ Working language of comments/docs is Spanish in places; code identifiers are Eng
   `net.guacamaya.proto.*` on Android.
 - Exception: the git branch name **`init-sosnet`** is a literal remote branch name until renamed.
 
-> **Context rule:** when a request touches anything under `backend/` or the shared user flow (API
+> **Context rule:** when a request touches anything under `guacamalla-api/` or the shared user flow (API
 > contracts, data shapes shared between mesh and backend, WebSocket events, channel/location
-> ingestion), read `backend/CLAUDE.md` first — it has the three-layer stack pattern, the dedup
+> ingestion), read `guacamalla-api/CLAUDE.md` first — it has the three-layer stack pattern, the dedup
 > invariant, environment setup, and per-domain commands.
 
 > **Mobile integration:** `backend_final.md` (repo root) is the authoritative per-endpoint reference
@@ -49,15 +49,15 @@ Working language of comments/docs is Spanish in places; code identifiers are Eng
 
 ```bash
 bun install
-bun run dev:backend     # bun --watch backend/src/index.ts  (HTTP + WS on :3000)
+bun run dev:api     # bun --watch guacamalla-api/src/index.ts  (HTTP + WS on :3000)
 bun test                # shared-package unit tests (bun:test)
 bun run build           # typecheck/build shared + backend
 ```
 
 Bun installs to `~/.bun/bin`. Runs out of the box with **no database**: if `SUPABASE_URL` /
 `SUPABASE_SERVICE_ROLE_KEY` are unset, the data layer falls back to in-memory stores
-(`backend/src/channels/store.ts`, `backend/src/locations/store.ts`). Configure `backend/.env` from
-`backend/.env.example`; set `BACKEND_PRIVATE_KEY_HEX` so the server's Ed25519 identity (and public
+(`guacamalla-api/src/channels/store.ts`, `guacamalla-api/src/locations/store.ts`). Configure `guacamalla-api/.env` from
+`guacamalla-api/.env.example`; set `BACKEND_PRIVATE_KEY_HEX` so the server's Ed25519 identity (and public
 key) stays stable across reboots — otherwise a fresh ephemeral keypair is generated each boot (it
 warns on startup).
 
@@ -78,13 +78,13 @@ trajectory for the moving-map dashboard. Like records, `id` = SHA-256 of canonic
 - `packages/shared/` — `ChannelRecord` + `LocationPoint` types, `getRecordId`, `getLocationId`,
   `verifyRecordSignature`, `mergeLogs` (union + dedupe + signature check). Pure, `bun:test` coverage.
   The contract both sides share. Keep it framework-agnostic.
-- `backend/src/index.ts` — Fastify bootstrap (CORS, rate-limit 100/min), registers route plugins, WS, graceful shutdown.
-- `backend/src/channels/routes.ts` — channel HTTP API + `/ingest` (see below). `store.ts` — in-memory fallback.
-- `backend/src/locations/routes.ts` — location HTTP API (see below). `store.ts` — in-memory fallback.
-- `backend/src/crypto/` — `keys.ts` (server identity), `signer.ts` (signs official records).
-- `backend/src/mesh/frame.ts` — **decodes + zero-trust-verifies GuacaMalla binary mesh frames** for `/ingest`.
-- `backend/src/db/` — `channelsRepo.ts`, `locationsRepo.ts` (Supabase with in-memory fallback), `supabase.ts`. Schema: `backend/supabase/schema.sql`.
-- `backend/src/ws/server.ts` — WebSocket `/ws`, subscribe/unsubscribe per channel, `broadcastRecord`, `broadcastLocation`.
+- `guacamalla-api/src/index.ts` — Fastify bootstrap (CORS, rate-limit 100/min), registers route plugins, WS, graceful shutdown.
+- `guacamalla-api/src/channels/routes.ts` — channel HTTP API + `/ingest` (see below). `store.ts` — in-memory fallback.
+- `guacamalla-api/src/locations/routes.ts` — location HTTP API (see below). `store.ts` — in-memory fallback.
+- `guacamalla-api/src/crypto/` — `keys.ts` (server identity), `signer.ts` (signs official records).
+- `guacamalla-api/src/mesh/frame.ts` — **decodes + zero-trust-verifies GuacaMalla binary mesh frames** for `/ingest`.
+- `guacamalla-api/src/db/` — `channelsRepo.ts`, `locationsRepo.ts` (Supabase with in-memory fallback), `supabase.ts`. Schema: `guacamalla-api/supabase/schema.sql`.
+- `guacamalla-api/src/ws/server.ts` — WebSocket `/ws`, subscribe/unsubscribe per channel, `broadcastRecord`, `broadcastLocation`.
 
 ### HTTP API
 
@@ -103,7 +103,7 @@ hop-TTL byte stripped** → 118 bytes = `22 B payload + 32 B pubkey + 64 B signa
 frame is tolerated by dropping the first byte).
 
 **Zero-trust: every frame is re-verified before anything is persisted** — the backend never trusts the
-client. `decodeAndVerifyFrame` (`backend/src/mesh/frame.ts`) mirrors the Kotlin `FloodRouter` reject
+client. `decodeAndVerifyFrame` (`guacamalla-api/src/mesh/frame.ts`) mirrors the Kotlin `FloodRouter` reject
 cascade, cheapest first: CRC16-CCITT (byte-for-byte mirror of `Crc16.ccitt`) → pubkey-binding
 (`SHA-256(pubkey)[0..4] == node_id`) → Ed25519 verify over the 22-byte payload (mirrors Kotlin
 `Signer.verify`; uses `@noble/ed25519`). The replay/timestamp-skew check is intentionally **omitted**

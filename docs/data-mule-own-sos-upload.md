@@ -1,7 +1,7 @@
 # Data‑mule: subida del SOS **propio** al backend
 
 > Estado: implementado en este PR (lado Android). Complementa el flujo
-> `POST /ingest` descrito en `backend_final.md` y `backend/CLAUDE.md`.
+> `POST /ingest` descrito en `backend_final.md` y `guacamalla-api/CLAUDE.md`.
 
 ## Problema
 

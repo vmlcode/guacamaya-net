@@ -5,8 +5,8 @@
     "": {
       "name": "guacamaya-net",
     },
-    "backend": {
-      "name": "@guacamaya/backend",
+    "guacamalla-api": {
+      "name": "@guacamaya/api",
       "version": "0.1.0",
       "dependencies": {
         "@fastify/cors": "^9.0.0",
@@ -266,7 +266,7 @@
 
     "@fontsource/outfit": ["@fontsource/outfit@5.2.8", "", {}, "sha512-rXC6g0MqD7cOBjht0bMqc43qM6lRqDLML9KXsmg9uykz0wLQhy8Z/ajrMG6iyoT3NJR+MYgU+OEHp7uHoTb+Yw=="],
 
-    "@guacamaya/backend": ["@guacamaya/backend@workspace:backend"],
+    "@guacamaya/api": ["@guacamaya/api@workspace:guacamalla-api"],
 
     "@guacamaya/landing": ["@guacamaya/landing@workspace:web/landing"],
 

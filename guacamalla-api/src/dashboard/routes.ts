@@ -21,7 +21,7 @@ const LOGO_SVG = readFileSync(
  * `channels/sanitize.ts`). La posición EXACTA de un SOS solo está disponible para
  * organismos regulados / de rescate vía GET /locations (read key) — nunca aquí.
  *
- * Estética: portada 1:1 del design system del app móvil (`android/.../ui/Theme.kt`
+ * Estética: portada 1:1 del design system del app móvil (`guacamalla-mobile/.../ui/Theme.kt`
  * → DESIGN.md): "yellow + black brand voltage", dark-only, capa semántica de
  * emergencia (danger/warning/success/info). Tokens espejados como CSS vars abajo.
  *
@@ -36,7 +36,7 @@ const PAGE = `<!doctype html>
 <title>GuacaMalla — Mapa de Alertas</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-  /* ── Design tokens — espejo de GuacamayaPalette (android/.../ui/Theme.kt) ── */
+  /* ── Design tokens — espejo de GuacamayaPalette (guacamalla-mobile/.../ui/Theme.kt) ── */
   :root {
     color-scheme: dark;
     --brand:#FAFF69; --on-brand:#0A0A0A;

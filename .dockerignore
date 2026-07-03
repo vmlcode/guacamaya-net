@@ -3,7 +3,7 @@
 .gitignore
 node_modules
 **/node_modules
-android
+guacamalla-mobile
 .claude
 .evidence
 dist

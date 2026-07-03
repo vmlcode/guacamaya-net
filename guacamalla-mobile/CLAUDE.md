@@ -12,7 +12,7 @@ layer via Ed25519 signatures.
 The Android app is **serverless by design**. The optional Bun backend (`POST /ingest`) is never a
 hard dependency.
 
-Package: `net.guacamaya`. Open **`android/`** (not the repo root) in Android Studio.
+Package: `net.guacamaya`. Open **`guacamalla-mobile/`** (not the repo root) in Android Studio.
 
 ## Build / test / run
 

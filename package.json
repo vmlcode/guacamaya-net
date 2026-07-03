@@ -3,15 +3,15 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "backend",
+    "guacamalla-api",
     "web/*"
   ],
   "scripts": {
-    "dev:backend": "bun run --cwd backend dev",
+    "dev:api": "bun run --cwd guacamalla-api dev",
     "dev:landing": "bun run --cwd web/landing dev",
-    "build": "bun run --cwd packages/shared build && bun run --cwd backend build && bun run --cwd web/landing build",
+    "build": "bun run --cwd packages/shared build && bun run --cwd guacamalla-api build && bun run --cwd web/landing build",
     "test": "bun test",
-    "keygen": "bun run backend/src/security/keygen.ts"
+    "keygen": "bun run guacamalla-api/src/security/keygen.ts"
   },
   "engines": {
     "bun": ">=1.1"

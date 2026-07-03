@@ -5,8 +5,8 @@ App nativa Android (Kotlin + Jetpack Compose) que implementa la malla. Los telé
 No hay conexión que caer, ni credencial que filtrar, ni infraestructura que falle.
 
 Parte de [[GuacaMallaProject]]. Paquete **`net.guacamaya`** (antes `org.sosnet` — ver rebrand en
-[[Arquitectura y Decisiones]]). Vive en `android/` dentro del monorepo y es un **proyecto Gradle
-autocontenido**: se abre `android/` directo en Android Studio, no la raíz del repo. El detalle del
+[[Arquitectura y Decisiones]]). Vive en `guacamalla-mobile/` dentro del monorepo y es un **proyecto Gradle
+autocontenido**: se abre `guacamalla-mobile/` directo en Android Studio, no la raíz del repo. El detalle del
 formato binario está en [[Protocolo y Frame]].
 
 ## Dos planos de transporte

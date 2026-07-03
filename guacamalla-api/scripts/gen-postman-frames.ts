@@ -1,11 +1,11 @@
 /**
  * Generates real signed GuacaMalla mesh frames for the Postman collection.
  *
- *   bun run backend/scripts/gen-postman-frames.ts
+ *   bun run guacamalla-api/scripts/gen-postman-frames.ts
  *
  * Copy the `validFrame` / `validFrame2` / pubkey values into the matching
- * collection variables in backend/postman_collection.json. The frame layout
- * here MUST mirror backend/src/mesh/frame.ts (offsets, CRC, big-endian) — if the
+ * collection variables in guacamalla-api/postman_collection.json. The frame layout
+ * here MUST mirror guacamalla-api/src/mesh/frame.ts (offsets, CRC, big-endian) — if the
  * wire format changes there, regenerate so /ingest keeps accepting the samples.
  *
  * Uses a deterministic dev key so the frames (and their content-hash ids) are
@@ -15,7 +15,7 @@ import * as ed from "@noble/ed25519";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
-// Mirror of backend/src/mesh/frame.ts CRC16-CCITT.
+// Mirror of guacamalla-api/src/mesh/frame.ts CRC16-CCITT.
 function crc16(data: Uint8Array, offset = 0, length = data.length): number {
   let crc = 0xffff;
   for (let i = offset; i < offset + length; i++) {

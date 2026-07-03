@@ -10,13 +10,13 @@ Cómo compilar y correr las dos mitades del monorepo [[GuacaMallaProject]] (rama
 | Monorepo `develop` (Android + backend consolidados, git worktree) | `~/AndroidStudioProjects/guacamaya-develop` | `develop` |
 | Remoto | `github.com/vmlcode/guacamaya-net` | — |
 
-> `develop` es ahora el **monorepo consolidado**: contiene `android/` **y** `backend/` + `packages/`.
+> `develop` es ahora el **monorepo consolidado**: contiene `guacamalla-mobile/` **y** `guacamalla-api/` + `packages/`.
 > El worktree comparte el mismo `.git`. La rama `init-sosnet` quedó con el layout viejo (la app en la
 > raíz, sin backend) — atrasada. Ver [[Arquitectura y Decisiones]] §2.
 
 ## [[GuacaMalla (Android)]] — compilar
 
-Proyecto Gradle autocontenido en `android/`. **Abrir `android/` en Android Studio, no la raíz.**
+Proyecto Gradle autocontenido en `guacamalla-mobile/`. **Abrir `guacamalla-mobile/` en Android Studio, no la raíz.**
 Requiere Android SDK con `platform-android-34` + `build-tools;34.0.0`. Apuntar Gradle al SDK con
 `local.properties` (`sdk.dir=...`, gitignored) o `ANDROID_HOME`.
 
@@ -38,7 +38,7 @@ export ANDROID_HOME=~/Android/Sdk
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Helper de demo (`android/scripts/demo.sh` auto-resuelve el JDK: `JAVA_HOME` → JBR → `java` en PATH).
+Helper de demo (`guacamalla-mobile/scripts/demo.sh` auto-resuelve el JDK: `JAVA_HOME` → JBR → `java` en PATH).
 Creció mucho con el sprint de campo dual-device:
 
 ```bash
@@ -61,14 +61,14 @@ Bun instalado en `~/.bun/bin`. Desde la **raíz del worktree de `develop`**:
 
 ```bash
 bun install
-bun run dev:backend     # bun --watch backend/src/index.ts  → HTTP + WS en :3000
+bun run dev:api     # bun --watch guacamalla-api/src/index.ts  → HTTP + WS en :3000
 bun test                # tests del paquete shared (incluye resolve)  → 23 pass al 2026-06-28
 bun run build           # typecheck/build de shared + backend
 bun run keygen          # genera API keys / identidad estable
 ```
 
 Corre sin base de datos (fallback en memoria si Supabase no está configurado). Copiar
-`backend/.env.example` a `backend/.env` y fijar:
+`guacamalla-api/.env.example` a `guacamalla-api/.env` y fijar:
 
 - `BACKEND_PRIVATE_KEY_HEX` — identidad Ed25519 estable del servidor.
 - `GUACAMAYA_ADMIN_KEY` (y opcional `GUACAMAYA_READ_KEY`, `GUACAMAYA_WS_KEY`) — **obligatorio en
@@ -76,6 +76,6 @@ Corre sin base de datos (fallback en memoria si Supabase no está configurado). 
 - `CORS_ORIGINS` — lista de orígenes; nunca `*` en prod.
 - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` — opcionales; sin ellos, store en memoria.
 
-> `android/` **no** es un workspace de Bun — mantenerlo fuera de los workspaces del `package.json` raíz.
+> `guacamalla-mobile/` **no** es un workspace de Bun — mantenerlo fuera de los workspaces del `package.json` raíz.
 
 Estado actual y trabajo abierto: [[Estado y Pendientes]].

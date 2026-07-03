@@ -1,10 +1,11 @@
 {
-  "name": "@guacamaya/backend",
+  "name": "@guacamaya/api",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts"
+    "start": "bun src/index.ts",
+    "build": "tsc --noEmit"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.0",

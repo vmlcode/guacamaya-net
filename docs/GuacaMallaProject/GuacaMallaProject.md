@@ -11,13 +11,13 @@ torres celulares — los teléfonos cercanos se retransmiten datos entre sí.
 
 > **Cambio importante (2026-06-28):** lo que antes eran **dos productos en ramas separadas** ahora
 > está **consolidado en un único monorepo** en la rama `develop`. La app Android se fusionó bajo
-> `android/` (commit `3441089`). Ya no hay dos linajes que "no se fusionan": `develop` contiene
+> `guacamalla-mobile/` (commit `3441089`). Ya no hay dos linajes que "no se fusionan": `develop` contiene
 > ambas mitades. La rama `init-sosnet` quedó como el layout viejo standalone (atrasado).
 
 | Mitad | Ruta | Stack | Rol |
 |---|---|---|---|
-| [[GuacaMalla (Android)]] | `android/` | Android nativo, Kotlin + Compose | App principal: malla L2 sin conexión por BLE (+ Wi-Fi Aware pendiente). Proyecto Gradle autocontenido. |
-| [[Backend Data-Mule]] | `backend/` + `packages/` | Bun + TypeScript (Fastify, Supabase) | Punto **opcional** de ingesta "data-mule", canales oficiales, histórico de ubicación y flujo de [[Resolve y Confirmacion de Rescate\|resolución de rescate]]. |
+| [[GuacaMalla (Android)]] | `guacamalla-mobile/` | Android nativo, Kotlin + Compose | App principal: malla L2 sin conexión por BLE (+ Wi-Fi Aware pendiente). Proyecto Gradle autocontenido. |
+| [[Backend Data-Mule]] | `guacamalla-api/` + `packages/` | Bun + TypeScript (Fastify, Supabase) | Punto **opcional** de ingesta "data-mule", canales oficiales, histórico de ubicación y flujo de [[Resolve y Confirmacion de Rescate\|resolución de rescate]]. |
 
 El puente entre ambos es el endpoint `POST /ingest` — ver [[Backend Data-Mule]] y [[Protocolo y Frame]].
 

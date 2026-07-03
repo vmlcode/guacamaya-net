@@ -119,7 +119,7 @@ Se replica el patrón `store.ts` (in-memory) + `*Repo.ts` (Supabase + fallback),
 igual que `channelsStore` / `channelsRepo`. Al ser append-only, el contrato se
 parece mucho al de canales.
 
-### 3.1 `backend/src/locations/store.ts` (fallback in-memory)
+### 3.1 `guacamalla-api/src/locations/store.ts` (fallback in-memory)
 
 ```ts
 import { LocationPoint } from "@guacamaya/shared";
@@ -146,7 +146,7 @@ export const locationsStore = {
 };
 ```
 
-### 3.2 `backend/src/db/locationsRepo.ts` (Supabase + fallback)
+### 3.2 `guacamalla-api/src/db/locationsRepo.ts` (Supabase + fallback)
 
 Mismo contrato; persiste a Supabase cuando está configurado. El append-only con
 dedupe se expresa con `upsert(..., { onConflict: "id", ignoreDuplicates: true })`
@@ -162,7 +162,7 @@ dedupe se expresa con `upsert(..., { onConflict: "id", ignoreDuplicates: true })
 Para lotes grandes: aceptar `upsert` de un array completo en una sola llamada
 (más eficiente que punto a punto).
 
-### 3.3 Esquema SQL — `backend/supabase/schema.sql`
+### 3.3 Esquema SQL — `guacamalla-api/supabase/schema.sql`
 
 ```sql
 create table if not exists public.location_points (
@@ -188,7 +188,7 @@ alter table public.location_points enable row level security;  -- service-role l
 
 ---
 
-## 4. Endpoints (`backend/src/locations/routes.ts`)
+## 4. Endpoints (`guacamalla-api/src/locations/routes.ts`)
 
 Nuevo plugin de rutas, registrado en `index.ts` junto a `channelRoutes`.
 
@@ -253,16 +253,16 @@ Mapa en vivo: añadir `broadcastLocation(p)` en `ws/server.ts` que emite
 
 - [ ] `LocationPoint` (con `id`) en `packages/shared/src/types.ts`
 - [ ] `getLocationId()` en `packages/shared/src/crypto.ts` (espejo de `getRecordId`)
-- [ ] `backend/src/locations/store.ts` (append-only, dedupe por `id`)
-- [ ] `backend/src/db/locationsRepo.ts` (Supabase upsert `onConflict: "id"` + fallback)
+- [ ] `guacamalla-api/src/locations/store.ts` (append-only, dedupe por `id`)
+- [ ] `guacamalla-api/src/db/locationsRepo.ts` (Supabase upsert `onConflict: "id"` + fallback)
 - [ ] Tabla `location_points` (PK = `id` + índices) en `supabase/schema.sql`
-- [ ] `backend/src/locations/routes.ts`: `POST /ingest/locations` + `GET /locations`
+- [ ] `guacamalla-api/src/locations/routes.ts`: `POST /ingest/locations` + `GET /locations`
       (recalcula `id` en el server)
-- [ ] Registrar `locationRoutes` en `backend/src/index.ts`
+- [ ] Registrar `locationRoutes` en `guacamalla-api/src/index.ts`
 - [ ] (Opcional) `broadcastLocation` en `ws/server.ts`
 - [ ] Tests: **re-subida de la misma mula y de mulas distintas dedupea por `id`**,
       validación de rangos, orden temporal
-- [ ] Nota de privacidad + retención en `backend/README.md`
+- [ ] Nota de privacidad + retención en `guacamalla-api/README.md`
 
 ---
 

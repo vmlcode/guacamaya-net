@@ -74,7 +74,7 @@ HTTPS para cualquier despliegue real.
 Verificada la **pata de aceptación del backend** — que un frame con el layout exacto de
 `IngestFrame` (118 B, `payload@0 ‖ pubkey@22 ‖ sig@54`) pasa la cascada zero-trust. El orden
 de bytes coincide en las tres fuentes: `IngestFrame.encode` (Kotlin) == `gen-postman-frames.ts`
-== offsets de `frame.ts`. Contra `bun run dev:backend` (store en memoria, llaves efímeras):
+== offsets de `frame.ts`. Contra `bun run dev:api` (store en memoria, llaves efímeras):
 
 | Caso | Resultado |
 |---|---|

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'android/**'
+      - 'guacamalla-mobile/**'
       - '.github/workflows/android-distribute.yml'
   workflow_dispatch:
 
@@ -22,7 +22,7 @@ jobs:
           cache: gradle
 
       - name: Write release notes from last commit
-        run: git log -1 --pretty=format:"%s%n%n%b" > android/app/release-notes.txt
+        run: git log -1 --pretty=format:"%s%n%n%b" > guacamalla-mobile/app/release-notes.txt
 
       - name: Write Firebase service account
         env:
@@ -30,7 +30,7 @@ jobs:
         run: echo "$FIREBASE_SERVICE_ACCOUNT" > /tmp/sa.json
 
       - name: Build & distribute debug APK
-        working-directory: android
+        working-directory: guacamalla-mobile
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
         run: >

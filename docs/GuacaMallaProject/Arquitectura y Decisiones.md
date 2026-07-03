@@ -15,12 +15,12 @@ malla asíncrona, oportunista, sin conexión que caer ni servidor que falle. Ver
 
 Antes el repo tenía **dos productos en linajes de rama separados** que compartían commit raíz pero no
 código y "no se fusionaban". Eso cambió: la app Android se **fusionó dentro de la rama `develop`**
-bajo `android/` (commit `3441089`). Hoy `develop` es el monorepo con ambas mitades:
+bajo `guacamalla-mobile/` (commit `3441089`). Hoy `develop` es el monorepo con ambas mitades:
 
-- `backend/` + `packages/` — backend Bun/TS ([[Backend Data-Mule]]).
-- `android/` — app Kotlin/Compose ([[GuacaMalla (Android)]]), **proyecto Gradle autocontenido** (su
-  propio `gradlew`, `build.gradle.kts`, `docs/`, `CLAUDE.md`). Se abre `android/` directo en Android
-  Studio, no la raíz del repo. `android/` **no** es un workspace de Bun.
+- `guacamalla-api/` + `packages/` — backend Bun/TS ([[Backend Data-Mule]]).
+- `guacamalla-mobile/` — app Kotlin/Compose ([[GuacaMalla (Android)]]), **proyecto Gradle autocontenido** (su
+  propio `gradlew`, `build.gradle.kts`, `docs/`, `CLAUDE.md`). Se abre `guacamalla-mobile/` directo en Android
+  Studio, no la raíz del repo. `guacamalla-mobile/` **no** es un workspace de Bun.
 
 La rama `init-sosnet` quedó con el layout viejo standalone (atrasado respecto a `develop`).
 
