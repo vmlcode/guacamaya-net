@@ -1,5 +1,7 @@
 import { Nav } from "@/components/site/Nav";
 import { Hero } from "@/components/site/Hero";
+import { ProofBand } from "@/components/site/ProofBand";
+import { HowItWorks } from "@/components/site/HowItWorks";
 import { Architecture } from "@/components/site/Architecture";
 import { ProofPacket } from "@/components/site/ProofPacket";
 import { Showcase } from "@/components/site/Showcase";
@@ -13,6 +15,8 @@ export function App() {
     <main className="min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
       <Nav />
       <Hero />
+      <ProofBand />
+      <HowItWorks />
       <Architecture />
       <ProofPacket />
       <Showcase />

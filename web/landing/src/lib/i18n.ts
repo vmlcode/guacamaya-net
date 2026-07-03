@@ -16,7 +16,32 @@ export const dict = {
       titleC: "tu señal sigue viva.",
       sub: "Red de emergencia BLE-mesh sin conexión. Cada teléfono retransmite un paquete SOS firmado, salto a salto. Sin torres, sin internet, sin servidor.",
       cta: "Únete a la lista",
-      scrollHint: "Desplázate",
+      scrollHint: "Cómo funciona",
+    },
+    band: {
+      items: [
+        { n: "0", l: "torres necesarias" },
+        { n: "0", l: "servidores obligatorios" },
+        { n: "22 B", l: "por señal, firmada Ed25519" },
+        { n: "100%", l: "sin conexión, por diseño" },
+      ],
+    },
+    how: {
+      section: "CÓMO FUNCIONA",
+      title: "Tu señal salta de mano en mano hasta encontrar ayuda.",
+      sub: "Sin infraestructura. Cada teléfono cercano recibe tu auxilio, lo guarda y lo vuelve a emitir. Así el mensaje viaja más allá de tu alcance de radio.",
+      steps: [
+        { t: "Transmites tu SOS", d: "Pulsas una vez. Tu ubicación, tipo de auxilio y batería se empaquetan en 22 bytes y se firman con tu llave." },
+        { t: "Los teléfonos cercanos lo repiten", d: "Cada equipo en alcance lo escucha por Bluetooth, lo verifica y lo vuelve a emitir. Salto a salto, sin que nadie tenga que aceptar nada." },
+        { t: "Llega a quien puede ayudar", d: "El auxilio aparece en el radar de cada persona en la cadena. Cuando alguien recupera internet, puede subirlo a las autoridades." },
+      ],
+      proof: "Cada salto re-verifica la firma Ed25519 antes de retransmitir. Lo falsificado o alterado se descarta en silencio.",
+      relay: {
+        origin: "origen · TTL 8",
+        hop1: "salto 1 · TTL 7",
+        hop2: "salto 2 · TTL 6",
+        received: "recibido",
+      },
     },
     arch: {
       section: "ARQUITECTURA",
@@ -74,7 +99,32 @@ export const dict = {
       titleC: "your signal stays alive.",
       sub: "Connectionless BLE-mesh emergency network. Every phone relays a signed SOS packet, hop by hop. No towers, no internet, no server.",
       cta: "Join the waitlist",
-      scrollHint: "Scroll",
+      scrollHint: "How it works",
+    },
+    band: {
+      items: [
+        { n: "0", l: "towers required" },
+        { n: "0", l: "mandatory servers" },
+        { n: "22 B", l: "per signal, Ed25519-signed" },
+        { n: "100%", l: "offline, by design" },
+      ],
+    },
+    how: {
+      section: "HOW IT WORKS",
+      title: "Your signal hops hand to hand until it finds help.",
+      sub: "No infrastructure. Every nearby phone receives your call, stores it, and broadcasts it again. That's how the message travels beyond your own radio range.",
+      steps: [
+        { t: "You send your SOS", d: "One tap. Your location, type of emergency and battery are packed into 22 bytes and signed with your key." },
+        { t: "Nearby phones repeat it", d: "Every device in range hears it over Bluetooth, verifies it, and broadcasts it again. Hop by hop — no one has to accept anything." },
+        { t: "It reaches someone who can help", d: "The call shows up on the radar of everyone in the chain. When someone regains internet, they can pass it to the authorities." },
+      ],
+      proof: "Every hop re-verifies the Ed25519 signature before relaying. Anything forged or altered is dropped silently.",
+      relay: {
+        origin: "origin · TTL 8",
+        hop1: "hop 1 · TTL 7",
+        hop2: "hop 2 · TTL 6",
+        received: "received",
+      },
     },
     arch: {
       section: "ARCHITECTURE",

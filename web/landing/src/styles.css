@@ -105,4 +105,45 @@
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
+/* Relay strip — signal hopping origin → hops → received */
+
+/* one continuous dashed line moving forward (origin → received) through all nodes */
+@keyframes relay-flow {
+  from { background-position: 0 0; }
+  to   { background-position: 22px 0; }
+}
+.relay-line {
+  background-image: repeating-linear-gradient(90deg, var(--primary) 0 7px, transparent 7px 22px);
+  background-size: 22px 100%;
+  background-repeat: repeat-x;
+  opacity: 0.55;
+  animation: relay-flow 0.85s linear infinite;
+}
+
+/* each node breathes */
+@keyframes relay-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.07); }
+}
+.relay-node        { animation: relay-breathe 2.4s ease-in-out infinite; }
+.relay-node-origin { animation: relay-breathe 2.4s ease-in-out infinite, relay-glow-origin 2.4s ease-in-out infinite; }
+.relay-node-recv   { animation: relay-breathe 2.4s ease-in-out infinite, relay-glow-recv 2.4s ease-in-out infinite; }
+
+/* soft glow pulse on the two filled end nodes */
+@keyframes relay-glow-origin {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+  50%      { box-shadow: 0 0 26px 2px rgba(244, 63, 94, 0.5); }
+}
+@keyframes relay-glow-recv {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(250, 255, 105, 0); }
+  50%      { box-shadow: 0 0 26px 2px rgba(250, 255, 105, 0.45); }
+}
+
+/* expanding ripple behind each node */
+@keyframes relay-ripple {
+  0%   { transform: scale(0.9); opacity: 0.65; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+.relay-ripple { animation: relay-ripple 2.4s ease-out infinite; }
+
 html { scroll-behavior: smooth; }
