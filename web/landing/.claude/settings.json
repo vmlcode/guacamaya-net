@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "lovable@claude-plugins-official": true
+  }
+}
