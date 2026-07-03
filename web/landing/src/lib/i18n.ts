@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useSyncExternalStore, useCallback } from "react";
 
 export type Lang = "es" | "en";
 
@@ -173,31 +173,42 @@ export const dict = {
 
 const KEY = "guacamalla:lang";
 
-function detectLang(): Lang {
-  if (typeof window === "undefined") return "es";
+// Shared module-level store so every useLanguage() consumer stays in sync
+// (no context provider needed). Initialised once from localStorage on load.
+let currentLang: Lang = "es";
+const listeners = new Set<() => void>();
+
+if (typeof window !== "undefined") {
   const stored = window.localStorage.getItem(KEY) as Lang | null;
-  if (stored === "es" || stored === "en") return stored;
   // Default to Spanish for this Venezuela-first product.
-  return "es";
+  if (stored === "es" || stored === "en") currentLang = stored;
+  document.documentElement.lang = currentLang;
+}
+
+function setLangGlobal(l: Lang) {
+  if (l === currentLang) return;
+  currentLang = l;
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(KEY, l);
+    document.documentElement.lang = l;
+  }
+  listeners.forEach((fn) => fn());
+}
+
+function subscribe(cb: () => void) {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
 }
 
 export function useLanguage() {
-  const [lang, setLangState] = useState<Lang>("es");
-
-  useEffect(() => {
-    const l = detectLang();
-    setLangState(l);
-    document.documentElement.lang = l;
-  }, []);
-
-  const setLang = useCallback((l: Lang) => {
-    setLangState(l);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(KEY, l);
-      document.documentElement.lang = l;
-    }
-  }, []);
-
+  const lang = useSyncExternalStore(
+    subscribe,
+    () => currentLang,
+    () => "es" as Lang,
+  );
+  const setLang = useCallback((l: Lang) => setLangGlobal(l), []);
   const t = dict[lang];
   return { lang, setLang, t };
 }
