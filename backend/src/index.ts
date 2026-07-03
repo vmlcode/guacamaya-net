@@ -41,17 +41,20 @@ await app.register(waitlistRoutes);
 
 app.get("/health", async () => ({ ok: true }));
 
-// Serves the compiled marketing/waitlist page (web/landing) at GET / and its
-// asset paths — same origin as the API, so the waitlist form needs no CORS
-// config. Falls back to a JSON message if the frontend hasn't been built
-// (e.g. a fresh checkout that only ran `bun run dev:backend`).
-const LANDING_DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/landing/dist");
+// Serves the compiled marketing/waitlist page (guacamalla-landing/landing) at
+// GET / and its asset paths — same origin as the API, so the waitlist form
+// needs no CORS config. Falls back to a JSON message if the frontend hasn't
+// been built (e.g. a fresh checkout that only ran `bun run dev:backend`).
+const LANDING_DIST = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../guacamalla-landing/landing/dist",
+);
 if (fs.existsSync(path.join(LANDING_DIST, "index.html"))) {
   await app.register(fastifyStatic, { root: LANDING_DIST });
 } else {
   app.log.warn(
     `Landing page build not found at ${LANDING_DIST} — GET / falls back to a JSON message. ` +
-      "Run 'bun run --cwd web/landing build' to serve the real page.",
+      "Run 'bun run --cwd guacamalla-landing/landing build' to serve the real page.",
   );
   app.get("/", async () => ({ message: "Welcome to GuacaMalla Net!" }));
 }
