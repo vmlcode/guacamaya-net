@@ -41,13 +41,20 @@ class NanMessenger private constructor(
     private val sessionRef = AtomicReference<WifiAwareSession?>(null)
     private val publishRef = AtomicReference<PublishDiscoverySession?>(null)
     private val subscribeRef = AtomicReference<SubscribeDiscoverySession?>(null)
+    private var dutyOpen: Runnable? = null
+    private var dutyClose: Runnable? = null
 
     fun interface Listener {
         fun onFrame(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, peer: PeerHandle)
     }
+    fun interface DigestListener { fun onDigest(digest: ByteArray, peer: PeerHandle) }
 
     private var listener: Listener? = null
+    private var digestListener: DigestListener? = null
     fun setListener(l: Listener) { listener = l }
+    fun setDigestListener(l: DigestListener) { digestListener = l }
+
+    fun publishDigest(ids: Collection<String>) = publish(byteArrayOf(DIGEST_TYPE) + NanDigestCodec.encode(ids))
 
     /** True when Wi-Fi Aware is attached and usable. */
     val isAttached: Boolean get() = sessionRef.get() != null
@@ -161,6 +168,10 @@ class NanMessenger private constructor(
                 matchFilter: MutableList<ByteArray>,
             ) {
                 val ssi = serviceSpecificInfo
+                if (ssi.firstOrNull() == DIGEST_TYPE) {
+                    digestListener?.onDigest(ssi.copyOfRange(1, ssi.size), peerHandle)
+                    return
+                }
                 if (ssi.size != AwareConfig.SSI_SIZE) {
                     Log.w(tag, "discovered but malformed ssi size=${ssi.size}")
                     return
@@ -177,13 +188,40 @@ class NanMessenger private constructor(
         subscribeRef.getAndSet(null)?.close()
     }
 
+    /** Listen in bounded discovery bursts instead of pinning Wi-Fi Aware on. */
+    fun startDutyCycled(cycle: NanDutyCycle) {
+        stopDutyCycled()
+        lateinit var open: Runnable
+        lateinit var close: Runnable
+        open = Runnable {
+            subscribe()
+            handler.postDelayed(close, cycle.listenMs)
+        }
+        close = Runnable {
+            stopSubscribe()
+            handler.postDelayed(open, cycle.sleepMs)
+        }
+        dutyOpen = open
+        dutyClose = close
+        handler.post(open)
+    }
+
+    fun stopDutyCycled() {
+        dutyOpen?.let(handler::removeCallbacks)
+        dutyClose?.let(handler::removeCallbacks)
+        dutyOpen = null
+        dutyClose = null
+        stopSubscribe()
+    }
+
     fun detach() {
         stopPublish()
-        stopSubscribe()
+        stopDutyCycled()
         sessionRef.getAndSet(null)?.close()
     }
 
     companion object {
+        private const val DIGEST_TYPE: Byte = 0x7e
         fun create(context: Context): NanMessenger? {
             val mgr = context.getSystemService(Context.WIFI_AWARE_SERVICE) as? WifiAwareManager
                 ?: run {

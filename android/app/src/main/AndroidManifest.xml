@@ -63,16 +63,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- adb demo: am start -a net.guacamaya.action.OBSERVE_ON -n net.guacamaya/.ui.MainActivity -->
-            <intent-filter>
-                <action android:name="net.guacamaya.action.OBSERVE_ON" />
-                <action android:name="net.guacamaya.action.OBSERVE_OFF" />
-                <action android:name="net.guacamaya.action.START" />
-                <action android:name="net.guacamaya.action.STOP" />
-                <action android:name="net.guacamaya.action.HEARTBEAT_ON" />
-                <action android:name="net.guacamaya.action.HEARTBEAT_OFF" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
         </activity>
 
         <service

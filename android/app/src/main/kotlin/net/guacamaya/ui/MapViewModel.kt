@@ -27,6 +27,9 @@ import net.guacamaya.crypto.Identity
 import net.guacamaya.mesh.MessageDao
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.mesh.GuacamayaDatabase
+import net.guacamaya.mesh.NeighborEstimateEntity
+import net.guacamaya.mesh.ChatMessageEntity
+import net.guacamaya.ble.ChatRuntime
 
 /**
  * Top-level UI state. Owns:
@@ -56,6 +59,16 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Alias for UI «recibidos» = unique node count. */
     val devicesReceived: StateFlow<Int> = knownNodes
+
+    /** Direct-neighbour filtered radio evidence for the rescue radar. This is
+     * intentionally separate from the signed SOS/message stream. */
+    val neighborEstimates: StateFlow<List<NeighborEstimateEntity>> = dao.observeNeighborEstimates()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val chatMessages: StateFlow<List<ChatMessageEntity>> = GuacamayaDatabase.get(app).chatDao().observeChatMessages()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val radioPolicy = ChatRuntime.policy
+    val chatActive = ChatRuntime.active
 
     private val _identity = MutableStateFlow<Identity?>(null)
     val identity: StateFlow<Identity?> = _identity.asStateFlow()
@@ -148,6 +161,8 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     fun setBroadcasting(on: Boolean) { _broadcasting.value = on }
     fun setObserving(on: Boolean) { _observing.value = on }
     fun setMode(m: MeshMode) { _mode.value = m }
+    fun sendChat(text: String): Result<Unit> = ChatRuntime.send(text)
+    fun openChat() { ChatRuntime.initialize(getApplication()); ChatRuntime.openActiveWindow() }
 
     private companion object {
         const val MAX_LIVE_SOS = 50

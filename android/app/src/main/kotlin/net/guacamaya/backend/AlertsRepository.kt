@@ -1,6 +1,7 @@
 package net.guacamaya.backend
 
 import android.util.Log
+import net.guacamaya.BuildConfig
 
 /** A verified official alert, ready for the UI. [payloadRaw] is the verbatim JSON. */
 data class OfficialAlert(
@@ -21,13 +22,15 @@ data class OfficialAlert(
  */
 class AlertsRepository(
     private val client: BackendClient,
+    private val backendPubkeyHex: String = BuildConfig.BACKEND_PUBLIC_KEY_HEX,
     private val officialChannels: List<String> = OFFICIAL_CHANNELS,
 ) {
     private val tag = "guacamaya.backend"
 
     suspend fun fetchVerifiedAlerts(sinceMs: Long = 0): Result<List<OfficialAlert>> {
-        val pubkey = client.pubkey()
-            ?: return Result.failure(IllegalStateException("backend pubkey unavailable"))
+        if (!backendPubkeyHex.matches(Regex("[0-9a-fA-F]{64}"))) {
+            return Result.failure(IllegalStateException("backend public-key trust anchor missing from build"))
+        }
 
         val verified = mutableListOf<OfficialAlert>()
         var dropped = 0
@@ -39,7 +42,7 @@ class AlertsRepository(
                 continue
             }
             for (rec in records) {
-                if (OfficialRecordVerifier.verify(rec, pubkey)) {
+                if (OfficialRecordVerifier.verify(rec, backendPubkeyHex)) {
                     verified += OfficialAlert(rec.id, rec.channel, rec.timestamp, rec.payloadRaw)
                 } else {
                     dropped++

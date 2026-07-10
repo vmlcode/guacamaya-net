@@ -41,6 +41,21 @@ describe("GuacaMalla Shared Utilities", () => {
     expect(id1.length).toBe(64); // SHA-256 hex is 64 chars
   });
 
+  test("record hashing survives jsonb object-key normalization", () => {
+    const base = {
+      channel: "alertas" as const,
+      timestamp: 1700000000000,
+      ttl: 3,
+      author: "backend",
+      verified: true,
+    };
+    const inserted = { title: "Sismo", severity: "alta", nested: { z: 1, a: 2 } };
+    const jsonbOrder = { nested: { a: 2, z: 1 }, severity: "alta", title: "Sismo" };
+
+    expect(getRecordId({ ...base, payload: inserted }))
+      .toBe(getRecordId({ ...base, payload: jsonbOrder }));
+  });
+
   test("signature generation & verification", async () => {
     const record: Omit<ChannelRecord, "id" | "sig"> & { verified: true } = {
       channel: "alertas",

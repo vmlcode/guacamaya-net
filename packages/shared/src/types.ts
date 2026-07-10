@@ -15,6 +15,57 @@ export interface ChannelRecord {
   verified: boolean; // true = firmado y verificado por el backend
   payload: unknown;
   sig?: string;      // firma Ed25519 hex (solo registros oficiales)
+  /**
+   * Per-author chain link: truncated hex (8-16 B) of the previous record by the
+   * same author. Internal concept name `previousAuthorRecordHash`; wire field
+   * stays `prevHash`. Distinct from `LedgerEvent.previousSosEventHash` (per-sosId
+   * chain). Carried on NAN/control records, not in BLE v1.
+   */
+  prevHash?: string;
+}
+
+export type ReceiptType = "delivery" | "soft-resolve" | "backend-resolve" | "self-cancel";
+
+/** Certificado compacto que autoriza a un rescatista a emitir soft-resolves por NAN. */
+export interface RescuerCertificate {
+  rescuerPublicKey: string;
+  issuedAt: number;
+  expiresAt: number;
+  backendSignature: string;
+}
+
+export interface CertificateRevocationList {
+  version: 1;
+  sequence: number;
+  issuedAt: number;
+  nextUpdate: number;
+  revokedPublicKeys: string[];
+  backendSignature: string;
+}
+
+/** Mensaje de control firmado; se deduplica por firma y vence explícitamente. */
+export interface ControlReceipt {
+  type: ReceiptType;
+  targetSosId: string;
+  targetSosAuthor: string;
+  issuedAt: number;
+  expiresAt: number;
+  issuerPublicKey: string;
+  certificate?: RescuerCertificate;
+  signature: string;
+  /**
+   * For `self-cancel` receipts only: the victim's Ed25519 signature over the
+   * canonical receipt bytes (same object, minus `signature` and these victim
+   * fields). Required for the ledger SOS_CANCELLED self-cancel proof.
+   * Absent for all other receipt types.
+   */
+  victimSignature?: string;   // 64-byte Ed25519 hex
+  victimPublicKey?: string;   // 32-byte hex; must equal the SOS originator's pubkey
+}
+
+export interface MeshDigest {
+  ids: string[];
+  generatedAt: number;
 }
 
 export type RecordMap = Map<string, ChannelRecord>;

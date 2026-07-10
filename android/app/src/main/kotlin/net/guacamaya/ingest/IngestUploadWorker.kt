@@ -11,6 +11,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import net.guacamaya.BuildConfig
+import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.mesh.GuacamayaDatabase
 import java.util.concurrent.TimeUnit
 
@@ -36,10 +37,37 @@ class IngestUploadWorker(
             TAG,
             "ingest run outcome=${summary.outcome} batches=${summary.batches} " +
                 "sent=${summary.framesSent} ingested=${summary.ingested} " +
-                "duplicate=${summary.duplicate} rejected=${summary.rejected}",
+                "duplicate=${summary.duplicate} rejected=${summary.rejected} " +
+                "ctrlSent=${summary.controlFramesSent} ctrlOk=${summary.controlAccepted} " +
+                "ctrlDup=${summary.controlDuplicate} ctrlRej=${summary.controlRejected}",
         )
         if (summary.rejected > 0) {
             Log.w(TAG, "backend rejected ${summary.rejected} locally-verified frames — check wire-format sync")
+        }
+        if (summary.controlRejected > 0) {
+            Log.w(TAG, "backend rejected ${summary.controlRejected} self-cancel frames — check control wire-format sync")
+        }
+
+        // Close the round-trip: re-inject any backend-minted control frames (delivery /
+        // backend-resolve) back into the mesh so they reach the victim and relay onward.
+        // Best-effort — never fails the run. Minted frames are never self-cancel, so this
+        // cannot loop back into the outbound queue.
+        var injected = 0
+        for (frameB64 in summary.mintedControlFrames) {
+            try {
+                BleMeshRuntime.injectControlFrame(frameB64)
+                injected++
+            } catch (t: Throwable) {
+                Log.w(TAG, "control inject failed: ${t.message}")
+            }
+        }
+        if (summary.mintedControlFrames.isNotEmpty()) {
+            Log.i(TAG, "control inject minted=${summary.mintedControlFrames.size} injected=$injected")
+        }
+        summary.certificateRevocationList?.let { crl ->
+            if (!MuleCrlStore.accept(applicationContext, crl, BuildConfig.BACKEND_PUBLIC_KEY_HEX)) {
+                Log.w(TAG, "discarded invalid/stale mule CRL sequence=${crl.sequence}")
+            }
         }
 
         return when (summary.outcome) {

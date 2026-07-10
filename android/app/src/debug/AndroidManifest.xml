@@ -6,6 +6,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>
+        <!-- Keep automation actions out of the exported release activity. -->
+        <activity android:name=".ui.MainActivity">
+            <intent-filter>
+                <action android:name="net.guacamaya.action.OBSERVE_ON" />
+                <action android:name="net.guacamaya.action.OBSERVE_OFF" />
+                <action android:name="net.guacamaya.action.START" />
+                <action android:name="net.guacamaya.action.STOP" />
+                <action android:name="net.guacamaya.action.HEARTBEAT_ON" />
+                <action android:name="net.guacamaya.action.HEARTBEAT_OFF" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <!--
             adb entry point for automation / demo scripts. Exported so adb shell
             am broadcast can reach it without root. Lives here (debug-only) so
@@ -18,7 +31,8 @@
         -->
         <receiver
             android:name=".adb.AdbCommandReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:permission="android.permission.DUMP">
             <intent-filter>
                 <action android:name="net.guacamaya.action.OBSERVE_ON" />
                 <action android:name="net.guacamaya.action.OBSERVE_OFF" />

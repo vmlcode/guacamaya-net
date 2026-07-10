@@ -17,8 +17,8 @@ import java.security.MessageDigest
  *      that reuses a validly-signed (id, sig) pair.
  *   2. Ed25519.verify(sig, hash, backendPubkey) — authenticity.
  *
- * `payloadJson` is [OfficialRecord.payloadRaw], the verbatim wire bytes — see
- * [RecordJson] for why it must not be re-serialized.
+ * `payloadJson` is [OfficialRecord.payloadRaw]. The backend emits canonical JSON
+ * (object keys sorted recursively), matching the representation stored by jsonb.
  *
  * This is a DISTINCT crypto path from the 22-byte mesh-frame signature
  * (`Signer.verify`): different message, different layout. Keep them separate.
