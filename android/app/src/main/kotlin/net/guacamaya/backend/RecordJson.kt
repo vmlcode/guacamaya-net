@@ -3,12 +3,9 @@ package net.guacamaya.backend
 /**
  * One official `ChannelRecord` as served by `GET /channels/:id/records`.
  *
- * [payloadRaw] is the **exact JSON text of the `payload` value as it arrived on the
- * wire** — never re-serialized. The backend signs `sha256("channel:timestamp:ttl:
- * author:verified:" + JSON.stringify(payload))`, so verification must hash the same
- * bytes the server produced; re-encoding the payload (e.g. via org.json, which does
- * not preserve key order) would change those bytes and break the signature.
- * See [OfficialRecordVerifier].
+ * [payloadRaw] preserves the canonical JSON value emitted by the backend. The
+ * backend sorts keys before signing and Supabase jsonb returns the same logical
+ * ordering, so verification hashes these exact wire bytes.
  */
 data class OfficialRecord(
     val channel: String,
@@ -22,9 +19,8 @@ data class OfficialRecord(
 )
 
 /**
- * Minimal, order-preserving JSON reader for the records endpoint. Hand-rolled (no
- * org.json) precisely so it can return each record's `payload` as the verbatim source
- * substring. Tolerant of unknown keys; assumes the compact output of the backend.
+ * Minimal JSON reader for the records endpoint. It returns each record's `payload`
+ * as a source substring for later canonicalization and is tolerant of unknown keys.
  */
 object RecordJson {
 

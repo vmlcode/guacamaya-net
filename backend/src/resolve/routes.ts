@@ -1,18 +1,31 @@
 import { FastifyInstance } from "fastify";
+import * as ed from "@noble/ed25519";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import {
   getResolveId,
   verifyResolveEnvelope,
   verifyWitnessSignature,
+  hashCanonical,
+  deriveSosId,
+  computeEventId,
+  computePayloadHash,
+  canonicalEventBytes,
   type ChannelId,
   type ChannelRecord,
+  type LedgerEvent,
   type ResolveEnvelope,
+  type ResolvePayload,
+  type ResolveQuorumProof,
   type ResolveReceipt,
   type ResolveWitness,
+  type UnsignedLedgerEvent,
 } from "@guacamaya/shared";
 import { channelsRepo } from "../db/channelsRepo.js";
 import { resolvesRepo } from "../db/resolvesRepo.js";
+import { ledgerRepo } from "../ledger/ledgerRepo.js";
 import { signRecord } from "../crypto/signer.js";
 import { broadcastRecord, broadcastResolve } from "../ws/server.js";
+import { privateKey, publicKeyBytes } from "../crypto/keys.js";
 import { requireApiKey } from "../security/auth.js";
 import { securityConfig, effectiveReadKey } from "../security/config.js";
 import { isValidResolveEnvelope } from "../security/validation.js";
@@ -106,6 +119,78 @@ async function emitResueltoRecord(
   }
 }
 
+/**
+ * Derive SOS_RESOLVED ledger event from a freshly-crossed quorum and upsert it.
+ * The witnesses (cumulative set) carry their own Ed25519 signatures; the backend
+ * re-canonicalizes them into witnessEnvelopeHash, signs canonicalEventBytes with
+ * the backend key, and persists. Idempotent by eventId — re-crossing the same
+ * quorum with the same witness set produces the same eventId and dedupes.
+ *
+ * The ledger event is *additive* — it cannot veto a CANCELLED with higher rank.
+ * reconcileState picks the winner per compareAuthority.
+ */
+async function emitResolveQuorumLedgerEvent(
+  targetRec: ChannelRecord,
+  receipt: ResolveReceipt,
+  witnesses: ResolveWitness[],
+): Promise<void> {
+  if (!targetRec.author.startsWith("device-")) return;
+  const pubkeyHex = targetRec.author.slice("device-".length);
+  const messageId = (targetRec.payload as { msgId?: unknown }).msgId;
+  if (typeof messageId !== "number" || !Number.isFinite(messageId)) return;
+
+  // The sosId belongs to the originator (author of the SOS frame), not to the
+  // backend. The backend *signs* the event via eventSignature, but issuerPublicKey
+  // here is the backend key — verifyLedgerEvent checks the backend signature, and
+  // the proof.witnessEnvelopeHash binds the witnesses. sosId is recomputed from
+  // the originator's pubkey so this RESOLVED event chains under the same sosId
+  // as the SOS_CREATED.
+  const originPubkey = hexToBytes(pubkeyHex);
+  const sosId = deriveSosId(originPubkey, messageId);
+  const issuerPublicKey = publicKeyBytes;
+
+  const previousEvents = await ledgerRepo.getEventsBySosId(sosId);
+  const created = previousEvents.find((s) => s.event.type === "SOS_CREATED");
+  const previousSosEventHash = created?.event.eventId ?? null;
+
+  const now = Date.now();
+  const payload: ResolvePayload = {
+    payloadVersion: 1,
+    resolvedAt: now,
+    quorumReachedAt: now,
+    backendIssuedAt: now,
+    witnesses,
+  };
+  const payloadHash = computePayloadHash(payload);
+  const proof: ResolveQuorumProof = {
+    proofType: "resolve-quorum",
+    proofVersion: 1,
+    resolveReceiptId: receipt.id,
+    witnessEnvelopeHash: bytesToHex(hashCanonical(witnesses)),
+    quorumCount: witnesses.length,
+  };
+  const unsigned: UnsignedLedgerEvent = {
+    version: 1,
+    sosId,
+    type: "SOS_RESOLVED",
+    previousSosEventHash,
+    issuedAt: now,
+    issuerPublicKey,
+    payload,
+    payloadHash,
+    payloadVersion: 1,
+    proof,
+  };
+  const eventId = computeEventId(unsigned);
+  const eventSignature = await ed.signAsync(canonicalEventBytes(unsigned), privateKey);
+  const event: LedgerEvent = { ...unsigned, eventId, eventSignature };
+  try {
+    await ledgerRepo.upsertEvent(event);
+  } catch (err) {
+    console.error("[ledger] SOS_RESOLVED quorum upsert failed", err);
+  }
+}
+
 export async function resolveRoutes(fastify: FastifyInstance) {
   // Accept raw image bytes for /resolve/evidence. Default Fastify parser only
   // handles application/json.
@@ -146,11 +231,15 @@ export async function resolveRoutes(fastify: FastifyInstance) {
     }
   );
 
+  // The quorum endpoint emits a terminal SOS_RESOLVED event and therefore does
+  // not implement certified, visual-only soft-resolve semantics. Keep it out of
+  // the route table unless a developer explicitly opts into legacy testing.
+  if (!securityConfig.resolve.legacyEndpointEnabled) return;
+
   fastify.post<{ Body: ResolveEnvelope }>(
     "/resolve",
     {
       config: { rateLimit: securityConfig.ingestRateLimit },
-      preHandler: perWitnessResolveLimit(),
     },
     async (request, reply) => {
       const envelope = request.body;
@@ -159,6 +248,18 @@ export async function resolveRoutes(fastify: FastifyInstance) {
           accepted: false,
           status: "rejected",
           reason: "invalid_envelope",
+        });
+      }
+
+      const now = Date.now();
+      if (
+        envelope.submittedAt < now - securityConfig.resolve.witnessMaxAgeMs ||
+        envelope.submittedAt > now + securityConfig.resolve.clockSkewMs
+      ) {
+        return reply.code(400).send({
+          accepted: false,
+          status: "rejected",
+          reason: "submitted_at_out_of_window",
         });
       }
 
@@ -206,6 +307,24 @@ export async function resolveRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Authenticate the identity before consuming its device-scoped tokens.
+      // Otherwise an attacker can spoof a victim's deviceId and exhaust that
+      // victim's bucket with invalid envelopes.
+      const submitterSignatureValid = await verifyWitnessSignature(
+        envelope,
+        envelope.witnesses[0]!,
+      );
+      if (!submitterSignatureValid) {
+        return reply.code(400).send({
+          accepted: false,
+          status: "rejected",
+          targetSosId: envelope.targetSosId,
+          reason: "signature_invalid",
+        });
+      }
+      const rateLimitResponse = await perWitnessResolveLimit()(request, reply);
+      if (rateLimitResponse) return rateLimitResponse;
+
       // Gates 5–9: per-witness processing. Skip dups and originator silently;
       // skip witnesses that fail geo/sig/token. Count only newly-accepted.
       const newAccepted: ResolveWitness[] = [];
@@ -213,6 +332,14 @@ export async function resolveRoutes(fastify: FastifyInstance) {
       for (const w of envelope.witnesses) {
         if (w.deviceId === target.author) {
           reasons.push("witness_is_originator");
+          continue;
+        }
+        if (
+          w.ts < now - securityConfig.resolve.witnessMaxAgeMs ||
+          w.ts > now + securityConfig.resolve.clockSkewMs ||
+          Math.abs(w.ts - envelope.submittedAt) > securityConfig.resolve.witnessMaxAgeMs
+        ) {
+          reasons.push("witness_timestamp_out_of_window");
           continue;
         }
         const alreadyWitnessed = await resolvesRepo.hasWitness(envelope.targetSosId, w.deviceId);
@@ -265,7 +392,6 @@ export async function resolveRoutes(fastify: FastifyInstance) {
         witnesses: allWitnesses,
       };
       const receiptId = getResolveId(canonicalEnvelope);
-      const now = Date.now();
       const previousReceipt = await resolvesRepo.getReceiptByTarget(envelope.targetSosId);
       const previouslyPending =
         previousReceipt?.status === "pending" ? previousReceipt.cooldownEndsAt : undefined;
@@ -290,13 +416,20 @@ export async function resolveRoutes(fastify: FastifyInstance) {
       };
       await resolvesRepo.upsertReceipt(receipt);
 
-      // On first quorum crossing, kick the cooldown + broadcast pending-clear.
+      // On first quorum crossing, kick the cooldown and emit the ledger verdict.
+      // The ledger SOS_RESOLVED event is the single source of truth for all visible
+      // effects (terminalControlTrusts → stop-victim-transmission on the mule path).
+      // The legacy broadcast (receipt WS push + "resuelto" record) is gated off by
+      // default and forced off in production — it only duplicated the ledger verdict.
       const justReachedQuorum = quorumSeen >= quorumNeeded && !previouslyPending;
       if (justReachedQuorum) {
-        broadcastResolve(receipt);
-        await emitResueltoRecord(target, receipt, "pending");
-      } else {
-        // Accumulating or repeat submission — broadcast updated receipt.
+        if (securityConfig.resolve.legacyBroadcast) {
+          broadcastResolve(receipt);
+          await emitResueltoRecord(target, receipt, "pending");
+        }
+        await emitResolveQuorumLedgerEvent(targetRec, receipt, allWitnesses);
+      } else if (securityConfig.resolve.legacyBroadcast) {
+        // Accumulating or repeat submission — broadcast updated receipt (legacy).
         broadcastResolve(receipt);
       }
 

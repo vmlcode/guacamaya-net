@@ -16,7 +16,7 @@ class OfficialRecordVerifierTest {
     private val backendPubkey = "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737"
 
     private val body =
-        """[{"channel":"alertas","timestamp":1782658760930,"ttl":3,"author":"backend","payload":{"title":"Sismo M6.1","severity":"alta","zona":"Centro"},"verified":true,"id":"923169ac45d5d7c74de385efb2b630e511a69e67f3ebb401e2eb34fa2fa406d9","sig":"f70d69bec71c4eec6fd3049764721950b37a3d6831915b6d7a749d05a20bfb84803e8205f0cc0e008ade196fc8176307af10aa5173011b31cdf45b9567fa270e"}]"""
+        """[{"channel":"alertas","timestamp":1782658760930,"ttl":3,"author":"backend","payload":{"severity":"alta","title":"Sismo M6.1","zona":"Centro"},"verified":true,"id":"b610be875897946fe22acc9dedc009acab8d16c03b43125d8f08a48ee54c4d85","sig":"d57f70c07a5f51785ab1a9c7813c89e663f68b7b25a2d017b70a048d17d805d4216e3403ef68c3989b5a1fa308274a9f1b929e83b2868013bc0053e51cf2c400"}]"""
 
     private fun record() = RecordJson.parseRecords(body).single()
 

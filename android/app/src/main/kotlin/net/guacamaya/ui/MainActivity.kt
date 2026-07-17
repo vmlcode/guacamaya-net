@@ -43,7 +43,9 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
+import net.guacamaya.BuildConfig
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,8 +57,10 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -89,16 +93,24 @@ import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.LocationServices
 import net.guacamaya.loc.PlatformLocation
+import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.mesh.MessageEntity
+import net.guacamaya.mesh.NeighborEstimateEntity
+import net.guacamaya.mesh.ChatMessageEntity
+import net.guacamaya.ble.RadioPolicy
+import net.guacamaya.ble.RadioTier
 import net.guacamaya.mesh.NodeCatalog
 import net.guacamaya.backend.OfficialAlert
 import net.guacamaya.service.GuacamayaForegroundService
 import org.json.JSONObject
 import net.guacamaya.util.BatteryHelper
 import kotlin.math.PI
+import kotlin.math.asin
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * VPN-style single screen. One big power button toggles mesh participation
@@ -193,6 +205,7 @@ class MainActivity : ComponentActivity() {
 
     /** MIUI/singleTop often drops intent.action; extra + prefs survive adb redispatch. */
     private fun resolveAdbAction(source: Intent?): String? {
+        if (!BuildConfig.DEBUG) return null
         source?.getStringExtra(EXTRA_ADB_ACTION)?.let { extra ->
             if (extra.startsWith("net.guacamaya.action.")) {
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_ADB_ACTION, extra).apply()
@@ -228,6 +241,7 @@ class MainActivity : ComponentActivity() {
 
     /** Route adb `am start -a …` into the foreground service (shell cannot start FGS on API 30+). */
     private fun dispatchServiceAction(action: String?) {
+        if (!BuildConfig.DEBUG) return
         if (action.isNullOrBlank() ||
             action == Intent.ACTION_MAIN ||
             !action.startsWith("net.guacamaya.action.")
@@ -312,6 +326,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun isDirectAdbLaunch(source: Intent?): Boolean {
+        if (!BuildConfig.DEBUG) return false
         val extra = source?.getStringExtra(EXTRA_ADB_ACTION)
         val action = source?.action
         return extra?.startsWith("net.guacamaya.action.") == true ||
@@ -518,16 +533,21 @@ private fun Screen(vm: MapViewModel = viewModel()) {
     val mode by vm.mode.collectAsState()
     val messages by vm.messages.collectAsState()
     val latestNodes by vm.latestNodes.collectAsState()
+    val neighborEstimates by vm.neighborEstimates.collectAsState()
     val devicesReceived by vm.devicesReceived.collectAsState()
     val totalFrames by vm.totalFrames.collectAsState()
     val alerts by vm.alerts.collectAsState()
     val liveSos by vm.liveSos.collectAsState()
     val broadcastSupported by vm.broadcastSupported.collectAsState()
+    val chatMessages by vm.chatMessages.collectAsState()
+    val radioPolicy by vm.radioPolicy.collectAsState()
+    val chatActive by vm.chatActive.collectAsState()
     val ctx = LocalContext.current
     val probeCompass = rememberCompassState()
     val probeLocation = rememberLiveLocation(ctx, highAccuracy = false)
 
     var showRadar by remember { mutableStateOf(false) }
+    var showChat by remember { mutableStateOf(false) }
     val running = broadcasting || observing
     val locationGranted = rememberLocationPermission(ctx)
     FunctionalProbe(compass = probeCompass, location = probeLocation, nodes = latestNodes, totalFrames = totalFrames)
@@ -541,6 +561,13 @@ private fun Screen(vm: MapViewModel = viewModel()) {
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // The foreground rescue view is the only place that asks the radio for the
+    // high-duty RSSI stream. Background mesh participation stays balanced.
+    DisposableEffect(showRadar) {
+        BleMeshRuntime.setRadarActive(showRadar)
+        onDispose { BleMeshRuntime.setRadarActive(false) }
     }
 
     fun send(action: String) {
@@ -597,14 +624,29 @@ private fun Screen(vm: MapViewModel = viewModel()) {
             .background(Canvas0)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        if (showRadar) {
-            RadarScreen(latestNodes = latestNodes, onBack = { showRadar = false })
+        if (showChat) {
+            ChatScreen(
+                messages = chatMessages,
+                policy = radioPolicy,
+                active = chatActive,
+                peerCount = devicesReceived,
+                onBack = { showChat = false },
+                onSend = vm::sendChat,
+            )
+        } else if (showRadar) {
+            RadarScreen(
+                latestNodes = latestNodes,
+                neighborEstimates = neighborEstimates,
+                onBack = { showRadar = false },
+                onMarkFound = { node, lat, lon -> vm.markFound(node, lat, lon) },
+            )
         } else {
             HomeScreen(
                 nodeIdHex = identity?.nodeId?.toHex(),
                 running = running,
                 mode = mode,
                 latestNodes = latestNodes,
+                neighborEstimates = neighborEstimates,
                 devicesReceived = devicesReceived,
                 alerts = alerts,
                 liveSosCount = liveSos.size,
@@ -613,6 +655,11 @@ private fun Screen(vm: MapViewModel = viewModel()) {
                 broadcastSupported = broadcastSupported,
                 locationGranted = locationGranted,
                 onOpenRadar = { showRadar = true },
+                onOpenChat = {
+                    vm.openChat()
+                    BleMeshRuntime.ensureObserving(ctx)
+                    showChat = true
+                },
             )
         }
     }
@@ -644,6 +691,7 @@ private fun HomeScreen(
     running: Boolean,
     mode: MeshMode,
     latestNodes: List<MessageEntity>,
+    neighborEstimates: List<NeighborEstimateEntity>,
     devicesReceived: Int,
     alerts: List<OfficialAlert>,
     liveSosCount: Int,
@@ -652,6 +700,7 @@ private fun HomeScreen(
     broadcastSupported: Boolean,
     locationGranted: Boolean,
     onOpenRadar: () -> Unit,
+    onOpenChat: () -> Unit,
 ) {
     val lastNode = latestNodes.firstOrNull()
     val lastRssi = lastNode?.rssi
@@ -738,7 +787,72 @@ private fun HomeScreen(
 
         Spacer(Modifier.height(Space.sm))
 
-        RadarEntry(latestNodes = latestNodes, onClick = onOpenRadar)
+        RadarEntry(
+            latestNodes = latestNodes,
+            neighborEstimates = neighborEstimates,
+            onClick = onOpenRadar,
+        )
+        Spacer(Modifier.height(Space.sm))
+        FilledTonalButton(onClick = onOpenChat, modifier = Modifier.fillMaxWidth()) {
+            Text("Chat BLE público")
+        }
+    }
+}
+
+@Composable
+private fun ChatScreen(
+    messages: List<ChatMessageEntity>,
+    policy: RadioPolicy,
+    active: Boolean,
+    peerCount: Int,
+    onBack: () -> Unit,
+    onSend: (String) -> Result<Unit>,
+) {
+    var draft by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val used = draft.toByteArray(Charsets.UTF_8).size
+    Column(Modifier.fillMaxSize().padding(Space.md)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("Atrás") }
+            Text("Chat cercano", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+        }
+        Text("Sala pública firmada · $peerCount nodos · ${policy.tier.name.lowercase()}", color = TextLo, style = MaterialTheme.typography.bodySmall)
+        Text(if (active) "Radio activo" else "Próxima ventana programada", color = if (active) SuccessC else TextLo)
+        if (policy.reducedRange) Text("Ahorro de batería: alcance reducido", color = GuacamayaPalette.Warning)
+        Text("Objetivo directo 10–20 m; no es una medición exacta.", color = TextLo, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(Space.md))
+        Column(Modifier.weight(1f).fillMaxWidth()) {
+            if (messages.isEmpty()) Text("No hay mensajes todavía. Se enviarán cuando aparezca otro nodo.", color = TextLo)
+            messages.takeLast(12).forEach { message ->
+                Surface(
+                    color = if (message.own) GuacamayaPalette.PrimaryDisabled else GuacamayaPalette.SurfaceCard,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = Space.xxs),
+                ) {
+                    Column(Modifier.padding(Space.sm)) {
+                        Text(message.text, color = TextHi)
+                        val state = when (message.deliveryState) { 0 -> "en cola"; 1 -> "anunciado"; else -> "retransmitido" }
+                        Text("${message.senderNodeId.take(8)} · $state", color = TextLo, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { candidate -> if (candidate.toByteArray(Charsets.UTF_8).size <= 160) draft = candidate },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Mensaje") },
+            supportingText = { Text("$used/160 bytes") },
+            isError = error != null,
+        )
+        error?.let { Text(it, color = DangerC, style = MaterialTheme.typography.bodySmall) }
+        Button(
+            onClick = {
+                onSend(draft).onSuccess { draft = ""; error = null }.onFailure { error = it.message }
+            },
+            enabled = used in 1..160,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Enviar por BLE") }
     }
 }
 
@@ -1102,16 +1216,22 @@ private fun StatCell(label: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun RadarEntry(latestNodes: List<MessageEntity>, onClick: () -> Unit) {
+private fun RadarEntry(
+    latestNodes: List<MessageEntity>,
+    neighborEstimates: List<NeighborEstimateEntity>,
+    onClick: () -> Unit,
+) {
     val ctx = LocalContext.current
     val heading = rememberCompassHeading()
     val location = rememberLiveLocation(ctx, highAccuracy = false)
-    val target = location?.let { GeoProximity.nearest(it, latestNodes) }
-    val relative = target?.let {
+    val gpsTarget = location?.let { GeoProximity.nearest(it, latestNodes) }
+    val criticalByNode = remember(latestNodes) { latestNodes.associate { it.nodeId.toHex() to it.critical } }
+    val signalTarget = SignalRadar.targetFor(gpsTarget?.nodeId, neighborEstimates, criticalByNode)
+    val consistency = SignalRadar.gpsConsistency(gpsTarget, signalTarget)
+    val relative = gpsTarget?.let {
         if (it.coLocated) 0f else CompassMath.relativeBearing(it.bearing, heading)
     } ?: 0f
 
-    // Compact entry — small compass + one status line + chevron.
     Row(
         Modifier
             .fillMaxWidth()
@@ -1123,35 +1243,64 @@ private fun RadarEntry(latestNodes: List<MessageEntity>, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Space.sm),
     ) {
-        RadarCompass(sizeDp = 40, heading = heading, relative = relative, target = target)
-
+        RadarCompass(
+            sizeDp = 40,
+            heading = heading,
+            relative = relative,
+            target = gpsTarget,
+            signal = signalTarget,
+            hasDirection = gpsTarget?.coLocated == false,
+            showSignalRing = consistency != SignalRadar.GpsConsistency.INCONSISTENT,
+        )
         Column(Modifier.weight(1f)) {
             Text("Radar", color = TextHi, style = MaterialTheme.typography.titleSmall)
             Text(
-                if (target == null) "Sin objetivo con GPS aún"
-                else "Nodo ${target.nodeId.take(8)} · ${GeoProximity.formatDistance(target)}",
+                when {
+                    gpsTarget != null -> "Nodo ${gpsTarget.nodeId.take(8)} · ${GeoProximity.formatDistance(gpsTarget)}"
+                    signalTarget != null -> "Nodo ${signalTarget.nodeId.take(8)} · ${SignalRadar.rangeLabel(signalTarget)}"
+                    else -> "Sin objetivo directo aún"
+                },
                 color = TextLo,
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-
         Text("›", color = TextLo, style = MaterialTheme.typography.titleMedium)
     }
 }
 
 @Composable
-private fun RadarScreen(latestNodes: List<MessageEntity>, onBack: () -> Unit) {
+private fun RadarScreen(
+    latestNodes: List<MessageEntity>,
+    neighborEstimates: List<NeighborEstimateEntity>,
+    onBack: () -> Unit,
+    onMarkFound: (MessageEntity, Double, Double) -> Unit,
+) {
     val ctx = LocalContext.current
     var compassKey by remember { mutableIntStateOf(0) }
     val heading = rememberCompassHeading(reloadKey = compassKey)
     val location = rememberLiveLocation(ctx, highAccuracy = true)
-    val target = location?.let { GeoProximity.nearest(it, latestNodes) }
-    val targetNode = target?.let { t -> latestNodes.firstOrNull { it.nodeId.toHex() == t.nodeId } }
-    val relative = target?.let {
+    val gpsTarget = location?.let { GeoProximity.nearest(it, latestNodes) }
+    val criticalByNode = remember(latestNodes) { latestNodes.associate { it.nodeId.toHex() to it.critical } }
+    val signalTarget = SignalRadar.targetFor(gpsTarget?.nodeId, neighborEstimates, criticalByNode)
+    val consistency = SignalRadar.gpsConsistency(gpsTarget, signalTarget)
+    val targetNodeId = gpsTarget?.nodeId ?: signalTarget?.nodeId
+    val targetNode = targetNodeId?.let { id -> latestNodes.firstOrNull { it.nodeId.toHex() == id } }
+
+    val sweep = remember(signalTarget?.nodeId) { BodyBearingSweep() }
+    var sweepResult by remember(signalTarget?.nodeId) { mutableStateOf<BodyBearingSweep.Result?>(null) }
+    LaunchedEffect(signalTarget?.nodeId, signalTarget?.estimate?.updatedAt, heading) {
+        if (gpsTarget == null && signalTarget?.estimate?.stable == true) {
+            sweepResult = sweep.record(heading, signalTarget.estimate.filteredRssi, System.currentTimeMillis())
+        }
+    }
+    val bodyBearing = sweepResult?.takeIf { it.confident && signalTarget?.estimate?.stable == true }?.bearing
+    val relative = gpsTarget?.let {
         if (it.coLocated) 0f else CompassMath.relativeBearing(it.bearing, heading)
-    } ?: 0f
+    } ?: bodyBearing?.let { CompassMath.relativeBearing(it, heading) } ?: 0f
+    val hasDirection = gpsTarget?.coLocated == false || bodyBearing != null
+    val critical = gpsTarget?.critical ?: signalTarget?.critical ?: false
 
     Column(
         Modifier.fillMaxSize().padding(Space.md),
@@ -1167,47 +1316,92 @@ private fun RadarScreen(latestNodes: List<MessageEntity>, onBack: () -> Unit) {
         }
 
         Spacer(Modifier.weight(0.7f))
-
-        RadarCompass(sizeDp = 280, heading = heading, relative = relative, target = target)
-
+        RadarCompass(
+            sizeDp = 280,
+            heading = heading,
+            relative = relative,
+            target = gpsTarget,
+            signal = signalTarget,
+            hasDirection = hasDirection,
+            showSignalRing = consistency != SignalRadar.GpsConsistency.INCONSISTENT,
+        )
         Spacer(Modifier.height(Space.xl))
 
-        if (target == null) {
-            Text("Sin objetivo con GPS", color = TextHi, style = MaterialTheme.typography.headlineSmall)
+        when {
+            gpsTarget != null -> {
+                Text(
+                    GeoProximity.formatDistance(gpsTarget),
+                    color = if (critical) DangerC else InfoC,
+                    style = MaterialTheme.typography.displaySmall,
+                )
+                Text("hacia nodo ${gpsTarget.nodeId.take(8)}", color = TextHi, style = MaterialTheme.typography.titleMedium)
+                Text("posición GPS firmada por la mesh", color = TextLo, style = MaterialTheme.typography.labelMedium)
+                if (gpsTarget.coLocated) {
+                    Text("GPS sin resolución para esta distancia", color = TextLo, style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Text(
+                        "${relative.roundToInt()}° relativo · bearing ${gpsTarget.bearing.roundToInt()}° · brújula ${heading.roundToInt()}°",
+                        color = TextLo,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+                when {
+                    signalTarget == null -> Text("sin señal directa; solo posición reportada", color = TextLo, style = MaterialTheme.typography.labelMedium)
+                    consistency == SignalRadar.GpsConsistency.INCONSISTENT -> Text("señal directa ${SignalRadar.rangeLabel(signalTarget)}: inconsistente con GPS firmado", color = DangerC, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+                }
+            }
+            signalTarget != null -> {
+                Text(
+                    SignalRadar.rangeLabel(signalTarget),
+                    color = if (critical) DangerC else InfoC,
+                    style = MaterialTheme.typography.displaySmall,
+                )
+                Text("señal de nodo ${signalTarget.nodeId.take(8)}", color = TextHi, style = MaterialTheme.typography.titleMedium)
+                if (bodyBearing != null) {
+                    Text(
+                        "${relative.roundToInt()}° por barrido corporal · confianza baja",
+                        color = TextLo,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                } else {
+                    Text("Haz un giro lento de 15-20 s, o dos vueltas, con el teléfono al pecho", color = TextLo, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
+                }
+            }
+            else -> {
+                Text("Sin objetivo directo", color = TextHi, style = MaterialTheme.typography.headlineSmall)
+                Text("El radar mostrará GPS o una señal BLE autenticada al recibirla.", color = TextLo, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+            }
+        }
+
+        targetNode?.let { node ->
             Spacer(Modifier.height(Space.xxs))
             Text(
-                "Enciende SOS o Ambos en el otro teléfono y espera su señal con GPS.",
-                color = TextLo,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
+                "Último ${NodeCatalog.signalKind(node)}: ${NodeCatalog.formatLastHeartbeat(node.receivedAt)}",
+                color = InfoC,
+                style = MaterialTheme.typography.titleSmall,
             )
-        } else {
+        }
+        signalTarget?.let { signal ->
+            Spacer(Modifier.height(Space.xxs))
             Text(
-                GeoProximity.formatDistance(target),
-                color = if (target.critical) DangerC else InfoC,
-                style = MaterialTheme.typography.displaySmall,
+                "${SignalRadar.sourceLabel(signal.estimate.source)} filtrado ${signal.estimate.filteredRssi.roundToInt()} dBm · ${SignalRadar.statusLabel(signal.state)}",
+                color = TextLo,
+                style = MaterialTheme.typography.labelMedium,
             )
-            Text("hacia nodo ${target.nodeId.take(8)}", color = TextHi, style = MaterialTheme.typography.titleMedium)
-            targetNode?.let { node ->
-                Spacer(Modifier.height(Space.xxs))
+            if (gpsTarget != null) {
                 Text(
-                    "Último ${NodeCatalog.signalKind(node)}: ${NodeCatalog.formatLastHeartbeat(node.receivedAt)}",
-                    color = InfoC,
-                    style = MaterialTheme.typography.titleSmall,
+                    SignalRadar.consistencyLabel(consistency),
+                    color = if (consistency == SignalRadar.GpsConsistency.INCONSISTENT) DangerC else TextLo,
+                    style = MaterialTheme.typography.labelMedium,
                 )
             }
-            Spacer(Modifier.height(Space.xs))
-            if (target.coLocated) {
-                Text("Dispositivos juntos — GPS no distingue cm", color = TextLo, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
-                Text("Usa la brújula; calibra apuntando al norte", color = TextLo, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center)
-            } else {
-                Text("${relative.roundToInt()}° relativo · bearing ${target.bearing.roundToInt()}° · brújula ${heading.roundToInt()}°", color = TextLo, style = MaterialTheme.typography.labelMedium)
-            }
-            Text("rssi ${target.rssi} dBm · ±${target.uncertaintyMeters.roundToInt()} m GPS · ${if (target.critical) "SOS" else "presencia"}", color = TextLo, style = MaterialTheme.typography.labelMedium)
+        }
+
+        targetNode?.let { node ->
+            FoundReportSection(targetNode = node, location = location, onMarkFound = onMarkFound)
         }
 
         Spacer(Modifier.height(Space.md))
-
         Column(
             Modifier
                 .fillMaxWidth()
@@ -1220,7 +1414,8 @@ private fun RadarScreen(latestNodes: List<MessageEntity>, onBack: () -> Unit) {
             Spacer(Modifier.height(Space.xxs))
             Text("GPS local: ${location?.accuracy?.roundToInt()?.let { "±$it m" } ?: "sin fix"}", color = TextLo, style = MaterialTheme.typography.bodySmall)
             Text("Objetivos con GPS: ${latestNodes.count { it.latE7 != 0 || it.lonE7 != 0 }}", color = TextLo, style = MaterialTheme.typography.bodySmall)
-            Text("Nota: a <15 m la distancia GPS se muestra como «junto».", color = TextLo, style = MaterialTheme.typography.labelMedium)
+            Text("Muestras BLE directas: ${neighborEstimates.count { net.guacamaya.mesh.NeighborState.at(it.lastSeenAt, System.currentTimeMillis()) != net.guacamaya.mesh.NeighborState.LOST }}", color = TextLo, style = MaterialTheme.typography.bodySmall)
+            Text("BLE da un anillo de incertidumbre, no una posición ni autoridad de protocolo.", color = TextLo, style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(Space.xs))
             FilledTonalButton(
                 onClick = {
@@ -1234,16 +1429,24 @@ private fun RadarScreen(latestNodes: List<MessageEntity>, onBack: () -> Unit) {
                 shape = MaterialTheme.shapes.medium,
             ) { Text("Calibrar norte (top del teléfono → N)", style = MaterialTheme.typography.labelLarge) }
         }
-
         Spacer(Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun RadarCompass(sizeDp: Int, heading: Float, relative: Float, target: GeoProximity.Result?) {
+private fun RadarCompass(
+    sizeDp: Int,
+    heading: Float,
+    relative: Float,
+    target: GeoProximity.Result?,
+    signal: SignalRadar.Target?,
+    hasDirection: Boolean,
+    showSignalRing: Boolean,
+) {
     val arrowAlpha = if (target?.coLocated == true) 0.35f else 1f
+    val signalColor = if (target?.critical == true || signal?.critical == true) DangerC else InfoC
+    val signalEstimate = signal?.estimate
     Box(Modifier.size(sizeDp.dp), contentAlignment = Alignment.Center) {
-        // Rose rotates so N aligns with true north; arrow shows target relative to phone top.
         Box(Modifier.fillMaxSize().rotate(-heading), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val r = size.minDimension / 2
@@ -1252,6 +1455,15 @@ private fun RadarCompass(sizeDp: Int, heading: Float, relative: Float, target: G
                 drawCircle(color = CardLine.copy(alpha = 0.35f), radius = r * 0.33f, style = Stroke(width = 1.dp.toPx()))
                 drawLine(TextLo.copy(alpha = 0.35f), Offset(r, 0f), Offset(r, size.height), strokeWidth = 1.dp.toPx())
                 drawLine(TextLo.copy(alpha = 0.35f), Offset(0f, r), Offset(size.width, r), strokeWidth = 1.dp.toPx())
+                signalEstimate?.takeIf { it.stable && showSignalRing }?.distanceMeters?.let { distance ->
+                    val uncertainty = signalEstimate.uncertaintyMeters ?: distance * 0.7f
+                    val band = (uncertainty / distance.coerceAtLeast(0.5f)).coerceIn(0.14f, 0.7f)
+                    drawCircle(
+                        color = signalColor.copy(alpha = 0.55f),
+                        radius = r * 0.54f,
+                        style = Stroke(width = r * band * 0.34f),
+                    )
+                }
             }
             Text(
                 "N",
@@ -1260,13 +1472,15 @@ private fun RadarCompass(sizeDp: Int, heading: Float, relative: Float, target: G
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = 6.dp),
             )
         }
-        Text(
-            "▲",
-            color = target?.let { if (it.critical) DangerC else InfoC }?.copy(alpha = arrowAlpha) ?: TextLo.copy(alpha = arrowAlpha),
-            fontSize = (sizeDp / 3).sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.rotate(relative),
-        )
+        if (hasDirection) {
+            Text(
+                "▲",
+                color = signalColor.copy(alpha = arrowAlpha),
+                fontSize = (sizeDp / 3).sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.rotate(relative),
+            )
+        }
     }
 }
 
@@ -1315,6 +1529,91 @@ private fun BackButton(onBack: () -> Unit) {
         colors = ButtonDefaults.filledTonalButtonColors(containerColor = CardBg, contentColor = TextHi),
         shape = MaterialTheme.shapes.medium,
     ) { Text("‹ Volver", style = MaterialTheme.typography.labelLarge) }
+}
+
+/** Local mirror of the backend's FOUND_PROXIMITY_METERS default (100 m). The
+ *  backend computes the authoritative verdict; this only powers the pre-check UI. */
+private const val FOUND_NEAR_METERS = 100.0
+
+/**
+ * "Marcar como encontrado": queues a signed Encontrado report for the radar's
+ * current target. Before queueing, shows a proximity pre-check against the
+ * target's last reported point — near (≤100 m) reads as "probable encontrado",
+ * far warns "posible falso positivo" so trolls/mistakes are flagged, not hidden.
+ */
+@Composable
+private fun FoundReportSection(
+    targetNode: MessageEntity,
+    location: Location?,
+    onMarkFound: (MessageEntity, Double, Double) -> Unit,
+) {
+    // Without the target's fix there is no reference point to validate against.
+    if (targetNode.latE7 == 0 && targetNode.lonE7 == 0) return
+    val nodeKey = "${targetNode.nodeId.toHex()}-${targetNode.msgId}"
+    var showDialog by remember(nodeKey) { mutableStateOf(false) }
+    var queued by remember(nodeKey) { mutableStateOf(false) }
+
+    Spacer(Modifier.height(Space.sm))
+    if (queued) {
+        Text(
+            "Reporte \"Encontrado\" en cola — se subirá al backend con conexión",
+            color = InfoC,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+        )
+        return
+    }
+    FilledTonalButton(
+        onClick = { showDialog = true },
+        enabled = location != null,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(if (location != null) "Marcar como encontrado" else "Marcar como encontrado (esperando GPS)")
+    }
+
+    if (showDialog && location != null) {
+        val distance = haversineMeters(
+            location.latitude, location.longitude,
+            targetNode.latE7 / 1e7, targetNode.lonE7 / 1e7,
+        )
+        val near = distance <= FOUND_NEAR_METERS
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("¿Marcar nodo ${targetNode.nodeId.toHex().take(8)} como encontrado?") },
+            text = {
+                Text(
+                    if (near) {
+                        "✅ Estás a ~${distance.roundToInt()} m del último punto reportado. " +
+                            "Probable encontrado."
+                    } else {
+                        "⚠️ Estás a ~${distance.roundToInt()} m del último punto reportado " +
+                            "(más de ${FOUND_NEAR_METERS.roundToInt()} m). El reporte se marcará " +
+                            "como posible falso positivo."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onMarkFound(targetNode, location.latitude, location.longitude)
+                    queued = true
+                    showDialog = false
+                }) { Text("Confirmar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) { Text("Cancelar") }
+            },
+        )
+    }
+}
+
+/** Great-circle distance in meters — mirror of `haversineMeters` in @guacamaya/shared. */
+private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val r = 6_371_000.0
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = sin(dLat / 2).pow(2) +
+        cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
+    return 2 * r * asin(sqrt(a))
 }
 
 private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }

@@ -42,9 +42,15 @@ class Broadcaster private constructor(
      * signature, concatenated into a single service-data blob keyed by the GuacaMalla
      * Service UUID. [ttl] is the unsigned hop budget (0..15) written at offset 0.
      */
-    fun start(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int = BleConfig.ORIGIN_HOP_TTL) {
+    fun start(
+        payload22: ByteArray,
+        pub32: ByteArray,
+        sig64: ByteArray,
+        ttl: Int = BleConfig.ORIGIN_HOP_TTL,
+        params: android.bluetooth.le.AdvertisingSetParameters = BleConfig.parametersCompat,
+    ) {
         pendingPayload = Quad(payload22, pub32, sig64, ttl)
-        beginAdvertising(BleConfig.parametersCompat, "1M/1M")
+        beginAdvertising(params, "1M/1M")
     }
 
     private fun beginAdvertising(params: android.bluetooth.le.AdvertisingSetParameters, label: String) {

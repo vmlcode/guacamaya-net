@@ -16,6 +16,14 @@ object Signer {
     const val PUBLIC_KEY_SIZE = 32
     const val PRIVATE_KEY_SIZE = 32
 
+    /** Derive the 32-byte Ed25519 public key from a 32-byte private key. */
+    fun derivePublicKey(privateKey: ByteArray): ByteArray {
+        require(privateKey.size == PRIVATE_KEY_SIZE) {
+            "private key must be $PRIVATE_KEY_SIZE bytes, got ${privateKey.size}"
+        }
+        return Ed25519PrivateKeyParameters(privateKey, 0).generatePublicKey().encoded
+    }
+
     /** Sign the full 22-byte payload (CRC included). Returns 64-byte signature. */
     fun sign(privateKey: ByteArray, payload: ByteArray): ByteArray {
         require(privateKey.size == PRIVATE_KEY_SIZE) {
@@ -35,6 +43,23 @@ object Signer {
     fun verify(publicKey: ByteArray, payload: ByteArray, signature: ByteArray): Boolean {
         if (payload.size != PayloadBytes.PAYLOAD_SIZE) return false
         return verifyMessage(publicKey, payload, signature)
+    }
+
+    /**
+     * Sign a 64-byte signature over an **arbitrary-length** message. The control-frame
+     * scheme signs `UTF8(domain) || payload22` (47 B for control v1), not a bare 22-byte
+     * payload, so [sign] (which requires exactly PAYLOAD_SIZE) cannot sign it. Mirrors
+     * [verifyMessage] on the sign side. See net.guacamaya.proto.ControlPayload.
+     */
+    fun signMessage(privateKey: ByteArray, message: ByteArray): ByteArray {
+        require(privateKey.size == PRIVATE_KEY_SIZE) {
+            "private key must be $PRIVATE_KEY_SIZE bytes, got ${privateKey.size}"
+        }
+        val signer = Ed25519Signer().apply {
+            init(true, Ed25519PrivateKeyParameters(privateKey, 0))
+            update(message, 0, message.size)
+        }
+        return signer.generateSignature()
     }
 
     /**

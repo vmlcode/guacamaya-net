@@ -11,6 +11,8 @@ import { locationRoutes } from "./locations/routes.js";
 import { resolveRoutes } from "./resolve/routes.js";
 import { dashboardRoutes } from "./dashboard/routes.js";
 import { waitlistRoutes } from "./waitlist/routes.js";
+import { controlRoutes } from "./control/routes.js";
+import { ledgerRoutes } from "./ledger/routes.js";
 import { resolvesRepo } from "./db/resolvesRepo.js";
 import { initWebSocketServer } from "./ws/server.js";
 import { securityConfig } from "./security/config.js";
@@ -21,7 +23,22 @@ const SWEEP_INTERVAL_MS = 60_000;
 const app = Fastify({ logger: true });
 
 await app.register(helmet, {
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+      scriptSrcAttr: ["'none'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'", "data:"],
+      upgradeInsecureRequests: [],
+    },
+  },
   crossOriginResourcePolicy: { policy: "cross-origin" },
 });
 
@@ -38,20 +55,25 @@ await app.register(locationRoutes);
 await app.register(resolveRoutes);
 await app.register(dashboardRoutes);
 await app.register(waitlistRoutes);
+await app.register(controlRoutes);
+await app.register(ledgerRoutes);
 
 app.get("/health", async () => ({ ok: true }));
 
-// Serves the compiled marketing/waitlist page (web/landing) at GET / and its
-// asset paths — same origin as the API, so the waitlist form needs no CORS
-// config. Falls back to a JSON message if the frontend hasn't been built
-// (e.g. a fresh checkout that only ran `bun run dev:backend`).
-const LANDING_DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/landing/dist");
+// Serves the compiled marketing/waitlist page (guacamalla-landing/landing) at
+// GET / and its asset paths — same origin as the API, so the waitlist form
+// needs no CORS config. Falls back to a JSON message if the frontend hasn't
+// been built (e.g. a fresh checkout that only ran `bun run dev:backend`).
+const LANDING_DIST = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../guacamalla-landing/landing/dist",
+);
 if (fs.existsSync(path.join(LANDING_DIST, "index.html"))) {
   await app.register(fastifyStatic, { root: LANDING_DIST });
 } else {
   app.log.warn(
     `Landing page build not found at ${LANDING_DIST} — GET / falls back to a JSON message. ` +
-      "Run 'bun run --cwd web/landing build' to serve the real page.",
+      "Run 'bun run --cwd guacamalla-landing/landing build' to serve the real page.",
   );
   app.get("/", async () => ({ message: "Welcome to GuacaMalla Net!" }));
 }
@@ -79,8 +101,13 @@ try {
   initWebSocketServer(app.server);
 
   // Cooldown sweeper — every 60 s, promote pending receipts whose cooldown
-  // expired (and which were not disputed) to cleared. Emits a `resuelto`
-  // record per promotion so subscribers see the final state.
+  // expired (and which were not disputed) to cleared. Promotion only flips the
+  // receipt status (pending → cleared); no SOS record is deleted and no new
+  // ledger event is emitted, because the authoritative terminal state was
+  // already recorded at quorum time — the additive SOS_RESOLVED ledger event
+  // (reconcileState picks it over a competing self-cancel via compareAuthority)
+  // plus the "resuelto" channel record. The sweep is a bookkeeping transition,
+  // not a destructive cleanup.
   sweepTimer = setInterval(async () => {
     try {
       const promoted = await resolvesRepo.getExpiredPendingClears(Date.now());

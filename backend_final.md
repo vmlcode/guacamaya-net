@@ -283,3 +283,58 @@ Pautas:
 
 > Estado actual: el `IngestClient` en Android **aún no existe** (trabajo abierto, ver
 > `android/CLAUDE.md`). El lado backend está completo y verificado end-to-end contra Supabase.
+
+## POST /ingest — `foundFrames` ("Encontrado" reports)
+
+Alongside `frames` and `controlFrames`, the ingest body may carry
+`"foundFrames": ["<base64>", ...]` — signed 118-byte found frames
+(`22 B payload + 32 B finder pubkey + 64 B signature`; a 119-byte frame with a
+leading hop-TTL byte is tolerated). No API key: zero-trust by signature.
+
+Found payload v1 (22 bytes, big-endian; signature domain
+`"guacamaya.found-frame.v1\n"` prefixed to the payload before signing):
+
+| Offset | Field | Type |
+|---|---|---|
+| 0..3 | latE7 (finder latitude × 1e7) | int32 |
+| 4..7 | lonE7 (finder longitude × 1e7) | int32 |
+| 8..11 | tsUnix | u32 |
+| 12..15 | targetNodeId = SHA-256(victim pubkey)[0..3] | 4 B |
+| 16..17 | targetMsgId (SOS session) | u16 |
+| 18..19 | foundMsgId (CSPRNG) | u16 |
+| 20..21 | CRC16-CCITT over 0..19 | u16 |
+
+Server-side, per frame: CRC → GPS-fix sanity (0,0 / out-of-range rejected) →
+Ed25519 over the domain-prefixed payload → target lookup (latest
+`solicito-ayuda` record with `payload.nodeId == targetNodeId` and
+`payload.msgId == targetMsgId`; missing or fixless target ⇒ rejected,
+`"unknown target sos"`). Accepted frames become `verified:false` records on
+channel `encontrado` with `id = SHA-256(payload22)` (dedupe), plus a proximity
+verdict computed from the finder's signed position vs the SOS's last reported
+point: distance ≤ `FOUND_PROXIMITY_METERS` (default 100 m) ⇒
+`proximity:"near"`, `verdict:"likely_found"`; otherwise `proximity:"far"`,
+`verdict:"possible_false_positive"`.
+
+Response additions:
+
+```json
+{
+  "foundAccepted": 1,
+  "foundDuplicate": 0,
+  "foundRejected": 0,
+  "foundReasons": {},
+  "foundResults": [
+    {
+      "id": "<sha256 hex>",
+      "targetRecordId": "<sha256 hex of the SOS record>",
+      "distanceMeters": 33,
+      "proximity": "near",
+      "verdict": "likely_found"
+    }
+  ]
+}
+```
+
+Verdicts are returned for duplicates too (the uploading mule is usually the
+finder's own phone). Recommended app flow: queue the frame in `outbound_found`,
+drain it with the regular mule upload, and log/render the returned verdict.
