@@ -54,6 +54,15 @@ describe("sanitizeRecordForPublic", () => {
     expect("frameB64" in p).toBe(false);
   });
 
+  test("applies to encontrado too", () => {
+    const out = sanitizeRecordForPublic(sosRecord({ channel: "encontrado" }));
+    const p = out.payload as Record<string, unknown>;
+    expect(p.lat).toBe(10.49);
+    expect(p.lon).toBe(-66.88);
+    expect("frameB64" in p).toBe(false);
+    expect(p.locationPrecision).toBe("coarse");
+  });
+
   test("leaves official channels untouched (full precision, full payload)", () => {
     const rec = sosRecord({
       channel: "alertas",

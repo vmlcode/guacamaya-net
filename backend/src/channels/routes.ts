@@ -34,7 +34,6 @@ import { decodeAndVerifyFrame } from "../mesh/frame.js";
 import { processControlFrames, mintControlFrames, type SosRef } from "../control/ingestControl.js";
 import {
   processFoundFrames,
-  FOUND_CHANNEL,
   type FoundDeps,
   type ProcessFoundSummary,
 } from "../found/processFound.js";

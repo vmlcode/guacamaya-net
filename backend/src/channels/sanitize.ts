@@ -13,7 +13,7 @@ import { canonicalJsonString, type ChannelRecord } from "@guacamaya/shared";
  * Official operator channels (alertas/refugios/ayuda-medica) are intentionally
  * public broadcasts and are not coarsened.
  */
-const COARSE_LOCATION_CHANNELS = new Set(["solicito-ayuda", "estoy-bien"]);
+const COARSE_LOCATION_CHANNELS = new Set(["solicito-ayuda", "estoy-bien", "encontrado"]);
 
 /**
  * ~1.1 km at the equator (2 decimal places ≈ 0.01° ≈ 1.11 km lat; ~1.1 km lon
