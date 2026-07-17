@@ -25,8 +25,8 @@ const LOGO_SVG = readFileSync(
  * → DESIGN.md): "yellow + black brand voltage", dark-only, capa semántica de
  * emergencia (danger/warning/success/info). Tokens espejados como CSS vars abajo.
  *
- * helmet corre con contentSecurityPolicy:false (ver index.ts), así que el script
- * inline + CDN + tiles cargan sin bloqueo.
+ * La CSP global permite de forma explícita los scripts/estilos de esta página y
+ * limita las imágenes remotas a los tiles de OpenStreetMap.
  */
 const PAGE = `<!doctype html>
 <html lang="es">

@@ -27,6 +27,10 @@ import kotlinx.coroutines.isActive
 import net.guacamaya.R
 import net.guacamaya.ble.BleMeshRuntime
 import net.guacamaya.ble.Broadcaster
+import net.guacamaya.ble.ChatRuntime
+import net.guacamaya.ble.RadioPolicy
+import net.guacamaya.ble.RadioPolicyEngine
+import net.guacamaya.ble.RadioTier
 import net.guacamaya.crypto.Identity
 import net.guacamaya.ingest.IngestUploadWorker
 import net.guacamaya.ingest.OwnUploadPolicy
@@ -38,12 +42,14 @@ import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.proto.Flags
 import net.guacamaya.proto.Payload
 import net.guacamaya.proto.SosType
+import net.guacamaya.time.MeshClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.security.SecureRandom
 
 /**
  * Foreground service that keeps BLE (and, when added, Wi-Fi Aware) alive while
@@ -74,6 +80,10 @@ class GuacamayaForegroundService : Service() {
     // fixed-point. Reset per broadcast session so the first frame always uploads.
     private var lastOwnUploadLatE7: Int? = null
     private var lastOwnUploadLonE7: Int? = null
+    private val sessionRng = SecureRandom()
+    private var distressStartedAtMs = 0L
+    private var radioTier = RadioTier.NORMAL
+    @Volatile private var presenceSleeping = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -169,7 +179,7 @@ class GuacamayaForegroundService : Service() {
             while (isActive && wantObserving) {
                 delay(OBSERVE_HEALTH_MS)
                 if (!wantObserving) break
-                if (!BleMeshRuntime.isScanning()) {
+                if (!presenceSleeping && !BleMeshRuntime.isScanning()) {
                     Log.w(tag, "observe health tick — scan inactive, restarting")
                     BleMeshRuntime.ensureObserving(this@GuacamayaForegroundService)
                 }
@@ -182,7 +192,7 @@ class GuacamayaForegroundService : Service() {
 
     /** SOS mode: this device's own frame is a critical distress request. */
     private fun startDistressBroadcast() =
-        startBroadcast(SosType.DISTRESS, ownCritical = true, ownTtl = 15)
+        startBroadcast(SosType.DISTRESS, ownCritical = true, ownTtl = 15).also { distressStartedAtMs = System.currentTimeMillis() }
 
     /**
      * "Ambos" mode: own frame is a low-priority presence beacon — but the rotation still
@@ -190,7 +200,36 @@ class GuacamayaForegroundService : Service() {
      */
     private fun startPresenceHeartbeat() {
         if (broadcastJob?.isActive == true) return
-        startBroadcast(SosType.OTHER, ownCritical = false, ownTtl = PRESENCE_HOP_TTL)
+        broadcastJob = scope.launch {
+            val id = identity ?: Identity.loadOrCreate(this@GuacamayaForegroundService).also { identity = it }
+            val bcast = broadcaster ?: Broadcaster.create(this@GuacamayaForegroundService)?.also { broadcaster = it }
+                ?: return@launch
+            while (isActive) {
+                val policy = currentRadioPolicy()
+                ChatRuntime.initialize(this@GuacamayaForegroundService)
+                ChatRuntime.setPolicy(policy)
+                ChatRuntime.setWindowClosedListener {
+                    if (presenceSleeping) BleMeshRuntime.stopObserving()
+                }
+                presenceSleeping = false
+                startObserving()
+                val payload = signedPayload(id, SosType.OTHER, false, PRESENCE_HOP_TTL)
+                bcast.start(
+                    payload, id.publicKey, id.sign(payload), PRESENCE_HOP_TTL,
+                    net.guacamaya.ble.BleConfig.normalParameters(policy.txPower),
+                )
+                delay(policy.windowMs)
+                bcast.stop()
+                if (!ChatRuntime.active.value) {
+                    presenceSleeping = true
+                    BleMeshRuntime.stopObserving()
+                }
+                val meshNow = MeshClock.now(this@GuacamayaForegroundService)
+                val jitter = RadioPolicyEngine.jitterMs(id.nodeId)
+                val phase = Math.floorMod(meshNow - jitter, policy.cadenceMs)
+                delay((policy.cadenceMs - phase).coerceAtLeast(1_000L))
+            }
+        }
     }
 
     /**
@@ -227,6 +266,19 @@ class GuacamayaForegroundService : Service() {
             }
             val dao = GuacamayaDatabase.get(this@GuacamayaForegroundService).messageDao()
 
+            // A resolved / self-cancelled SOS must not resume TX on reboot. A terminal
+            // control trust (backend-resolve 0x02 or self-cancel 0x03) for THIS device,
+            // still inside its signed lifetime, is the local authority to stay silent as
+            // a distress beacon. The victim gates by nodeId, NOT by msgId: its own SOS
+            // msgId rotates every dwell for flood dedup (DedupeCache keys on nodeId+msgId),
+            // so a resolve that targeted one dwell's msgId would never match the live frame.
+            // The mule/relay role lives in FloodRouter and is unaffected — only OWN distress
+            // TX is suppressed. See docs/PROTOCOL_CONTROL.md.
+            if (ownType == SosType.DISTRESS && isDistressSuppressed(dao, id)) {
+                Log.i(tag, "distress TX suppressed — terminal control trust active for this node")
+                return@launch
+            }
+
             // Bootstrap own ADV via start() so the compat→coded PHY negotiation runs once.
             signedPayload(id, ownType, ownCritical, ownTtl).let { p ->
                 val sig = id.sign(p)
@@ -238,7 +290,7 @@ class GuacamayaForegroundService : Service() {
             var idx = 0
             var ownTurn = false // own frame just went out above
             while (isActive) {
-                delay(FORWARD_DWELL_MS)
+                delay(nextDwellMs(ownCritical))
                 if (ownTurn) {
                     val p = signedPayload(id, ownType, ownCritical, ownTtl)
                     val sig = id.sign(p)
@@ -306,6 +358,20 @@ class GuacamayaForegroundService : Service() {
         }
     }
 
+    /**
+     * True if THIS device has a non-expired terminal control receipt (backend-resolve
+     * 0x02 or self-cancel 0x03) — the local authority to keep off the air as a distress
+     * beacon. Matched by nodeId (SHA-256(pubkey)[0..3] hex), never by msgId: the SOS
+     * msgId rotates per dwell for flood dedup, so it cannot match a resolve that pinned
+     * one specific dwell. Uses MeshClock for the lifetime check so the gate agrees with
+     * the same clock that verified the control frame in [net.guacamaya.mesh.FloodRouter].
+     */
+    private suspend fun isDistressSuppressed(dao: MessageDao, id: Identity): Boolean {
+        val myNodeIdHex = id.nodeId.joinToString("") { "%02x".format(it.toInt() and 0xFF) }
+        val nowMs = MeshClock.now(this)
+        return dao.terminalControlTrusts().any { it.nodeId == myNodeIdHex && it.expiresAt > nowMs }
+    }
+
     private fun stopBroadcasting() {
         broadcastJob?.cancel()
         broadcastJob = null
@@ -315,6 +381,19 @@ class GuacamayaForegroundService : Service() {
     private fun stopPresenceHeartbeat() {
         broadcastJob?.cancel()
         broadcastJob = null
+        broadcaster?.stop()
+        presenceSleeping = false
+    }
+
+    private fun currentRadioPolicy(): RadioPolicy {
+        val battery = registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+        val level = battery?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, 100) ?: 100
+        val scale = battery?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100)?.coerceAtLeast(1) ?: 100
+        val percent = (level * 100 / scale).coerceIn(0, 100)
+        val status = battery?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == android.os.BatteryManager.BATTERY_STATUS_FULL
+        return RadioPolicyEngine.next(radioTier, percent, charging).also { radioTier = it.tier }
     }
 
     private suspend fun signedPayload(
@@ -327,12 +406,27 @@ class GuacamayaForegroundService : Service() {
         return Payload(
             latE7 = latE7,
             lonE7 = lonE7,
-            tsUnix = System.currentTimeMillis() / 1000,
+            tsUnix = MeshClock.now(this) / 1000,
             nodeId = id.nodeId,
             flags = Flags(hasHeavy = false, critical = critical, batteryBucket = 3, hopTtl = hopTtl),
             sosType = type,
-            msgId = (System.currentTimeMillis() and 0xFFFF).toInt(),
+            // Entropy per session prevents a captured control receipt from matching
+            // a later SOS that happens to share a wall-clock low word.
+            msgId = sessionRng.nextInt(0x1_0000),
         ).encode()
+    }
+
+    /** Graceful degradation: fast initially, slower after an hour and on low battery. */
+    private fun nextDwellMs(distress: Boolean): Long {
+        if (!distress) return FORWARD_DWELL_MS
+        val age = System.currentTimeMillis() - distressStartedAtMs
+        val battery = registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+            ?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, 100) ?: 100
+        return when {
+            battery < 15 -> LOW_BATTERY_DWELL_MS
+            age >= ONE_HOUR_MS -> AGED_DISTRESS_DWELL_MS
+            else -> FORWARD_DWELL_MS
+        }
     }
 
     /**
@@ -372,6 +466,7 @@ class GuacamayaForegroundService : Service() {
             Log.w(tag, "no last known location available (Fused + platform)")
             return null
         }
+        MeshClock.updateFromGps(this, loc)
         val latE7 = (loc.latitude * 1e7).toInt().coerceIn(-900_000_000, 900_000_000)
         val lonE7 = (loc.longitude * 1e7).toInt().coerceIn(-1_800_000_000, 1_800_000_000)
         return latE7 to lonE7
@@ -444,6 +539,9 @@ class GuacamayaForegroundService : Service() {
          *  is small — chained holders carry SOS across the mesh. Tune for reach vs battery. */
         private const val REBROADCAST_NODES = 20
         private const val FORWARD_DWELL_MS = 2_000L
+        private const val AGED_DISTRESS_DWELL_MS = 30_000L
+        private const val LOW_BATTERY_DWELL_MS = 100_000L
+        private const val ONE_HOUR_MS = 60 * 60_000L
         private const val REBROADCAST_TTL = 2
 
         private const val PREFS = "guacamaya_service"

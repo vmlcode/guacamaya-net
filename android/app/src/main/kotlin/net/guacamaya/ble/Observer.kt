@@ -30,20 +30,50 @@ class Observer private constructor(
     private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile private var scanning = false
-    @Volatile private var scanProfile = BleConfig.ScanProfile.AGGRESSIVE
+    @Volatile private var scanProfile = BleConfig.ScanProfile.BALANCED
+    @Volatile private var radarActive = false
     private var lastCallbackAt = 0L
     @Volatile private var lastGuacamayaFrameAt = 0L
     private var scanCallbackCount = 0
     private val activeCallback = AtomicReference<ScanCallback?>(null)
-
-    /** Called on every Guacamaya-shaped frame. Implementations must be thread-safe. */
-    fun interface FrameListener {
-        fun onFrame(payload22: ByteArray, pub32: ByteArray, sig64: ByteArray, ttl: Int, rssi: Int)
+    private val exitRadarRunnable = Runnable {
+        radarActive = false
+        switchProfile(defaultScanProfile(), "radar debounce elapsed")
     }
 
+    /**
+     * Called on every Guacamaya-shaped frame. [kind] tells the listener whether the
+     * frame arrived under the SOS Service UUID (an SOS payload) or the control Service
+     * UUID (a delivery / backend-resolve / self-cancel payload) — the routing decision
+     * is made from the UUID, never from payload-byte inspection on the hot path.
+     * Implementations must be thread-safe.
+     */
+    fun interface FrameListener {
+        fun onFrame(
+            kind: BleConfig.FrameKind,
+            payload22: ByteArray,
+            pub32: ByteArray,
+            sig64: ByteArray,
+            ttl: Int,
+            radio: RadioMetadata,
+        )
+    }
+
+    /** Per-PDU radio metadata. `ALL_MATCHES` is intentional: RSSI filtering needs
+     * repeated advertising samples, not a deduplicated device callback. */
+    data class RadioMetadata(
+        val rssi: Int,
+        val txPower: Int?,
+        val primaryPhy: Int,
+        val secondaryPhy: Int,
+    )
+
     private var listener: FrameListener? = null
+    fun interface ChatFrameListener { fun onFrame(frame: ByteArray, radio: RadioMetadata) }
+    private var chatListener: ChatFrameListener? = null
 
     fun setListener(l: FrameListener) { listener = l }
+    fun setChatListener(l: ChatFrameListener) { chatListener = l }
 
     private fun newCallback(): ScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -65,9 +95,12 @@ class Observer private constructor(
 
         override fun onScanFailed(errorCode: Int) {
             Log.e(tag, "scan failed code=$errorCode profile=$scanProfile")
+            if (errorCode == ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED) {
+                Log.e(tag, "scan registration rejected; Android may be rate-limiting start/stop cycles")
+            }
             scanning = false
             activeCallback.set(null)
-            scheduleScanRestart(fallback = scanProfile == BleConfig.ScanProfile.AGGRESSIVE)
+            scheduleScanRestart(fallback = scanProfile != BleConfig.ScanProfile.LEGACY_STACK)
         }
     }
 
@@ -78,39 +111,77 @@ class Observer private constructor(
             Log.i(tag, "saw UUID rssi=${result.rssi} legacy=${result.isLegacy} len=${rec.bytes?.size ?: 0}")
             Log.i("guacamaya.probe", "saw_uuid rssi=${result.rssi} legacy=${result.isLegacy}")
         }
-        val blob = extractServiceData(rec)
-        if (blob == null || blob.size != BleConfig.SERVICE_DATA_SIZE) {
-            if (sawUuid || blob != null) {
-                Log.w(
-                    tag,
-                    "GuacaMalla frame incomplete size=${blob?.size ?: -1} " +
-                        "(need ${BleConfig.SERVICE_DATA_SIZE}) rssi=${result.rssi} legacy=${result.isLegacy}",
+        val blobs = extractServiceData(rec)
+        if (blobs.isEmpty()) return
+        // A scan record can carry service-data under several UUIDs at once — e.g. an SOS
+        // origin under SERVICE_UUID and a control relay under CONTROL_SERVICE_UUID in the
+        // same advertisement. Surface each blob tagged with the kind its UUID implies.
+        for ((blob, kind) in blobs) {
+            if (kind == BleConfig.FrameKind.CHAT) {
+                lastGuacamayaFrameAt = SystemClock.elapsedRealtime()
+                chatListener?.onFrame(
+                    blob,
+                    RadioMetadata(result.rssi, result.txPower.takeUnless { it == ScanResult.TX_POWER_NOT_PRESENT }, result.primaryPhy, result.secondaryPhy),
                 )
+                continue
             }
-            return
+            if (blob.size != BleConfig.SERVICE_DATA_SIZE) {
+                if (sawUuid) {
+                    Log.w(
+                        tag,
+                        "$kind frame incomplete size=${blob.size} " +
+                            "(need ${BleConfig.SERVICE_DATA_SIZE}) rssi=${result.rssi} legacy=${result.isLegacy}",
+                    )
+                }
+                continue
+            }
+            val ttl = blob[BleConfig.TTL_OFFSET].toInt() and 0xFF
+            val payload22 = blob.copyOfRange(BleConfig.PAYLOAD_OFFSET, BleConfig.PUBKEY_OFFSET)
+            val pub32 = blob.copyOfRange(BleConfig.PUBKEY_OFFSET, BleConfig.SIG_OFFSET)
+            val sig64 = blob.copyOfRange(BleConfig.SIG_OFFSET, BleConfig.SERVICE_DATA_SIZE)
+            Log.d(tag, "$kind frame ttl=$ttl rssi=${result.rssi} src=${result.device.address}")
+            lastGuacamayaFrameAt = SystemClock.elapsedRealtime()
+            listener?.onFrame(
+                kind,
+                payload22,
+                pub32,
+                sig64,
+                ttl,
+                RadioMetadata(
+                    rssi = result.rssi,
+                    txPower = result.txPower.takeUnless { it == ScanResult.TX_POWER_NOT_PRESENT },
+                    primaryPhy = result.primaryPhy,
+                    secondaryPhy = result.secondaryPhy,
+                ),
+            )
         }
-        val ttl = blob[BleConfig.TTL_OFFSET].toInt() and 0xFF
-        val payload22 = blob.copyOfRange(BleConfig.PAYLOAD_OFFSET, BleConfig.PUBKEY_OFFSET)
-        val pub32 = blob.copyOfRange(BleConfig.PUBKEY_OFFSET, BleConfig.SIG_OFFSET)
-        val sig64 = blob.copyOfRange(BleConfig.SIG_OFFSET, BleConfig.SERVICE_DATA_SIZE)
-        Log.d(tag, "frame ttl=$ttl rssi=${result.rssi} src=${result.device.address}")
-        lastGuacamayaFrameAt = SystemClock.elapsedRealtime()
-        listener?.onFrame(payload22, pub32, sig64, ttl, result.rssi)
     }
 
     /**
      * Prefer the parsed map; fall back to raw AD bytes. Some older stacks populate
      * [ScanRecord.getServiceUuids] but leave [ScanRecord.getServiceData] empty on
-     * extended ADV secondary payloads.
+     * extended ADV secondary payloads. Each blob is tagged with the [BleConfig.FrameKind]
+     * of the UUID it was found under, so the caller routes SOS vs control by UUID and
+     * never inspects payload bytes on the hot path. Within a kind, the first blob wins
+     * (a broadcaster advertises under exactly one UUID of a kind, so duplicates only
+     * arise when the parsed map and the raw-AD parse both surface the same UUID).
      */
-    private fun extractServiceData(rec: ScanRecord): ByteArray? {
-        for (parcel in BleConfig.MATCH_PARCEL_UUIDS) {
-            rec.serviceData?.get(parcel)?.let { return it }
+    private fun extractServiceData(rec: ScanRecord): List<Pair<ByteArray, BleConfig.FrameKind>> {
+        val out = ArrayList<Pair<ByteArray, BleConfig.FrameKind>>()
+        val seenKinds = mutableSetOf<BleConfig.FrameKind>()
+        rec.serviceData?.forEach { (parcel, blob) ->
+            val kind = BleConfig.kindOf(parcel) ?: return@forEach
+            if (seenKinds.add(kind)) out.add(blob to kind)
         }
         for (uuid in BleConfig.MATCH_UUIDS) {
-            parseServiceData128(rec.bytes, uuid)?.let { return it }
+            val kind = BleConfig.kindOfUuid(uuid) ?: continue
+            if (kind in seenKinds) continue
+            parseServiceData128(rec.bytes, uuid)?.let {
+                seenKinds.add(kind)
+                out.add(it to kind)
+            }
         }
-        return null
+        return out
     }
 
     /** Begin scanning. Idempotent. */
@@ -121,7 +192,11 @@ class Observer private constructor(
         ) {
             Log.w(tag, "chip lacks LE extended advertising — extended SOS frames may not arrive")
         }
-        scanProfile = defaultScanProfile()
+        scanProfile = if (radarActive && !isXiaomiLegacyStack()) {
+            BleConfig.ScanProfile.AGGRESSIVE
+        } else {
+            defaultScanProfile()
+        }
         Log.i(tag, "device=${Build.DEVICE} mfr=${Build.MANUFACTURER} api=${Build.VERSION.SDK_INT} profile=$scanProfile")
         startInternal()
     }
@@ -129,7 +204,7 @@ class Observer private constructor(
     /** Xiaomi/MTK API ≤31: start LEGACY_STACK — AGGRESSIVE often misses extended ADV. */
     private fun defaultScanProfile(): BleConfig.ScanProfile =
         if (isXiaomiLegacyStack()) BleConfig.ScanProfile.LEGACY_STACK
-        else BleConfig.ScanProfile.AGGRESSIVE
+        else BleConfig.ScanProfile.BALANCED
 
     private fun isXiaomiLegacyStack(): Boolean {
         val mfr = Build.MANUFACTURER.lowercase()
@@ -149,9 +224,38 @@ class Observer private constructor(
         stopInternal()
         mainHandler.removeCallbacks(watchdogRunnable)
         mainHandler.removeCallbacks(restartRunnable)
+        mainHandler.removeCallbacks(exitRadarRunnable)
+        radarActive = false
     }
 
     val isScanning: Boolean get() = scanning
+
+    /** Active rescue search needs a low-latency RSSI stream. Normal mesh mode
+     * returns to balanced scanning as soon as the radar closes. */
+    fun setRadarActive(active: Boolean) {
+        if (active) {
+            mainHandler.removeCallbacks(exitRadarRunnable)
+            if (radarActive) return
+            radarActive = true
+            val wanted = if (!isXiaomiLegacyStack()) BleConfig.ScanProfile.AGGRESSIVE else defaultScanProfile()
+            switchProfile(wanted, "radar opened")
+        } else if (radarActive) {
+            // Android can throttle apps that repeatedly stop/start scanning. Keep
+            // low latency briefly while a rescuer switches between radar and map.
+            mainHandler.removeCallbacks(exitRadarRunnable)
+            mainHandler.postDelayed(exitRadarRunnable, RADAR_EXIT_DEBOUNCE_MS)
+            Log.d(tag, "radar closed; keeping low-latency scan for ${RADAR_EXIT_DEBOUNCE_MS}ms")
+        }
+    }
+
+    private fun switchProfile(wanted: BleConfig.ScanProfile, reason: String) {
+        if (scanProfile == wanted) return
+        scanProfile = wanted
+        if (scanning) {
+            Log.i(tag, "$reason; switching scan profile=$scanProfile")
+            restart()
+        }
+    }
 
     private fun startInternal() {
         val callback = newCallback()
@@ -223,10 +327,10 @@ class Observer private constructor(
                     "scan stalled callbacks=${idleCallbacks}ms guacamalla=${idleGuacamaya}ms " +
                         "profile=$scanProfile — restarting",
                 )
-                if (isXiaomiLegacyStack() && scanProfile == BleConfig.ScanProfile.AGGRESSIVE) {
+                if (isXiaomiLegacyStack() && scanProfile != BleConfig.ScanProfile.LEGACY_STACK) {
                     scanProfile = BleConfig.ScanProfile.LEGACY_STACK
                 } else if (scanProfile == BleConfig.ScanProfile.LEGACY_STACK) {
-                    scanProfile = BleConfig.ScanProfile.AGGRESSIVE
+                    scanProfile = if (radarActive) BleConfig.ScanProfile.AGGRESSIVE else BleConfig.ScanProfile.BALANCED
                 }
                 restart()
             }
@@ -236,6 +340,7 @@ class Observer private constructor(
 
     companion object {
         private const val RESTART_DELAY_MS = 1_500L
+        private const val RADAR_EXIT_DEBOUNCE_MS = 10_000L
         private const val WATCHDOG_INTERVAL_MS = 60_000L
         /** Legacy Xiaomi/sweet: check every 30 s, restart if no GuacaMalla frame in 60 s. */
         private const val LEGACY_WATCHDOG_INTERVAL_MS = 30_000L

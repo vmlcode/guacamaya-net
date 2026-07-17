@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { supabase, isSupabaseConfigured } from "../db/supabase.js";
 import { securityConfig } from "../security/config.js";
 import { hashImage } from "@guacamaya/shared";
-import { publicKeyHex } from "../crypto/keys.js";
+import { privateKey } from "../crypto/keys.js";
 
 /**
  * Evidence-image storage abstraction.
@@ -26,6 +26,8 @@ const EXT_BY_MAGIC: Array<{ magic: number[]; ext: string }> = [
   { magic: [0x42, 0x4d], ext: "bmp" },
   { magic: [0x52, 0x49, 0x46, 0x46], ext: "webp" }, // RIFF — could be webp or wav; assume webp
 ];
+const IMAGE_HASH_RE = /^[0-9a-f]{64}$/;
+const ALLOWED_EXTENSIONS = new Set(["jpg", "png", "webp", "gif", "bmp", "bin"]);
 
 function detectExt(bytes: Uint8Array): string {
   for (const { magic, ext } of EXT_BY_MAGIC) {
@@ -34,9 +36,15 @@ function detectExt(bytes: Uint8Array): string {
   return "bin";
 }
 
-/** HMAC key — the backend's stable public key hex (ephemeral in dev). */
-function hmacKey(): string {
-  return publicKeyHex;
+/**
+ * HMAC key — the backend's private signing seed (ephemeral in dev).
+ *
+ * This must never be derived from the public key: /pubkey intentionally exposes
+ * that value, which would let anybody mint a valid-looking upload token without
+ * first uploading evidence.
+ */
+function hmacKey(): Uint8Array {
+  return privateKey;
 }
 
 export function makeUploadToken(imageHash: string, expiresAtMs: number): string {
@@ -100,6 +108,9 @@ export async function storeEvidence(imageBytes: Uint8Array): Promise<StoredEvide
  * the file is missing (troll submitted a hash with no prior upload).
  */
 export async function readEvidence(imageHash: string, ext: string = "bin"): Promise<Uint8Array | null> {
+  // Both values become storage paths. Reject rather than normalize so no input
+  // can escape the evidence directory/bucket prefix.
+  if (!IMAGE_HASH_RE.test(imageHash) || !ALLOWED_EXTENSIONS.has(ext)) return null;
   if (isSupabaseConfigured && supabase) {
     const path = `${imageHash}.${ext}`;
     const { data, error } = await supabase

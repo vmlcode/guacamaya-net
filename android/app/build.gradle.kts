@@ -22,6 +22,9 @@ fun prop(name: String, fallback: String): String =
 
 val backendDebugUrl: String = prop("BACKEND_BASE_URL", "http://10.0.2.2:3000")
 val backendReleaseUrl: String = prop("BACKEND_RELEASE_URL", "https://guacamaya.invalid")
+// Trust anchor, supplied only at build time from deployment configuration. Runtime
+// GET /pubkey is diagnostic; it is never allowed to replace this key (no TOFU).
+val backendPublicKeyHex: String = prop("BACKEND_PUBLIC_KEY_HEX", "")
 
 android {
     namespace = "net.guacamaya"
@@ -40,7 +43,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             manifestPlaceholders["firebase_crashlytics_collection_enabled"] = "true"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -48,12 +52,14 @@ android {
             )
             // Deployed HTTPS backend (placeholder until one exists — see backendReleaseUrl).
             buildConfigField("String", "BACKEND_BASE_URL", "\"$backendReleaseUrl\"")
+            buildConfigField("String", "BACKEND_PUBLIC_KEY_HEX", "\"$backendPublicKeyHex\"")
         }
         debug {
             isMinifyEnabled = false
             // Emulator loopback by default; override with -PBACKEND_BASE_URL for a LAN backend.
             // Cleartext allowed broadly by the debug network-security-config.
             buildConfigField("String", "BACKEND_BASE_URL", "\"$backendDebugUrl\"")
+            buildConfigField("String", "BACKEND_PUBLIC_KEY_HEX", "\"$backendPublicKeyHex\"")
             manifestPlaceholders["firebase_crashlytics_collection_enabled"] = "true"
             firebaseAppDistribution {
                 groups = "internal-testers"

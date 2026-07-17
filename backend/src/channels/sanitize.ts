@@ -1,4 +1,4 @@
-import type { ChannelRecord } from "@guacamaya/shared";
+import { canonicalJsonString, type ChannelRecord } from "@guacamaya/shared";
 
 /**
  * Channels whose records are publicly readable (no auth on `GET
@@ -36,7 +36,11 @@ function coarsenCoord(v: number): number {
  * shapes the public HTTP response.
  */
 export function sanitizeRecordForPublic(record: ChannelRecord): ChannelRecord {
-  if (!COARSE_LOCATION_CHANNELS.has(record.channel)) return record;
+  if (!COARSE_LOCATION_CHANNELS.has(record.channel)) {
+    // Database drivers may materialize jsonb keys in implementation-defined
+    // order. Emit the signed canonical order for byte-verifying clients.
+    return { ...record, payload: JSON.parse(canonicalJsonString(record.payload)) };
+  }
 
   const payload = record.payload;
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return record;
