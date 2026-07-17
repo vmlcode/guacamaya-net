@@ -88,6 +88,12 @@ class IngestRepositoryTest {
         override suspend fun terminalControlTrusts(): List<ControlTrustEntity> = throw NotImplementedError()
         override suspend fun countControlTrust(): Int = throw NotImplementedError()
         override suspend fun clearControlTrust() = throw NotImplementedError()
+
+        // ── Outbound found frames: not touched by the uploader (yet). ─────────
+        override suspend fun insertOutboundFound(entity: net.guacamaya.mesh.OutboundFoundEntity): Long = throw NotImplementedError()
+        override suspend fun selectUploadableFound(limit: Int): List<net.guacamaya.mesh.OutboundFoundEntity> = throw NotImplementedError()
+        override suspend fun markFoundUploaded(sigs: List<String>) = throw NotImplementedError()
+        override suspend fun countUploadableFound(): Int = throw NotImplementedError()
     }
 
     private class FakeApi(

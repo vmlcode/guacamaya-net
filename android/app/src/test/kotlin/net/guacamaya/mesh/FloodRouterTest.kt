@@ -499,5 +499,11 @@ class FloodRouterTest {
         override suspend fun selectUploadableControl(limit: Int): List<OutboundControlEntity> = emptyList()
         override suspend fun markControlUploaded(sigs: List<String>) {}
         override suspend fun countUploadableControl(): Int = 0
+
+        // ── Outbound found queue: uploader-only; routing tests ignore it. ─────────
+        override suspend fun insertOutboundFound(entity: OutboundFoundEntity): Long = 1L
+        override suspend fun selectUploadableFound(limit: Int): List<OutboundFoundEntity> = emptyList()
+        override suspend fun markFoundUploaded(sigs: List<String>) {}
+        override suspend fun countUploadableFound(): Int = 0
     }
 }

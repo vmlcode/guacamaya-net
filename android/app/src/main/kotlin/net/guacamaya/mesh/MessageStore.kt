@@ -209,6 +209,31 @@ data class OutboundControlEntity(
     override fun hashCode(): Int = System.identityHashCode(this)
 }
 
+/**
+ * A locally-authored "Encontrado" (found) frame queued for data-mule upload to
+ * the backend (`foundFrames[]` in POST /ingest). Keyed by the 64-byte Ed25519
+ * signature hex so the same report is queued exactly once. [frame] is the
+ * canonical 118 B upload blob (payload22 ‖ pubkey32 ‖ sig64) built by
+ * net.guacamaya.proto.buildFoundFrame.
+ */
+@Entity(
+    tableName = "outbound_found",
+    indices = [Index(value = ["queued_at"])],
+)
+data class OutboundFoundEntity(
+    /** 64-byte Ed25519 signature hex (128 chars). The dedup key. */
+    @PrimaryKey @ColumnInfo(name = "signature_hex") val signatureHex: String,
+    /** Canonical 118 B upload frame (payload22 + pubkey32 + sig64). */
+    @ColumnInfo(name = "frame") val frame: ByteArray,
+    /** Set once the backend accepted/duplicated the frame in `foundFrames[]`. */
+    @ColumnInfo(name = "uploaded", defaultValue = "0") val uploaded: Boolean = false,
+    @ColumnInfo(name = "queued_at") val queuedAt: Long,
+) {
+    // Room needs equals/hashCode for ByteArray fields.
+    override fun equals(other: Any?): Boolean = this === other
+    override fun hashCode(): Int = System.identityHashCode(this)
+}
+
 @Entity(
     tableName = "chat_messages",
     primaryKeys = ["sender_node_id", "message_id"],
@@ -420,6 +445,23 @@ interface MessageDao {
     @Query("SELECT COUNT(*) FROM outbound_control WHERE uploaded = 0")
     suspend fun countUploadableControl(): Int
 
+    // ── Outbound found frames: mule-upload queue ("Encontrado" → backend) ────────
+
+    /** Queue a locally-authored found frame. IGNORE on the PK dedupes by signature. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertOutboundFound(entity: OutboundFoundEntity): Long
+
+    /** Oldest-first batch of found frames not yet uploaded, drained alongside SOS
+     *  frames in the same `/ingest` call (the backend's `foundFrames[]` field). */
+    @Query("SELECT * FROM outbound_found WHERE uploaded = 0 ORDER BY queued_at ASC LIMIT :limit")
+    suspend fun selectUploadableFound(limit: Int): List<OutboundFoundEntity>
+
+    @Query("UPDATE outbound_found SET uploaded = 1 WHERE signature_hex IN (:sigs)")
+    suspend fun markFoundUploaded(sigs: List<String>)
+
+    @Query("SELECT COUNT(*) FROM outbound_found WHERE uploaded = 0")
+    suspend fun countUploadableFound(): Int
+
 }
 
 @Dao
@@ -561,6 +603,24 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
     }
 }
 
+/**
+ * v9 → v10: outbound queue for "Encontrado" (found) frames awaiting data-mule
+ * upload to the backend's `foundFrames[]` ingest path. Independent of signed SOS
+ * storage and of the control tables, so the protocol's upload/relay semantics
+ * are unchanged.
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS outbound_found (" +
+                "signature_hex TEXT NOT NULL PRIMARY KEY, " +
+                "frame BLOB NOT NULL, " +
+                "uploaded INTEGER NOT NULL DEFAULT 0, queued_at INTEGER NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_outbound_found_queued_at ON outbound_found (queued_at)")
+    }
+}
+
 @Database(
     entities = [
         MessageEntity::class,
@@ -569,10 +629,11 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         ControlReplayEntity::class,
         ControlTrustEntity::class,
         OutboundControlEntity::class,
+        OutboundFoundEntity::class,
         ChatMessageEntity::class,
         ChatFragmentEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 abstract class GuacamayaDatabase : RoomDatabase() {
@@ -589,7 +650,7 @@ abstract class GuacamayaDatabase : RoomDatabase() {
                     GuacamayaDatabase::class.java,
                     "guacamaya.db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .fallbackToDestructiveMigration() // safety net for any unhandled jump
                     .build().also { instance = it }
             }
