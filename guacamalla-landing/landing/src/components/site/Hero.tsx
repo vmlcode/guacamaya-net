@@ -66,7 +66,7 @@ export function Hero() {
             <span className="mono text-xs opacity-70 group-hover:translate-x-0.5 transition-transform">→</span>
           </a>
           <a
-            href="#architecture"
+            href="#how"
             className="mono text-[11px] tracking-wider uppercase text-muted-foreground hover:text-foreground transition"
           >
             {t.hero.scrollHint} ↓

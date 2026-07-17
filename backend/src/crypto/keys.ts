@@ -9,6 +9,9 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 // signed records.
 const hexKey = process.env.BACKEND_PRIVATE_KEY_HEX ?? process.env.BACKEND_PRIVATE_KEY;
 if (!hexKey) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("BACKEND_PRIVATE_KEY_HEX is required in production; refusing an ephemeral backend identity");
+  }
   console.warn(
     "[crypto/keys] BACKEND_PRIVATE_KEY_HEX not set — generating an EPHEMERAL keypair. " +
       "The public key will change on every restart. Set it in backend/.env for a stable identity."

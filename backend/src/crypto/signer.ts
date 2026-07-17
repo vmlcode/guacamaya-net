@@ -1,6 +1,6 @@
 import * as ed from "@noble/ed25519";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { ChannelRecord, getRecordId } from "@guacamaya/shared";
+import { ChannelRecord, canonicalJsonString, getRecordId } from "@guacamaya/shared";
 import { privateKey } from "./keys.js";
 
 /**
@@ -12,6 +12,9 @@ export async function signRecord(
 ): Promise<ChannelRecord> {
   const verifiedRecord = {
     ...record,
+    // Emit the same sorted representation that is signed. This keeps clients
+    // which verify the wire payload byte-for-byte compatible with jsonb.
+    payload: JSON.parse(canonicalJsonString(record.payload)),
     verified: true,
   };
 

@@ -38,6 +38,10 @@ import java.util.UUID
  */
 object BleConfig {
 
+    /** Reserved service UUID for a future incompatible frame v2. Old v1 apps do
+     * not scan it; new apps will dual-scan v1 + v2 during a disaster rollout. */
+    val V2_SERVICE_UUID: UUID = UUID.fromString("bb34a92c-3b5f-4c13-9fa5-599a2ed26b3e")
+
     /**
      * 128-bit production Service UUID an origin broadcasts under. A random v4 (not a
      * registry-assigned value) — the 128-bit space makes collision negligible and no
@@ -47,20 +51,68 @@ object BleConfig {
     val SERVICE_UUID: UUID = UUID.fromString("a613421e-f059-4233-a4de-8b08de13fb7e")
 
     /**
+     * Dedicated Service UUID for **control frames** (delivery / backend-resolve /
+     * self-cancel). A separate UUID — NOT [SERVICE_UUID] and NOT [V2_SERVICE_UUID] — so
+     * the Observer can tell a control PDU from an SOS PDU on the hot path by the UUID it
+     * arrived under, with zero ambiguity and no payload-byte heuristics. A random v4
+     * (collision-negligible, no registry). The 119 B on-wire envelope is identical to
+     * the SOS frame; only the Service UUID and the 22 B payload content differ.
+     *
+     * Backend `/ingest` never sees this UUID — mules strip the leading TTL byte and
+     * upload the bare 118 B frame, so the control UUID is purely an Android BLE
+     * transport concern and has no mirror in `packages/shared`.
+     */
+    val CONTROL_SERVICE_UUID: UUID = UUID.fromString("a5f1f968-bf85-40b3-b84b-c0770d7d4afa")
+
+    /** Versioned public group-chat transport. Variable-length frames; never parsed as SOS. */
+    val CHAT_SERVICE_UUID: UUID = UUID.fromString("f3e1d6a2-7b49-4a93-93c1-64b4750cb8ad")
+
+    /**
      * Retired UUIDs the Observer still matches so devices on an older build stay reachable
      * during a rollout. Broadcast is always [SERVICE_UUID]; only scanning accepts these.
+     * Legacy UUIDs carry SOS frames only.
      */
     val LEGACY_UUIDS: List<UUID> = listOf(
         UUID.fromString("8d3d0001-2a1b-4c8e-9c0f-1234567890ab"),
     )
 
-    /** Every UUID the Observer accepts (current + legacy), newest first. */
-    val MATCH_UUIDS: List<UUID> = listOf(SERVICE_UUID) + LEGACY_UUIDS
+    /** SOS UUIDs the Observer accepts: current production + legacy rollout values. */
+    val SOS_MATCH_UUIDS: List<UUID> = listOf(SERVICE_UUID) + LEGACY_UUIDS
+
+    /** Control UUIDs the Observer accepts (single value, room to grow like SOS). */
+    val CONTROL_MATCH_UUIDS: List<UUID> = listOf(CONTROL_SERVICE_UUID)
+
+    /** Every UUID the Observer accepts, SOS first then control. */
+    val MATCH_UUIDS: List<UUID> = SOS_MATCH_UUIDS + CONTROL_MATCH_UUIDS + CHAT_SERVICE_UUID
 
     val SERVICE_PARCEL_UUID: ParcelUuid = ParcelUuid(SERVICE_UUID)
 
+    val CONTROL_PARCEL_UUID: ParcelUuid = ParcelUuid(CONTROL_SERVICE_UUID)
+    val CHAT_PARCEL_UUID: ParcelUuid = ParcelUuid(CHAT_SERVICE_UUID)
+
     /** ParcelUuids for software matching of [MATCH_UUIDS]. */
     val MATCH_PARCEL_UUIDS: List<ParcelUuid> = MATCH_UUIDS.map { ParcelUuid(it) }
+
+    /** What a service-data blob under a given UUID carries. */
+    enum class FrameKind { SOS, CONTROL, CHAT }
+
+    private val SOS_MATCH_SET: Set<ParcelUuid> = SOS_MATCH_UUIDS.map { ParcelUuid(it) }.toSet()
+
+    /** Classify a parsed service-data UUID, or null if it is not a GuacaMalla UUID. */
+    fun kindOf(parcel: ParcelUuid): FrameKind? = when {
+        parcel == CONTROL_PARCEL_UUID -> FrameKind.CONTROL
+        parcel == CHAT_PARCEL_UUID -> FrameKind.CHAT
+        parcel in SOS_MATCH_SET -> FrameKind.SOS
+        else -> null
+    }
+
+    /** Classify a raw-AD parse UUID, or null if it is not a GuacaMalla UUID. */
+    fun kindOfUuid(uuid: UUID): FrameKind? = when {
+        uuid == CONTROL_SERVICE_UUID -> FrameKind.CONTROL
+        uuid == CHAT_SERVICE_UUID -> FrameKind.CHAT
+        uuid in SOS_MATCH_UUIDS -> FrameKind.SOS
+        else -> null
+    }
 
     /** Byte offsets within the service-data blob. */
     const val TTL_OFFSET = 0
@@ -114,18 +166,29 @@ object BleConfig {
         .setTxPowerLevel(AdvertisingSetParameters.TX_POWER_MAX)
         .build()
 
+    fun normalParameters(txPower: Int, active: Boolean = false): AdvertisingSetParameters =
+        AdvertisingSetParameters.Builder()
+            .setConnectable(false).setScannable(false)
+            .setPrimaryPhy(BluetoothDevice.PHY_LE_1M).setSecondaryPhy(BluetoothDevice.PHY_LE_1M)
+            .setInterval(if (active) AdvertisingSetParameters.INTERVAL_LOW else AdvertisingSetParameters.INTERVAL_MEDIUM)
+            .setTxPowerLevel(txPower).build()
+
     /**
      * Scan profiles for the Observer. Extended ADV (119 B service-data) requires
      * `legacy=false`; hardware ScanFilter is avoided (see Observer.kt).
      *
-     * [AGGRESSIVE] — default: low-latency, immediate callbacks (`reportDelay=0`),
-     * all PHYs. Best on Pixel / recent Qualcomm.
+     * [BALANCED] — normal mesh observation with all matches but without the
+     * highest scan duty cycle. The active rescue radar promotes this to
+     * [AGGRESSIVE].
+     *
+     * [AGGRESSIVE] — active rescue search: low-latency, immediate callbacks
+     * (`reportDelay=0`), all PHYs. Best on Pixel / recent Qualcomm.
      *
      * [LEGACY_STACK] — for older MTK / Xiaomi-class stacks (Android 8–11) that
      * fail aggressive match or stop delivering callbacks: sticky match, fewer
      * concurrent matches, CODED PHY when supported (Broadcaster secondary PHY).
      */
-    enum class ScanProfile { AGGRESSIVE, LEGACY_STACK }
+    enum class ScanProfile { BALANCED, AGGRESSIVE, LEGACY_STACK }
 
     /** Build scan settings tuned for [profile] and this chip's PHY support. */
     fun scanSettings(adapter: BluetoothAdapter, profile: ScanProfile): ScanSettings {
@@ -137,6 +200,18 @@ object BleConfig {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             builder.setLegacy(false)
             when (profile) {
+                ScanProfile.BALANCED -> {
+                    builder.setScanMode(ScanSettings.SCAN_MODE_BALANCED)
+                    builder.setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
+                    builder.setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
+                    builder.setPhy(
+                        if (adapter.isLeCodedPhySupported) {
+                            ScanSettings.PHY_LE_ALL_SUPPORTED
+                        } else {
+                            BluetoothDevice.PHY_LE_1M
+                        },
+                    )
+                }
                 ScanProfile.AGGRESSIVE -> {
                     builder.setMatchMode(ScanSettings.MATCH_MODE_AGGRESSIVE)
                     builder.setNumOfMatches(ScanSettings.MATCH_NUM_MAX_ADVERTISEMENT)
