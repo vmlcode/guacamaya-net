@@ -4,24 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this branch is
 
-The **`develop` branch is the consolidated GuacaMalla monorepo** holding both halves of the product:
+The **`develop` branch is the consolidated GuacaMalla monorepo** holding every half of the product:
 
-- **`backend/` + `packages/`** — the GuacaMalla Red backend (Bun + TypeScript). It is the **data-mule
-  ingestion point** for the mesh (`POST /ingest`), serves official signed channels, and feeds the
-  moving-map location history. The mesh works without it; the backend is never a hard dependency.
+- **`backend/` + `packages/`** — the GuacaMalla Red backend (Bun + TypeScript + Fastify). It is the
+  **data-mule ingestion point** for the mesh (`POST /ingest`), serves official signed channels, runs
+  the resolve/ledger flow, and feeds the moving-map dashboard. The mesh works without it; the backend
+  is never a hard dependency.
 - **`android/`** — the native Kotlin + Compose **GuacaMalla mesh app**, the connectionless
   BLE/Wi-Fi-Aware mesh. A **self-contained Gradle project** (its own `gradlew`, `build.gradle.kts`,
   `docs/`, `CLAUDE.md`); open `android/` directly in Android Studio. See **`android/CLAUDE.md`** for
-  the mesh side.
+  the mesh side. A Cursor rule (`.cursor/rules/device-test-first.mdc`) requires Android BLE/UI changes
+  to be verified on connected adb devices (`cd android && ./scripts/demo.sh install` /
+  `device-test` / `logcat`) before claiming they work.
+- **`guacamalla-landing/landing/`** — the public marketing site (Vite + React 19 + Tailwind 4 +
+  shadcn/Radix). It has its **own `bun.lock`** and is **not** a root Bun workspace; run it via
+  `bun run dev:landing`. It is **connected to Lovable** (see its `AGENTS.md`): never force-push,
+  rebase, or amend commits already pushed on its branch, and keep the branch in a working state.
 
-The abandoned Expo app that used to live in `app/` has been removed. `android/` is **not** a Bun
-workspace — keep it out of the root `package.json` workspaces.
+`android/` is **not** a Bun workspace — keep it (and the landing) out of the root `package.json`
+workspaces (`packages/*`, `backend`). The `app/` directory is a leftover stub (a lone
+`expo-env.d.ts`) from the removed Expo app — nothing lives there.
 
 Working language of comments/docs is Spanish in places; code identifiers are English.
 
 ## Brand rules
 
-- The product is **GuacaMalla Net** (mesh app + optional backend). Use *GuacaMalla* in prose, docs,
+- The product is **GuacaMalla** (mesh app + optional backend). Use *GuacaMalla* in prose, docs,
   comments, and UI. **SOSNet** is a retired name — do not use it.
 - **Code identifiers intentionally stay `guacamaya`** — the brand fix (Guacamaya→GuacaMalla) was
   *visible + docs only*. Do **not** "fix" these to `guacamalla`; doing so changes the app identity,
@@ -29,37 +37,41 @@ Working language of comments/docs is Spanish in places; code identifiers are Eng
   - Android package + `namespace`/`applicationId` (`net.guacamaya`) and action strings (`net.guacamaya.action.*`).
   - npm/workspace packages (`@guacamaya/*`, `guacamaya-net`) and env vars (`GUACAMAYA_ADMIN_KEY`, `GUACAMAYA_*_KEY`).
   - Runtime keys: Keystore alias `guacamaya_master`, Room DB `guacamaya.db`, WorkManager `guacamaya-ingest-upload`,
-    notification channel/log tags (`guacamaya.*`), and the WS subprotocol prefix `guacamaya.` (matched on both sides).
+    notification channel/log tags (`guacamaya.*`), signing domains (`guacamaya.rescuer-cert.v1`,
+    `CONTROL_SIGN_DOMAIN`, …), and the WS subprotocol prefix (matched on both sides).
 - Wire-format constants live in `packages/shared/src/mesh/` and must stay byte-identical with
   `net.guacamaya.proto.*` on Android.
 - Exception: the git branch name **`init-sosnet`** is a literal remote branch name until renamed.
 
 > **Context rule:** when a request touches anything under `backend/` or the shared user flow (API
 > contracts, data shapes shared between mesh and backend, WebSocket events, channel/location
-> ingestion), read `backend/CLAUDE.md` first — it has the three-layer stack pattern, the dedup
-> invariant, environment setup, and per-domain commands.
+> ingestion, auth keys), read `backend/CLAUDE.md` first — it has the three-layer stack pattern, the
+> dedup invariant, the security/key model, environment setup, and per-domain commands.
 
 > **Mobile integration:** `backend_final.md` (repo root) is the authoritative per-endpoint reference
 > for wiring the Android app to the backend — auth model (which keys the app must/must not hold), the
 > 118-byte upload-frame layout for the `IngestClient`, every endpoint's request/response, the resolve
 > witness-signing format, and the recommended mule-upload flow. Read it before touching the
-> mesh↔backend HTTP/WS contract or building the Android `IngestClient`.
+> mesh↔backend HTTP/WS contract or building against the Android `IngestClient`.
 
 ## Run / test (Bun-first — never npm/node)
 
 ```bash
 bun install
 bun run dev:backend     # bun --watch backend/src/index.ts  (HTTP + WS on :3000)
-bun test                # shared-package unit tests (bun:test)
-bun run build           # typecheck/build shared + backend
+bun run dev:landing     # Vite dev server for the landing site
+bun test                # all unit tests (packages/shared + backend, bun:test)
+bun test packages/shared/src/ledger.test.ts   # single test file
+bun run build           # typecheck/build shared + backend + landing
+bun run keygen          # generate BACKEND_PRIVATE_KEY_HEX + GUACAMAYA_ADMIN_KEY
 ```
 
 Bun installs to `~/.bun/bin`. Runs out of the box with **no database**: if `SUPABASE_URL` /
-`SUPABASE_SERVICE_ROLE_KEY` are unset, the data layer falls back to in-memory stores
-(`backend/src/channels/store.ts`, `backend/src/locations/store.ts`). Configure `backend/.env` from
-`backend/.env.example`; set `BACKEND_PRIVATE_KEY_HEX` so the server's Ed25519 identity (and public
-key) stays stable across reboots — otherwise a fresh ephemeral keypair is generated each boot (it
-warns on startup).
+`SUPABASE_SERVICE_ROLE_KEY` are unset, the data layer falls back to in-memory stores (`store.ts` in
+each domain). Configure `backend/.env` from `backend/.env.example`; set `BACKEND_PRIVATE_KEY_HEX` so
+the server's Ed25519 identity stays stable across reboots (otherwise an ephemeral keypair is
+generated each boot, with a startup warning). `NODE_ENV=production` refuses to start without
+`GUACAMAYA_ADMIN_KEY`.
 
 ## Architecture
 
@@ -75,26 +87,52 @@ trajectory for the moving-map dashboard. Like records, `id` = SHA-256 of canonic
 
 ### Layout
 
-- `packages/shared/` — `ChannelRecord` + `LocationPoint` types, `getRecordId`, `getLocationId`,
-  `verifyRecordSignature`, `mergeLogs` (union + dedupe + signature check). Pure, `bun:test` coverage.
-  The contract both sides share. Keep it framework-agnostic.
-- `backend/src/index.ts` — Fastify bootstrap (CORS, rate-limit 100/min), registers route plugins, WS, graceful shutdown.
-- `backend/src/channels/routes.ts` — channel HTTP API + `/ingest` (see below). `store.ts` — in-memory fallback.
-- `backend/src/locations/routes.ts` — location HTTP API (see below). `store.ts` — in-memory fallback.
+- `packages/shared/` — the contract both sides share. Pure, framework-agnostic, `bun:test` coverage:
+  - `types.ts`, `crypto.ts`, `merge.ts` — `ChannelRecord`/`LocationPoint`, `getRecordId`/`getLocationId`,
+    `verifyRecordSignature`, `mergeLogs` (union + dedupe + signature check).
+  - `canonical.ts` — canonical JSON serialization + `SosId`/`EventId` formats; every signed structure
+    hashes through it.
+  - `control.ts` — `ControlReceipt` verification, **rescuer certificates** (7-day max, domain
+    `guacamaya.rescuer-cert.v1`) and the signed **CRL** the backend issues.
+  - `ledger.ts` — the SOS lifecycle event chain: `SOS_CREATED | SOS_RESOLVED | SOS_CANCELLED |
+    SOS_EXPIRED | KEY_REVOKED`, event hashing/chaining, replay guard.
+  - `resolve.ts` — witness envelope + quorum verification for finder co-signed disarms.
+  - `mesh/` — binary wire format: `constants.ts` (offsets/sizes/domains), `crc16.ts` (CRC16-CCITT),
+    `controlFrame.ts` (22-byte control payload, byte-identical with Android `ControlPayload.kt`,
+    domain-separated signature so SOS and control signatures are never interchangeable).
+- `backend/src/index.ts` — Fastify bootstrap (helmet+CSP, CORS, rate limits), registers all route
+  plugins, WS, periodic sweep, graceful shutdown.
+- `backend/src/<domain>/` — one directory per domain, each following the same three-layer stack
+  (`routes.ts` → `*Repo.ts` Supabase-or-fallback → `store.ts` in-memory): `channels/` (+ `/ingest`),
+  `locations/`, `resolve/` (witness quorum + evidence upload), `control/` (NAN control-receipt
+  ingress + replay guard), `ledger/` (SOS lifecycle chain), `waitlist/` (landing signups → Resend
+  email), `dashboard/` (self-contained Leaflet map page, public, coordinates degraded ~1 km).
 - `backend/src/crypto/` — `keys.ts` (server identity), `signer.ts` (signs official records).
-- `backend/src/mesh/frame.ts` — **decodes + zero-trust-verifies GuacaMalla binary mesh frames** for `/ingest`.
-- `backend/src/db/` — `channelsRepo.ts`, `locationsRepo.ts` (Supabase with in-memory fallback), `supabase.ts`. Schema: `backend/supabase/schema.sql`.
-- `backend/src/ws/server.ts` — WebSocket `/ws`, subscribe/unsubscribe per channel, `broadcastRecord`, `broadcastLocation`.
+- `backend/src/mesh/frame.ts` — **decodes + zero-trust-verifies GuacaMalla binary mesh frames** for
+  `/ingest`; `controlFrame.ts` for control frames.
+- `backend/src/security/` — API-key auth (timing-safe), env-driven config, per-route rate limits,
+  input validation, `keygen.ts`. Key model (admin/read/WS keys) is detailed in `backend/CLAUDE.md`.
+- `backend/src/db/` — Supabase repos with in-memory fallback. Schema: `backend/supabase/schema.sql`.
+- `backend/src/ws/server.ts` — WebSocket `/ws` (key-gated), subscribe/unsubscribe per channel,
+  `broadcastRecord`, `broadcastLocation`, `broadcastResolve`.
 
-### HTTP API
+### HTTP API (details + auth per endpoint in `backend_final.md`)
 
-- `GET /pubkey` — backend public key (clients verify official records against it).
-- `GET /channels` — channel list.
-- `GET /channels/:id/records?since=<ms>` — records since a timestamp.
-- `POST /channels/:id/records` — create an **official** record: backend signs it (`verified:true`), persists, broadcasts over WS.
-- `POST /ingest` — **data-mule upload of signed binary mesh frames** (see below). Also populates the
-  location history: each verified frame's lat/lon becomes a `LocationPoint`.
-- `GET /locations?since=<ms>&deviceId=<id>` — location points for the moving-map dashboard (read-only).
+- `GET /pubkey` — backend public key (clients verify official records/receipts against it).
+- `GET /channels`, `GET /channels/:id/records?since=<ms>` — channel reads.
+- `POST /channels/:id/records` — create an **official** record (admin key; backend signs it
+  `verified:true`, persists, broadcasts over WS).
+- `POST /ingest` — **data-mule upload of signed binary mesh frames** (see below).
+- `GET /locations?since=<ms>&deviceId=<id>` — location points (read key), moving-map dashboard.
+- `POST /resolve/evidence` + `POST /resolve` — finder co-signed disarm of an active SOS: photo
+  evidence upload, then witness-quorum envelope; backend re-verifies every witness signature.
+- `POST /control/receipts` — NAN control-receipt ingress (backend-resolve / self-cancel / delivery);
+  verified receipts derive ledger events (`SOS_RESOLVED` / `SOS_CANCELLED`).
+- `GET /ledger/state/:sosId`, `GET /ledger/events/:sosId`, `GET /ledger/events` (cursor-paginated) —
+  SOS lifecycle ledger reads (`POST /ledger/events` is a 501 stub — p2p event transport not enabled).
+- `POST /operator/rescuer-certificates` — admin-key issuance of short-lived rescuer certificates.
+- `POST /waitlist` — landing-page signup (validated, rate-limited, Resend confirmation email).
+- `GET /dashboard` — public self-contained alert map (privacy-degraded coordinates).
 
 ### `POST /ingest` — the data-mule bridge (most important flow)
 
@@ -119,16 +157,20 @@ broadcasts it to `"locations"` WS subscribers — same zero-trust gate, no separ
 
 ## Conventions worth keeping
 
-- **Bun only** for package management and scripts (project preference). `.env.example` mentioning `npm` is stale.
-- `/ingest` must **never** persist a frame whose signature it hasn't re-verified. Verification is the gate.
+- **Bun only** for package management and scripts (project preference).
+- `/ingest` must **never** persist a frame whose signature it hasn't re-verified. Verification is the
+  gate — the same holds for `/control/receipts`, `/resolve`, and `/ledger/events`: every signature is
+  re-verified server-side and receipts go through the replay guard.
 - Keep `packages/shared` framework-agnostic — it's the contract; don't pull backend-only deps into it.
-- The binary frame layout in `frame.ts` mirrors `proto/Payload.kt` on the mesh branch; if the wire
-  format changes there (offsets, sizes, CRC), update both or `/ingest` silently rejects valid frames.
+- The binary frame layouts in `backend/src/mesh/` and `packages/shared/src/mesh/` mirror
+  `proto/Payload.kt` / `proto/ControlPayload.kt` on the Android side; if the wire format changes
+  there (offsets, sizes, CRC, signing domains), update both or `/ingest` silently rejects valid frames.
+- All signatures are **domain-separated** (e.g. `guacamaya.rescuer-cert.v1`, `CONTROL_SIGN_DOMAIN`) —
+  never sign or verify bare payload bytes for a new structure; add a new domain constant.
 - **Always recompute `id` server-side** (`getRecordId` / `getLocationId`) on ingest — never trust a
   client-supplied id.
 - **Locations are frame-derived, never client-trusted.** The canonical, authenticated source of a
   device's position is the **lat/lon inside a verified mesh frame** — `decodeAndVerifyFrame` emits the
   `LocationPoint` and `/ingest` persists it. There is intentionally **no** trusted-JSON location
-  ingest endpoint (the original `POST /ingest/locations` was removed): the same Ed25519 gate that
-  guards records guards positions. `deviceId` is derived from the verified pubkey, never supplied by
-  the client. `GET /locations` stays read-only.
+  ingest endpoint: the same Ed25519 gate that guards records guards positions. `deviceId` is derived
+  from the verified pubkey, never supplied by the client. `GET /locations` stays read-only.
