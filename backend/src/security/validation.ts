@@ -8,6 +8,7 @@ const VALID_CHANNEL_IDS = new Set([
   "estoy-bien",
   "solicito-ayuda",
   "resuelto",
+  "encontrado",
 ]);
 
 export function isValidChannelId(id: string): boolean {

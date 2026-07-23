@@ -88,6 +88,9 @@ export const securityConfig = {
 
   maxIngestBatch: boundedNumber("MAX_INGEST_BATCH", 200, 1, 1000, true),
   maxFrameB64Length: boundedNumber("MAX_FRAME_B64_LENGTH", 256, 64, 4096, true),
+  /** "Encontrado" proximity gate: finder within this many meters of the SOS's
+   * last reported point → likely_found; further → possible_false_positive. */
+  foundProximityMeters: boundedNumber("FOUND_PROXIMITY_METERS", 100, 1, 100_000),
   maxOfficialPayloadBytes: boundedNumber("MAX_OFFICIAL_PAYLOAD_BYTES", 16_384, 1, 1_048_576, true),
 
   /** Allowlisted field rescuers may receive a fresh certificate through a mule ingest. */

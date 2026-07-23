@@ -33,6 +33,10 @@ data class IngestResult(
     val controlDuplicate: Int = 0,
     val controlRejected: Int = 0,
     val controlFrames: List<String> = emptyList(),
+    val foundAccepted: Int = 0,
+    val foundDuplicate: Int = 0,
+    val foundRejected: Int = 0,
+    val foundResults: List<FoundVerdict> = emptyList(),
     val certificateRevocationList: MuleCrl? = null,
 )
 
@@ -44,17 +48,33 @@ data class MuleCrl(
     val backendSignature: String,
 )
 
+/** Backend proximity verdict for one uploaded "Encontrado" frame. */
+data class FoundVerdict(
+    val id: String,
+    val targetRecordId: String,
+    val distanceMeters: Int,
+    /** "near" | "far" */
+    val proximity: String,
+    /** "likely_found" | "possible_false_positive" */
+    val verdict: String,
+)
+
 /**
  * The uploader's view of the backend. Implemented by [IngestClient]; faked in tests
  * so [IngestRepository] stays free of Android/HTTP dependencies.
  */
 interface IngestApi {
     /**
-     * POST a batch of base64 SOS [frames] and (optional) base64 [controlFrames]
-     * (self-cancels). Either list may be empty; the backend accepts a batch with just
-     * one non-empty side. Throws [IOException] on transport failure.
+     * POST a batch of base64 SOS [frames], (optional) base64 [controlFrames]
+     * (self-cancels) and (optional) base64 [foundFrames] ("Encontrado" reports).
+     * Any list may be empty; the backend accepts a batch with at least one
+     * non-empty side. Throws [IOException] on transport failure.
      */
-    suspend fun upload(frames: List<String>, controlFrames: List<String>): IngestResult
+    suspend fun upload(
+        frames: List<String>,
+        controlFrames: List<String>,
+        foundFrames: List<String>,
+    ): IngestResult
 }
 
 /**
@@ -71,7 +91,11 @@ class IngestClient(
     private val readTimeoutMs: Int = 30_000,
 ) : IngestApi {
 
-    override suspend fun upload(frames: List<String>, controlFrames: List<String>): IngestResult {
+    override suspend fun upload(
+        frames: List<String>,
+        controlFrames: List<String>,
+        foundFrames: List<String>,
+    ): IngestResult {
         val url = URL(baseUrl.trimEnd('/') + "/ingest")
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -82,7 +106,9 @@ class IngestClient(
             setRequestProperty("Accept", "application/json")
         }
         try {
-            conn.outputStream.use { it.write(buildBody(frames, controlFrames).toByteArray(Charsets.UTF_8)) }
+            conn.outputStream.use {
+                it.write(buildBody(frames, controlFrames, foundFrames).toByteArray(Charsets.UTF_8))
+            }
             val code = conn.responseCode
             if (code !in 200..299) {
                 // Drain the error stream so the connection can be pooled/closed cleanly.
@@ -101,6 +127,21 @@ class IngestClient(
                 controlRejected = json.optInt("controlRejected", 0),
                 controlFrames = json.optJSONArray("controlFrames")?.let { arr ->
                     List(arr.length()) { arr.getString(it) }
+                } ?: emptyList(),
+                foundAccepted = json.optInt("foundAccepted", 0),
+                foundDuplicate = json.optInt("foundDuplicate", 0),
+                foundRejected = json.optInt("foundRejected", 0),
+                foundResults = json.optJSONArray("foundResults")?.let { arr ->
+                    List(arr.length()) { i ->
+                        val o = arr.getJSONObject(i)
+                        FoundVerdict(
+                            id = o.optString("id"),
+                            targetRecordId = o.optString("targetRecordId"),
+                            distanceMeters = o.optInt("distanceMeters"),
+                            proximity = o.optString("proximity"),
+                            verdict = o.optString("verdict"),
+                        )
+                    }
                 } ?: emptyList(),
                 certificateRevocationList = json.optJSONObject("certificateRevocationList")?.let { crl ->
                     val keys = crl.optJSONArray("revokedPublicKeys") ?: JSONArray()
@@ -124,10 +165,15 @@ class IngestClient(
      * key absent vs `[]` keeps the body minimal and sidesteps any empty-array edge in
      * `validateIngestBatch`.
      */
-    private fun buildBody(frames: List<String>, controlFrames: List<String>): String {
+    private fun buildBody(
+        frames: List<String>,
+        controlFrames: List<String>,
+        foundFrames: List<String>,
+    ): String {
         val obj = JSONObject()
         if (frames.isNotEmpty()) obj.put("frames", JSONArray(frames))
         if (controlFrames.isNotEmpty()) obj.put("controlFrames", JSONArray(controlFrames))
+        if (foundFrames.isNotEmpty()) obj.put("foundFrames", JSONArray(foundFrames))
         return obj.toString()
     }
 }

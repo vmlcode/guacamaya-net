@@ -5,4 +5,5 @@ export * from "./ledger.js";
 export * from "./resolve.js";
 export * from "./control.js";
 export * from "./merge.js";
+export * from "./geo.js";
 export * from "./mesh/index.js";

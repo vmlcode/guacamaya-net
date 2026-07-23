@@ -24,12 +24,19 @@ import net.guacamaya.backend.ws.LiveSos
 import net.guacamaya.backend.ws.LiveSosClient
 import net.guacamaya.ble.Broadcaster
 import net.guacamaya.crypto.Identity
+import net.guacamaya.ingest.IngestUploadWorker
 import net.guacamaya.mesh.MessageDao
 import net.guacamaya.mesh.MessageEntity
 import net.guacamaya.mesh.GuacamayaDatabase
 import net.guacamaya.mesh.NeighborEstimateEntity
 import net.guacamaya.mesh.ChatMessageEntity
+import net.guacamaya.mesh.OutboundFoundEntity
 import net.guacamaya.ble.ChatRuntime
+import net.guacamaya.proto.ControlFrame
+import net.guacamaya.proto.FoundFrame
+import net.guacamaya.proto.FoundPayload
+import net.guacamaya.proto.buildFoundFrame
+import java.security.SecureRandom
 
 /**
  * Top-level UI state. Owns:
@@ -163,6 +170,35 @@ class MapViewModel(app: Application) : AndroidViewModel(app) {
     fun setMode(m: MeshMode) { _mode.value = m }
     fun sendChat(text: String): Result<Unit> = ChatRuntime.send(text)
     fun openChat() { ChatRuntime.initialize(getApplication()); ChatRuntime.openActiveWindow() }
+
+    /**
+     * Queue a signed "Encontrado" report for [node]'s current SOS session and kick
+     * the mule uploader. The backend re-verifies the signature and computes the
+     * authoritative near/far verdict against the SOS's last reported point; the
+     * finder's position travels inside the signed payload, never as loose JSON.
+     */
+    fun markFound(node: MessageEntity, finderLat: Double, finderLon: Double) {
+        val id = identity.value ?: return
+        val app = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            val frame = buildFoundFrame(
+                FoundPayload(
+                    latE7 = (finderLat * 1e7).toInt(),
+                    lonE7 = (finderLon * 1e7).toInt(),
+                    tsUnix = System.currentTimeMillis() / 1000,
+                    targetNodeId = node.nodeId.copyOf(),
+                    targetMsgId = node.msgId,
+                    foundMsgId = SecureRandom().nextInt(0x10000),
+                ),
+                id.privateKeySeed,
+            )
+            val sigHex = ControlFrame.toHex(frame.copyOfRange(FoundFrame.SIG_OFF, FoundFrame.FRAME_LEN))
+            dao.insertOutboundFound(
+                OutboundFoundEntity(signatureHex = sigHex, frame = frame, queuedAt = System.currentTimeMillis())
+            )
+            IngestUploadWorker.enqueue(app)
+        }
+    }
 
     private companion object {
         const val MAX_LIVE_SOS = 50
