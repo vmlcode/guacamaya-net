@@ -59,3 +59,38 @@ export const MESH_SOS_TYPES = [
 ] as const;
 
 export type MeshSosType = (typeof MESH_SOS_TYPES)[number];
+
+/**
+ * Found frame v1 ("Encontrado") — a finder marks an SOS victim as found.
+ * Same envelope as the SOS frame: 22 B payload + 32 B pubkey + 64 B signature,
+ * with a leading mutable hop-TTL byte tolerated on the wire. Must stay
+ * byte-identical with net.guacamaya.proto.FoundPayload (Android).
+ *
+ *   off 0..3   latE7         int32 — finder latitude × 1e7
+ *   off 4..7   lonE7         int32 — finder longitude × 1e7
+ *   off 8..11  tsUnix        u32 unix seconds
+ *   off 12..15 targetNodeId  SHA-256(victim pubkey)[0..3]
+ *   off 16..17 targetMsgId   u16 — msgId of the SOS session being marked
+ *   off 18..19 foundMsgId    u16 — CSPRNG per found report (dedupe entropy)
+ *   off 20..21 crc           CRC16-CCITT over bytes 0..19
+ */
+export const FOUND_PAYLOAD_LEN = 22;
+export const FOUND_FRAME_LEN = FOUND_PAYLOAD_LEN + MESH_PUBKEY_LEN + MESH_SIG_LEN; // 118 (upload, TTL stripped)
+export const FOUND_ON_WIRE_LEN = FOUND_FRAME_LEN + 1; // 119 (leading hop TTL)
+
+export const FOUND_PAYLOAD_OFF = 0;
+export const FOUND_PUBKEY_OFF = FOUND_PAYLOAD_OFF + FOUND_PAYLOAD_LEN;
+export const FOUND_SIG_OFF = FOUND_PUBKEY_OFF + MESH_PUBKEY_LEN;
+
+/**
+ * Domain separation for the found-frame Ed25519 signature:
+ * sig = Ed25519(sk, UTF8(FOUND_SIGN_DOMAIN) || payload22).
+ * An SOS or control signature can never be replayed as a found report or
+ * vice versa. Mirrored verbatim in net.guacamaya.proto.FoundPayload.
+ */
+export const FOUND_SIGN_DOMAIN = "guacamaya.found-frame.v1\n";
+
+/** Default proximity gate: finder within this many meters of the SOS's last
+ * reported point → "near / likely_found"; further → "far / possible_false_positive".
+ * Backend default; env-overridable via FOUND_PROXIMITY_METERS. */
+export const FOUND_PROXIMITY_NEAR_METERS = 100;

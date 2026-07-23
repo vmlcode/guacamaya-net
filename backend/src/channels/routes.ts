@@ -32,6 +32,11 @@ import { broadcastRecord, broadcastLocation, broadcastResolve } from "../ws/serv
 import { privateKey, publicKeyHex } from "../crypto/keys.js";
 import { decodeAndVerifyFrame } from "../mesh/frame.js";
 import { processControlFrames, mintControlFrames, type SosRef } from "../control/ingestControl.js";
+import {
+  processFoundFrames,
+  type FoundDeps,
+  type ProcessFoundSummary,
+} from "../found/processFound.js";
 import { sanitizeRecordsForPublic } from "./sanitize.js";
 import { requireApiKey } from "../security/auth.js";
 import { securityConfig } from "../security/config.js";
@@ -54,6 +59,7 @@ export async function channelRoutes(fastify: FastifyInstance) {
     { id: "ayuda-medica", name: "Ayuda Médica", verifiedOnly: true },
     { id: "estoy-bien", name: "Estoy Bien (Comunidad)", verifiedOnly: false },
     { id: "solicito-ayuda", name: "Solicito Ayuda (Comunidad)", verifiedOnly: false },
+    { id: "encontrado", name: "Encontrado (Comunidad)", verifiedOnly: false },
   ]);
 
   /** Issues a short-lived NAN-only rescuer certificate. Never expose the backend key. */
@@ -120,29 +126,32 @@ export async function channelRoutes(fastify: FastifyInstance) {
     },
   );
 
-  fastify.post<{ Body: { frames?: unknown; controlFrames?: unknown; rescuerPublicKeys?: unknown } }>(
+  fastify.post<{ Body: { frames?: unknown; controlFrames?: unknown; foundFrames?: unknown; rescuerPublicKeys?: unknown } }>(
     "/ingest",
     { config: { rateLimit: securityConfig.ingestRateLimit } },
     async (request, reply) => {
-      const { frames, controlFrames } = request.body ?? {};
+      const { frames, controlFrames, foundFrames } = request.body ?? {};
 
-      // A mule may carry SOS frames, control frames, or both. At least one batch
-      // must be present and each is independently capped.
+      // A mule may carry SOS frames, control frames, found frames, or any mix.
+      // At least one batch must be present and each is independently capped.
       const framesValid = validateIngestBatch(frames);
       const controlValid = validateIngestBatch(controlFrames);
-      if (!framesValid && !controlValid) {
+      const foundValid = validateIngestBatch(foundFrames);
+      if (!framesValid && !controlValid && !foundValid) {
         const tooMany =
           (Array.isArray(frames) && frames.length > securityConfig.maxIngestBatch) ||
-          (Array.isArray(controlFrames) && controlFrames.length > securityConfig.maxIngestBatch);
+          (Array.isArray(controlFrames) && controlFrames.length > securityConfig.maxIngestBatch) ||
+          (Array.isArray(foundFrames) && foundFrames.length > securityConfig.maxIngestBatch);
         return reply.code(400).send({
           error: tooMany
             ? `Batch exceeds max ${securityConfig.maxIngestBatch} frames`
-            : "Missing or invalid 'frames'/'controlFrames' array",
+            : "Missing or invalid 'frames'/'controlFrames'/'foundFrames' array",
         });
       }
 
       const frameList: string[] = framesValid ? (frames as string[]) : [];
       const controlList: string[] = controlValid ? (controlFrames as string[]) : [];
+      const foundList: string[] = foundValid ? (foundFrames as string[]) : [];
 
       let ingested = 0;
       let duplicate = 0;
@@ -226,6 +235,19 @@ export async function channelRoutes(fastify: FastifyInstance) {
         request.log.warn({ rejected, reasons }, "rejected unverifiable mesh frames");
       }
 
+      // "Encontrado" reports: verify zero-trust, resolve the target SOS (which may
+      // have arrived in this very batch — the SOS loop above already persisted it),
+      // and compute the proximity verdict server-side.
+      const foundSummary: ProcessFoundSummary = foundList.length > 0
+        ? await processFoundFrames(foundList, foundDeps())
+        : { accepted: 0, duplicate: 0, rejected: 0, reasons: {}, results: [] };
+      if (foundSummary.rejected > 0) {
+        request.log.warn(
+          { rejected: foundSummary.rejected, reasons: foundSummary.reasons },
+          "rejected unverifiable found frames",
+        );
+      }
+
       // Mules request renewals for pre-authorized field keys. The allowlist is
       // server configuration, never learned from an untrusted ingest request.
       const requested = Array.isArray(request.body?.rescuerPublicKeys)
@@ -269,9 +291,50 @@ export async function channelRoutes(fastify: FastifyInstance) {
         controlRejected: controlResult.rejected,
         controlReasons: controlResult.reasons,
         controlFrames: minted.map((m) => m.frameB64),
+        foundAccepted: foundSummary.accepted,
+        foundDuplicate: foundSummary.duplicate,
+        foundRejected: foundSummary.rejected,
+        foundReasons: foundSummary.reasons,
+        foundResults: foundSummary.results,
       };
     },
   );
+}
+
+/**
+ * Production wiring for the "Encontrado" processor: the reference point is the
+ * LATEST verified SOS record for (targetNodeId, targetMsgId) on solicito-ayuda.
+ * payload.nodeId / payload.msgId are set by decodeAndVerifyFrame from the
+ * signed frame, so the lookup key is authenticated, never client-supplied.
+ */
+function foundDeps(): FoundDeps {
+  return {
+    proximityNearMeters: securityConfig.foundProximityMeters,
+    async findTargetSos(targetNodeIdHex, targetMsgId) {
+      const records = await channelsRepo.getRecords(SOS_CHANNEL, 0);
+      let best: ChannelRecord | null = null;
+      for (const r of records) {
+        const p = r.payload as { nodeId?: unknown; msgId?: unknown };
+        if (p.nodeId === targetNodeIdHex && p.msgId === targetMsgId) {
+          if (!best || r.timestamp > best.timestamp) best = r;
+        }
+      }
+      if (!best) return null;
+      const p = best.payload as { lat?: unknown; lon?: unknown };
+      if (
+        typeof p.lat !== "number" ||
+        typeof p.lon !== "number" ||
+        !Number.isFinite(p.lat) ||
+        !Number.isFinite(p.lon) ||
+        (p.lat === 0 && p.lon === 0)
+      ) {
+        return null; // SOS exists but carries no fix — nothing to validate against
+      }
+      return { recordId: best.id, lat: p.lat, lon: p.lon };
+    },
+    addRecord: (record) => channelsRepo.addRecord(record),
+    broadcast: (record) => broadcastRecord(record),
+  };
 }
 
 /**

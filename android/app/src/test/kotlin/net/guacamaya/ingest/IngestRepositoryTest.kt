@@ -8,6 +8,7 @@ import net.guacamaya.mesh.NeighborEstimateEntity
 import net.guacamaya.mesh.ControlReplayEntity
 import net.guacamaya.mesh.ControlTrustEntity
 import net.guacamaya.mesh.OutboundControlEntity
+import net.guacamaya.mesh.OutboundFoundEntity
 import net.guacamaya.mesh.NeighborObservationEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -88,6 +89,26 @@ class IngestRepositoryTest {
         override suspend fun terminalControlTrusts(): List<ControlTrustEntity> = throw NotImplementedError()
         override suspend fun countControlTrust(): Int = throw NotImplementedError()
         override suspend fun clearControlTrust() = throw NotImplementedError()
+
+        // ── Outbound found frames: mule-upload queue ("Encontrado" → backend) ────────
+        val outboundFound = mutableListOf<OutboundFoundEntity>()
+
+        override suspend fun insertOutboundFound(entity: OutboundFoundEntity): Long {
+            if (outboundFound.any { it.signatureHex == entity.signatureHex }) return -1
+            outboundFound.add(entity)
+            return outboundFound.size.toLong()
+        }
+
+        override suspend fun selectUploadableFound(limit: Int): List<OutboundFoundEntity> =
+            outboundFound.filter { !it.uploaded }.sortedBy { it.queuedAt }.take(limit)
+
+        override suspend fun markFoundUploaded(sigs: List<String>) {
+            val marked = outboundFound.map { if (it.signatureHex in sigs) it.copy(uploaded = true) else it }
+            outboundFound.clear()
+            outboundFound.addAll(marked)
+        }
+
+        override suspend fun countUploadableFound(): Int = outboundFound.count { !it.uploaded }
     }
 
     private class FakeApi(
@@ -97,11 +118,17 @@ class IngestRepositoryTest {
         var calls = 0
         val sentSizes = mutableListOf<Int>()
         val controlSentSizes = mutableListOf<Int>()
+        val uploadedFound = mutableListOf<List<String>>()
 
-        override suspend fun upload(frames: List<String>, controlFrames: List<String>): IngestResult {
+        override suspend fun upload(
+            frames: List<String>,
+            controlFrames: List<String>,
+            foundFrames: List<String>,
+        ): IngestResult {
             calls++
             sentSizes += frames.size
             controlSentSizes += controlFrames.size
+            uploadedFound += foundFrames
             if (calls > failAfter) throw IOException("boom")
             return result
         }
@@ -260,5 +287,25 @@ class IngestRepositoryTest {
         assertEquals(1, api.calls)
         assertEquals(listOf(0), api.sentSizes)
         assertEquals(listOf(1), api.controlSentSizes)
+    }
+
+    @Test
+    fun `drains found queue and marks uploaded`() = runBlocking {
+        // Arrange: one pending found frame, no SOS/control work.
+        val dao = FakeDao(emptyList())
+        dao.outboundFound.add(
+            OutboundFoundEntity(
+                signatureHex = "ab".repeat(64),
+                frame = ByteArray(118) { 1 },
+                queuedAt = 1L,
+            )
+        )
+        val api = FakeApi()
+        val repo = IngestRepository(dao, api, batchSize = 50)
+
+        val summary = repo.uploadPending()
+        assertEquals(IngestRepository.Outcome.SUCCESS, summary.outcome)
+        assertEquals(1, summary.foundFramesSent)
+        assertEquals(0, dao.countUploadableFound())
     }
 }

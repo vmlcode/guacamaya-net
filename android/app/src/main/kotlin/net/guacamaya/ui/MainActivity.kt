@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import net.guacamaya.BuildConfig
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -104,9 +105,12 @@ import net.guacamaya.service.GuacamayaForegroundService
 import org.json.JSONObject
 import net.guacamaya.util.BatteryHelper
 import kotlin.math.PI
+import kotlin.math.asin
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * VPN-style single screen. One big power button toggles mesh participation
@@ -634,6 +638,7 @@ private fun Screen(vm: MapViewModel = viewModel()) {
                 latestNodes = latestNodes,
                 neighborEstimates = neighborEstimates,
                 onBack = { showRadar = false },
+                onMarkFound = { node, lat, lon -> vm.markFound(node, lat, lon) },
             )
         } else {
             HomeScreen(
@@ -1270,6 +1275,7 @@ private fun RadarScreen(
     latestNodes: List<MessageEntity>,
     neighborEstimates: List<NeighborEstimateEntity>,
     onBack: () -> Unit,
+    onMarkFound: (MessageEntity, Double, Double) -> Unit,
 ) {
     val ctx = LocalContext.current
     var compassKey by remember { mutableIntStateOf(0) }
@@ -1389,6 +1395,10 @@ private fun RadarScreen(
                     style = MaterialTheme.typography.labelMedium,
                 )
             }
+        }
+
+        targetNode?.let { node ->
+            FoundReportSection(targetNode = node, location = location, onMarkFound = onMarkFound)
         }
 
         Spacer(Modifier.height(Space.md))
@@ -1519,6 +1529,91 @@ private fun BackButton(onBack: () -> Unit) {
         colors = ButtonDefaults.filledTonalButtonColors(containerColor = CardBg, contentColor = TextHi),
         shape = MaterialTheme.shapes.medium,
     ) { Text("‹ Volver", style = MaterialTheme.typography.labelLarge) }
+}
+
+/** Local mirror of the backend's FOUND_PROXIMITY_METERS default (100 m). The
+ *  backend computes the authoritative verdict; this only powers the pre-check UI. */
+private const val FOUND_NEAR_METERS = 100.0
+
+/**
+ * "Marcar como encontrado": queues a signed Encontrado report for the radar's
+ * current target. Before queueing, shows a proximity pre-check against the
+ * target's last reported point — near (≤100 m) reads as "probable encontrado",
+ * far warns "posible falso positivo" so trolls/mistakes are flagged, not hidden.
+ */
+@Composable
+private fun FoundReportSection(
+    targetNode: MessageEntity,
+    location: Location?,
+    onMarkFound: (MessageEntity, Double, Double) -> Unit,
+) {
+    // Without the target's fix there is no reference point to validate against.
+    if (targetNode.latE7 == 0 && targetNode.lonE7 == 0) return
+    val nodeKey = "${targetNode.nodeId.toHex()}-${targetNode.msgId}"
+    var showDialog by remember(nodeKey) { mutableStateOf(false) }
+    var queued by remember(nodeKey) { mutableStateOf(false) }
+
+    Spacer(Modifier.height(Space.sm))
+    if (queued) {
+        Text(
+            "Reporte \"Encontrado\" en cola — se subirá al backend con conexión",
+            color = InfoC,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+        )
+        return
+    }
+    FilledTonalButton(
+        onClick = { showDialog = true },
+        enabled = location != null,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(if (location != null) "Marcar como encontrado" else "Marcar como encontrado (esperando GPS)")
+    }
+
+    if (showDialog && location != null) {
+        val distance = haversineMeters(
+            location.latitude, location.longitude,
+            targetNode.latE7 / 1e7, targetNode.lonE7 / 1e7,
+        )
+        val near = distance <= FOUND_NEAR_METERS
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("¿Marcar nodo ${targetNode.nodeId.toHex().take(8)} como encontrado?") },
+            text = {
+                Text(
+                    if (near) {
+                        "✅ Estás a ~${distance.roundToInt()} m del último punto reportado. " +
+                            "Probable encontrado."
+                    } else {
+                        "⚠️ Estás a ~${distance.roundToInt()} m del último punto reportado " +
+                            "(más de ${FOUND_NEAR_METERS.roundToInt()} m). El reporte se marcará " +
+                            "como posible falso positivo."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onMarkFound(targetNode, location.latitude, location.longitude)
+                    queued = true
+                    showDialog = false
+                }) { Text("Confirmar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) { Text("Cancelar") }
+            },
+        )
+    }
+}
+
+/** Great-circle distance in meters — mirror of `haversineMeters` in @guacamaya/shared. */
+private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val r = 6_371_000.0
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = sin(dLat / 2).pow(2) +
+        cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
+    return 2 * r * asin(sqrt(a))
 }
 
 private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }

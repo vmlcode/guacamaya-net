@@ -39,13 +39,17 @@ class IngestUploadWorker(
                 "sent=${summary.framesSent} ingested=${summary.ingested} " +
                 "duplicate=${summary.duplicate} rejected=${summary.rejected} " +
                 "ctrlSent=${summary.controlFramesSent} ctrlOk=${summary.controlAccepted} " +
-                "ctrlDup=${summary.controlDuplicate} ctrlRej=${summary.controlRejected}",
+                "ctrlDup=${summary.controlDuplicate} ctrlRej=${summary.controlRejected}" +
+                " foundSent=${summary.foundFramesSent} foundOk=${summary.foundAccepted} foundRej=${summary.foundRejected}",
         )
         if (summary.rejected > 0) {
             Log.w(TAG, "backend rejected ${summary.rejected} locally-verified frames — check wire-format sync")
         }
         if (summary.controlRejected > 0) {
             Log.w(TAG, "backend rejected ${summary.controlRejected} self-cancel frames — check control wire-format sync")
+        }
+        for (v in summary.foundResults) {
+            Log.i(TAG, "found verdict target=${v.targetRecordId.take(12)} d=${v.distanceMeters}m ${v.proximity}/${v.verdict}")
         }
 
         // Close the round-trip: re-inject any backend-minted control frames (delivery /
